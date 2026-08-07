@@ -1,0 +1,10 @@
+{
+  "roles.err_unknown_role": "Rol desconocido",
+  "roles.err_invalid_subject": "Identificador de usuario inválido",
+  "role.student": "Estudiante",
+  "role.teacher": "Docente",
+  "role.admin": "Administrador",
+  "http.err_bad_request": "Solicitud inválida",
+  "http.err_not_found": "Recurso no encontrado",
+  "http.err_internal": "Error interno del servidor"
+}
