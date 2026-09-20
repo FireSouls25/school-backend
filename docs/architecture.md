@@ -200,11 +200,24 @@ roles only authorizes.
   Note}` — including the first mark — and current state folds from
   revisions (`SessionDetail`). Both states are always kept; repeating a
   mark fails with `ErrNoChange`, marking outside the roster with
-  `ErrNotEnrolled`. Full detail in `docs/school.md`.
+  `ErrNotEnrolled`. `SessionsForStudent` returns the student's session
+  history. Full detail in `docs/school.md`.
+
+## Statistics (`src/core/statistics`)
+
+- Read-only aggregation over sessions, warnings and faults through
+  `SessionSource` / `WarningSource` / `FaultSource` ports, implemented at
+  the composition root (same pattern as `schedules.Checker`). Owns no
+  tables; view structs carry plain strings, never core types.
+- `ClassReport` gives one alphabetical `StudentSummary` per roster student
+  (sessions taken, presences, absences, evasions, lates, attendance rate)
+  plus class totals. `StudentReport` gives the full cross-year view:
+  session history as recorded, mark totals, warning tallies by gravity and
+  fault tallies by severity.
 
 ## Persistence (`src/platform/postgres`)
 
-- Production adapters implement the ten Store ports on `pgx/v5`
+- Production adapters implement the eleven Store ports on `pgx/v5`
   (`pgxpool`). The idempotent schema lives in `schema.sql` (embedded) and is
   applied at connect time, including `ADD COLUMN IF NOT EXISTS` migrations
   for installs predating the extended profile and the `late` reason.

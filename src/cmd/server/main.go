@@ -13,6 +13,7 @@ import (
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
+	"grade/src/core/statistics"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
 	"grade/src/core/teachers"
@@ -71,8 +72,6 @@ func main() {
 
 	_ = students.NewService(studentsStore)
 	_ = attendance.NewService(attendanceStore)
-	_ = incidents.NewService(incidentsStore)
-	_ = warnings.NewService(warningsStore)
 	_ = teachers.NewService(teachersStore)
 	_ = schoolyears.NewService(yearsStore)
 	_ = classes.NewService(classesStore)
@@ -80,7 +79,14 @@ func main() {
 
 	subjectsSvc := subjects.NewService(subjectsStore)
 	_ = schedules.NewService(schedulesStore, subjectChecker{subjectsSvc})
-	_ = sessions.NewService(sessionsStore)
+	sessionsSvc := sessions.NewService(sessionsStore)
+	warningsSvc := warnings.NewService(warningsStore)
+	incidentsSvc := incidents.NewService(incidentsStore)
+	_ = statistics.NewService(
+		statisticsSessions{sessionsSvc},
+		statisticsWarnings{warningsSvc},
+		statisticsFaults{incidentsSvc},
+	)
 
 	roleStore := roles.NewMemoryStore()
 	roles.NewService(roleStore)
@@ -112,4 +118,95 @@ func (c subjectChecker) Teaches(ctx context.Context, teacherID, subjectID string
 		}
 	}
 	return false, nil
+}
+
+// statisticsSessions implements statistics.SessionSource on top of the
+// sessions capability.
+type statisticsSessions struct {
+	sessions *sessions.Service
+}
+
+// GroupSessions implements statistics.SessionSource.
+func (a statisticsSessions) GroupSessions(ctx context.Context, classGroupID string) ([]statistics.SessionView, error) {
+	list, err := a.sessions.SessionsForGroup(ctx, classGroupID)
+	if err != nil {
+		return nil, err
+	}
+	return a.withMarks(ctx, list)
+}
+
+// StudentSessions implements statistics.SessionSource.
+func (a statisticsSessions) StudentSessions(ctx context.Context, studentID string) ([]statistics.SessionView, error) {
+	list, err := a.sessions.SessionsForStudent(ctx, studentID)
+	if err != nil {
+		return nil, err
+	}
+	return a.withMarks(ctx, list)
+}
+
+func (a statisticsSessions) withMarks(ctx context.Context, list []sessions.Session) ([]statistics.SessionView, error) {
+	out := make([]statistics.SessionView, 0, len(list))
+	for _, sess := range list {
+		detail, err := a.sessions.SessionDetail(ctx, sess.ID)
+		if err != nil {
+			return nil, err
+		}
+		view := statistics.SessionView{
+			ID:           sess.ID,
+			ClassGroupID: sess.ClassGroupID,
+			ClassLabel:   sess.ClassLabel,
+			SchoolYear:   sess.SchoolYear,
+			Date:         sess.Date,
+			Period:       sess.Period,
+			Marks:        make(map[string]string, len(detail.Marks)),
+		}
+		for _, e := range sess.Roster {
+			view.Roster = append(view.Roster, statistics.RosterEntryView{
+				StudentID: e.StudentID, Names: e.Names, Surnames: e.Surnames,
+			})
+		}
+		for id, mark := range detail.Marks {
+			view.Marks[id] = mark.String()
+		}
+		out = append(out, view)
+	}
+	return out, nil
+}
+
+// statisticsWarnings implements statistics.WarningSource on top of the
+// warnings capability.
+type statisticsWarnings struct {
+	warnings *warnings.Service
+}
+
+// StudentWarnings implements statistics.WarningSource.
+func (a statisticsWarnings) StudentWarnings(ctx context.Context, studentID string) ([]statistics.WarningView, error) {
+	list, err := a.warnings.ForStudent(ctx, studentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]statistics.WarningView, 0, len(list))
+	for _, w := range list {
+		out = append(out, statistics.WarningView{Gravity: w.Gravity.String(), Date: w.HappenedAt})
+	}
+	return out, nil
+}
+
+// statisticsFaults implements statistics.FaultSource on top of the
+// incidents capability.
+type statisticsFaults struct {
+	incidents *incidents.Service
+}
+
+// StudentFaults implements statistics.FaultSource.
+func (a statisticsFaults) StudentFaults(ctx context.Context, studentID string) ([]statistics.FaultView, error) {
+	list, err := a.incidents.ForStudent(ctx, studentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]statistics.FaultView, 0, len(list))
+	for _, f := range list {
+		out = append(out, statistics.FaultView{Severity: f.Severity.String(), Date: f.Date})
+	}
+	return out, nil
 }

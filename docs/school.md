@@ -44,8 +44,11 @@ histories span years through the student id.
 src/core/schoolyears/  years: model, Store port, Service, MemoryStore
 src/core/classes/      groups: model, Store port, Service, MemoryStore
 src/core/enrollments/  placements + promotions: model, Store port, Service, MemoryStore
+src/core/schedules/    weekly slots: model, Store port, Checker port, Service, MemoryStore
+src/core/sessions/     roll calls: model, Store port, Service, MemoryStore
+src/core/statistics/   reports: reader ports, Service (no tables)
 src/platform/postgres/ production adapters + embedded schema.sql
-src/tests/schoolyears|classes|enrollments|postgres/
+src/tests/schoolyears|classes|enrollments|schedules|sessions|statistics|postgres/
 ```
 
 ## Ports
@@ -158,6 +161,34 @@ Marks reuse the attendance vocabulary (`absence` / `evasion` / `late`,
 labels from the `reason.*` catalog) without importing the attendance
 package: each capability stays decoupled.
 
+### Statistics: read-only admin reports
+
+`statistics.Service` persists nothing. It aggregates through
+`SessionSource` / `WarningSource` / `FaultSource` reader ports, which the
+composition root implements over the sessions, warnings and incidents
+services (same pattern as `schedules.Checker`); view structs carry plain
+strings, never core types, so capabilities stay decoupled.
+
+```go
+// statistics reader ports (no tables behind them)
+GroupSessions(ctx, classGroupID) ([]SessionView, error)
+StudentSessions(ctx, studentID string) ([]SessionView, error)
+StudentWarnings(ctx, studentID string) ([]WarningView, error)
+StudentFaults(ctx, studentID string) ([]FaultView, error)
+
+// statistics.Service
+ClassReport(ctx, classGroupID) (ClassReport, error)
+StudentReport(ctx, studentID string) (StudentReport, error)
+```
+
+`ClassReport` lists one `StudentSummary` per roster student (names from
+the frozen roster, alphabetical by surnames) with sessions taken,
+presences, absences, evasions, lates and attendance rate, plus class
+totals — the per-group, per-year view admins filter on. `StudentReport`
+covers the full cross-year history: every session as recorded (frozen
+class label and year), mark totals, warning tallies by gravity and fault
+tallies by severity.
+
 ## Database schema
 
 `src/platform/postgres/schema.sql` is embedded and applied idempotently at
@@ -230,6 +261,7 @@ explicitly once empty.
 | `sessions.err_not_found` | 404 |
 | `sessions.err_invalid_id` / `err_invalid_class_group` / `err_invalid_teacher` / `err_invalid_subject` / `err_invalid_date` / `err_invalid_period` / `err_invalid_class_label` / `err_invalid_school_year` / `err_empty_roster` / `err_invalid_roster` / `err_duplicate_roster` / `err_unknown_mark` / `err_invalid_student` / `err_not_enrolled` / `err_no_change` / `err_invalid_actor` | 400 |
 | `classes.err_has_sessions` | 400 |
+| `statistics.err_invalid_class_group` / `err_invalid_student` | 400 |
 
 All messages are localized through `src/platform/i18n/catalogs/es.json`
 (`enrollment.decision.*` holds the display names Promovido/Repite/Graduado).
@@ -239,4 +271,6 @@ All messages are localized through `src/platform/i18n/catalogs/es.json`
 - **Promotion flow**: suggestions + per-student destination choice write
   next-year enrollments, update `Student.ClassID` and record `Promotion`
   rows; graduating from grade 11 calls `Student.Graduate`.
-- **Statistics**: aggregations over these records need no new tables.
+- **Graphs**: chart-ready endpoints over the statistics reports.
+- **Remaining roadmap**: `users`/`auth`, WhatsApp `notifications`, HTTP
+  endpoints with role gating, audit logging.

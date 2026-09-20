@@ -218,3 +218,38 @@ func TestSessionListingsNewestFirst(t *testing.T) {
 		t.Errorf("len(byTeacher) = %d, want 2", len(byTeacher))
 	}
 }
+
+func TestSessionsForStudent(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	both := validSession()
+	if _, err := svc.OpenSession(ctx, both); err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	solo := validSession()
+	solo.Date = time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	solo.Roster = solo.Roster[:1]
+	if _, err := svc.OpenSession(ctx, solo); err != nil {
+		t.Fatalf("OpenSession solo: %v", err)
+	}
+
+	mine, err := svc.SessionsForStudent(ctx, studentA)
+	if err != nil {
+		t.Fatalf("SessionsForStudent: %v", err)
+	}
+	if len(mine) != 2 || !mine[0].Date.After(mine[1].Date) {
+		t.Errorf("studentA sessions not newest first: %+v", mine)
+	}
+	theirs, err := svc.SessionsForStudent(ctx, studentB)
+	if err != nil {
+		t.Fatalf("SessionsForStudent: %v", err)
+	}
+	if len(theirs) != 1 {
+		t.Errorf("len(studentB sessions) = %d, want 1", len(theirs))
+	}
+
+	if _, err := svc.SessionsForStudent(ctx, "nope"); !errors.Is(err, sessions.ErrInvalidStudent) {
+		t.Errorf("bad student error = %v, want ErrInvalidStudent", err)
+	}
+}

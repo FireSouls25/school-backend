@@ -117,7 +117,7 @@ func (s *SessionsStore) CreateSession(ctx context.Context, sess sessions.Session
 	out, err := scanSessionMeta(row.Scan)
 	if err != nil {
 		switch {
-		case isForeignKeyViolationOn(err, "class_groups"):
+		case isForeignKeyViolationOn(err, "_class_group_id_"):
 			return sessions.Session{}, sessions.ErrInvalidClassGroup
 		}
 		return sessions.Session{}, fmt.Errorf("postgres: create session: %w", err)
@@ -128,7 +128,7 @@ func (s *SessionsStore) CreateSession(ctx context.Context, sess sessions.Session
 			VALUES ($1, $2, $3, $4, $5)`,
 			out.ID, e.StudentID, e.Names, e.Surnames, e.DocumentID); err != nil {
 			switch {
-			case isForeignKeyViolationOn(err, "students"):
+			case isForeignKeyViolationOn(err, "_student_id_"):
 				return sessions.Session{}, sessions.ErrInvalidStudent
 			case isUniqueViolationOn(err, "session_rosters"):
 				return sessions.Session{}, sessions.ErrDuplicateRoster
@@ -174,6 +174,41 @@ func (s *SessionsStore) SessionsForTeacher(ctx context.Context, teacherID string
 		`WHERE teacher_id = $1 ORDER BY date DESC, id DESC`, teacherID)
 }
 
+// SessionsForStudent implements sessions.Store.
+func (s *SessionsStore) SessionsForStudent(ctx context.Context, studentID string) ([]sessions.Session, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+sessionColumns+`
+		FROM sessions s
+		WHERE EXISTS (
+			SELECT 1 FROM session_rosters r
+			WHERE r.session_id = s.id AND r.student_id = $1
+		)
+		ORDER BY date DESC, id DESC`,
+		studentID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list student sessions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]sessions.Session, 0)
+	for rows.Next() {
+		sess, err := scanSessionMeta(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan session: %w", err)
+		}
+		roster, err := s.roster(ctx, sess.ID)
+		if err != nil {
+			return nil, err
+		}
+		sess.Roster = roster
+		out = append(out, sess)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DeleteSession implements sessions.Store. Roster and revisions cascade.
 func (s *SessionsStore) DeleteSession(ctx context.Context, id string) error {
 	if _, err := s.db.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id); err != nil {
@@ -198,7 +233,7 @@ func (s *SessionsStore) AppendRevision(ctx context.Context, r sessions.Revision)
 	err := row.Scan(&out.ID, &out.SessionID, &out.Number, &out.StudentID,
 		&from, &to, &out.ChangedBy, &out.ChangedAt, &out.Note)
 	if err != nil {
-		if isForeignKeyViolationOn(err, "sessions") {
+		if isForeignKeyViolationOn(err, "_session_id_") {
 			return sessions.Revision{}, sessions.ErrNotFound
 		}
 		return sessions.Revision{}, fmt.Errorf("postgres: append revision: %w", err)

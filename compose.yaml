@@ -1,0 +1,23 @@
+# Local test database. Only Postgres lives here for now: it backs the
+# integration suite (TEST_DATABASE_URL) and manual API trials
+# (DATABASE_URL). No app container yet on purpose.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: grade
+      POSTGRES_PASSWORD: grade
+      POSTGRES_DB: gradedb
+    ports:
+      # 5433 avoids clashing with a system Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grade -d gradedb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

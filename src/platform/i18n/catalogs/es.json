@@ -60,6 +60,8 @@
   "sessions.err_no_change": "La marca no cambió",
   "sessions.err_invalid_actor": "Responsable del cambio inválido",
   "classes.err_has_sessions": "El salón tiene llamados a lista",
+  "statistics.err_invalid_class_group": "Salón inválido",
+  "statistics.err_invalid_student": "Identificador de estudiante inválido",
   "teachers.err_not_found": "Docente no encontrado",
   "teachers.err_invalid_id": "Identificador de docente inválido",
   "teachers.err_invalid_name": "Nombre del docente inválido",

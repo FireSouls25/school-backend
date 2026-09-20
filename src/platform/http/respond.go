@@ -139,6 +139,9 @@ var statusByCode = map[string]int{
 	"sessions.err_not_enrolled":        http.StatusBadRequest,
 	"sessions.err_no_change":           http.StatusBadRequest,
 	"sessions.err_invalid_actor":       http.StatusBadRequest,
+
+	"statistics.err_invalid_class_group": http.StatusBadRequest,
+	"statistics.err_invalid_student":     http.StatusBadRequest,
 }
 
 // writeJSON writes v as JSON with the given status code.

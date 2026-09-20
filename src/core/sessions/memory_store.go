@@ -76,6 +76,20 @@ func (s *MemoryStore) SessionsForTeacher(_ context.Context, teacherID string) ([
 	return out, nil
 }
 
+// SessionsForStudent implements Store.
+func (s *MemoryStore) SessionsForStudent(_ context.Context, studentID string) ([]Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Session, 0)
+	for _, sess := range s.sessions {
+		if inRoster(sess.Roster, studentID) {
+			out = append(out, cloneSession(sess))
+		}
+	}
+	sortSessions(out)
+	return out, nil
+}
+
 // DeleteSession implements Store. Roster travels with the session;
 // revisions are dropped with it.
 func (s *MemoryStore) DeleteSession(_ context.Context, id string) error {

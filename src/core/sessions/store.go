@@ -18,6 +18,9 @@ type Store interface {
 	// SessionsForTeacher returns every session taken by a teacher, newest
 	// first, rosters included.
 	SessionsForTeacher(ctx context.Context, teacherID string) ([]Session, error)
+	// SessionsForStudent returns every session whose roster contains the
+	// student, newest first, rosters included.
+	SessionsForStudent(ctx context.Context, studentID string) ([]Session, error)
 	// DeleteSession removes the session with the given id, cascading its
 	// roster and revisions. Removing an unknown session is a no-op.
 	DeleteSession(ctx context.Context, id string) error

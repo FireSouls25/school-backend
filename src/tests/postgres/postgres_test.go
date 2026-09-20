@@ -657,6 +657,18 @@ func TestSessionsRoundTrip(t *testing.T) {
 		t.Errorf("roster = %+v, want 1 frozen entry", byGroup[0].Roster)
 	}
 
+	mine, err := store.SessionsForStudent(ctx, sid)
+	if err != nil || len(mine) != 1 {
+		t.Fatalf("SessionsForStudent = %v, %d records", err, len(mine))
+	}
+	if mine[0].ID != got.ID {
+		t.Errorf("SessionsForStudent[0] = %v, want %v", mine[0].ID, got.ID)
+	}
+	other, err := store.SessionsForStudent(ctx, "99999999-9999-4999-8999-999999999999")
+	if err != nil || len(other) != 0 {
+		t.Errorf("SessionsForStudent outsider = %v, %d records", err, len(other))
+	}
+
 	// A group with sessions cannot be deleted.
 	if err := classesStore.Delete(ctx, group.ID); !errors.Is(err, classes.ErrHasSessions) {
 		t.Errorf("delete group error = %v, want ErrHasSessions", err)

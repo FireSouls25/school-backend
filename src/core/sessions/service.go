@@ -111,6 +111,15 @@ func (s *Service) SessionsForTeacher(ctx context.Context, teacherID string) ([]S
 	return s.store.SessionsForTeacher(ctx, strings.TrimSpace(teacherID))
 }
 
+// SessionsForStudent returns every session including the student in its
+// frozen roster, newest first: the student's session history.
+func (s *Service) SessionsForStudent(ctx context.Context, studentID string) ([]Session, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(studentID)); err != nil {
+		return nil, ErrInvalidStudent
+	}
+	return s.store.SessionsForStudent(ctx, strings.TrimSpace(studentID))
+}
+
 // RevisionsForSession returns every revision of a session, oldest first.
 func (s *Service) RevisionsForSession(ctx context.Context, sessionID string) ([]Revision, error) {
 	if _, err := uuid.Parse(strings.TrimSpace(sessionID)); err != nil {
