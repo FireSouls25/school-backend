@@ -32,7 +32,14 @@ func isUniqueViolationOn(err error, substr string) bool {
 }
 
 // isForeignKeyViolationOn reports whether err violates a foreign key whose
-// constraint name contains substr (table or column name fragment).
+// constraint name contains substr (column or table name fragment, e.g.
+// "_student_id_" or "class_groups").
 func isForeignKeyViolationOn(err error, substr string) bool {
 	return pgErrorCode(err) == "23503" && strings.Contains(pgConstraint(err), substr)
+}
+
+// isForeignKeyViolation reports whether err is any foreign-key violation,
+// used when every child table means the same protection.
+func isForeignKeyViolation(err error) bool {
+	return pgErrorCode(err) == "23503"
 }

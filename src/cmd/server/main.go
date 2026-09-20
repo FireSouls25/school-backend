@@ -10,6 +10,7 @@ import (
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
+	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
@@ -41,6 +42,7 @@ func main() {
 		yearsStore       schoolyears.Store = schoolyears.NewMemoryStore()
 		classesStore     classes.Store     = classes.NewMemoryStore()
 		enrollmentsStore enrollments.Store = enrollments.NewMemoryStore()
+		schedulesStore   schedules.Store   = schedules.NewMemoryStore()
 	)
 	if cfg.DatabaseURL != "" {
 		db, err := pg.Connect(ctx, cfg.DatabaseURL)
@@ -58,6 +60,7 @@ func main() {
 		yearsStore = pg.NewSchoolYearsStore(db)
 		classesStore = pg.NewClassesStore(db)
 		enrollmentsStore = pg.NewEnrollmentsStore(db)
+		schedulesStore = pg.NewSchedulesStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only)")
@@ -68,10 +71,12 @@ func main() {
 	_ = incidents.NewService(incidentsStore)
 	_ = warnings.NewService(warningsStore)
 	_ = teachers.NewService(teachersStore)
-	_ = subjects.NewService(subjectsStore)
 	_ = schoolyears.NewService(yearsStore)
 	_ = classes.NewService(classesStore)
 	_ = enrollments.NewService(enrollmentsStore)
+
+	subjectsSvc := subjects.NewService(subjectsStore)
+	_ = schedules.NewService(schedulesStore, subjectChecker{subjectsSvc})
 
 	roleStore := roles.NewMemoryStore()
 	roles.NewService(roleStore)
@@ -82,4 +87,25 @@ func main() {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+// subjectChecker implements schedules.Checker on top of the subjects
+// capability. It lives here because only the composition root may wire
+// concrete types across capabilities.
+type subjectChecker struct {
+	subjects *subjects.Service
+}
+
+// Teaches implements schedules.Checker.
+func (c subjectChecker) Teaches(ctx context.Context, teacherID, subjectID string) (bool, error) {
+	current, err := c.subjects.CurrentForTeacher(ctx, teacherID)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range current {
+		if a.SubjectID == subjectID {
+			return true, nil
+		}
+	}
+	return false, nil
 }

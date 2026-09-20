@@ -36,6 +36,7 @@ src/
     schoolyears/   # años lectivos: periodos, fechas, festivos
     classes/       # salones por año: grado 1-11 + grupo
     enrollments/   # matrículas por salón + auditoría de promociones
+    schedules/     # horarios semanales por salón
   platform/        # cross-cutting infrastructure
     config/        # environment configuration
     http/          # chi router, locale middleware, error responses

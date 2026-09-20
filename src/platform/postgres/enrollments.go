@@ -54,9 +54,9 @@ func (s *EnrollmentsStore) AddEnrollment(ctx context.Context, e enrollments.Enro
 	var out enrollments.Enrollment
 	if err := row.Scan(&out.ID, &out.StudentID, &out.ClassGroupID); err != nil {
 		switch {
-		case isForeignKeyViolationOn(err, "students"):
+		case isForeignKeyViolationOn(err, "_student_id_"):
 			return enrollments.Enrollment{}, enrollments.ErrInvalidStudent
-		case isForeignKeyViolationOn(err, "class_groups"):
+		case isForeignKeyViolationOn(err, "_class_group_id_"):
 			return enrollments.Enrollment{}, enrollments.ErrInvalidClassGroup
 		case isUniqueViolationOn(err, "enrollments"):
 			return enrollments.Enrollment{}, enrollments.ErrDuplicateEnrollment
@@ -121,9 +121,11 @@ func (s *EnrollmentsStore) RecordPromotion(ctx context.Context, p enrollments.Pr
 	out, err := scanPromotion(row.Scan)
 	if err != nil {
 		switch {
-		case isForeignKeyViolationOn(err, "students"):
+		case isForeignKeyViolationOn(err, "_student_id_"):
 			return enrollments.Promotion{}, enrollments.ErrInvalidStudent
-		case isForeignKeyViolationOn(err, "class_groups"):
+		case isForeignKeyViolationOn(err, "_class_group_id_"),
+			isForeignKeyViolationOn(err, "_from_group_id_"),
+			isForeignKeyViolationOn(err, "_to_group_id_"):
 			return enrollments.Promotion{}, enrollments.ErrInvalidClassGroup
 		}
 		return enrollments.Promotion{}, fmt.Errorf("postgres: record promotion: %w", err)

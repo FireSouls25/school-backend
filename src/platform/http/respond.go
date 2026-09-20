@@ -106,6 +106,17 @@ var statusByCode = map[string]int{
 	"enrollments.err_invalid_promotion":    http.StatusBadRequest,
 	"enrollments.err_invalid_date":         http.StatusBadRequest,
 	"enrollments.err_invalid_actor":        http.StatusBadRequest,
+
+	"schedules.err_not_found":            http.StatusNotFound,
+	"schedules.err_invalid_id":           http.StatusBadRequest,
+	"schedules.err_invalid_class_group":  http.StatusBadRequest,
+	"schedules.err_invalid_teacher":      http.StatusBadRequest,
+	"schedules.err_invalid_subject":      http.StatusBadRequest,
+	"schedules.err_invalid_weekday":      http.StatusBadRequest,
+	"schedules.err_invalid_time":         http.StatusBadRequest,
+	"schedules.err_teacher_conflict":     http.StatusBadRequest,
+	"schedules.err_class_conflict":       http.StatusBadRequest,
+	"schedules.err_not_teaching_subject": http.StatusBadRequest,
 }
 
 // writeJSON writes v as JSON with the given status code.

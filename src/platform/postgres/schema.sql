@@ -235,3 +235,19 @@ CREATE TABLE IF NOT EXISTS promotions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_promotions_student_id ON promotions (student_id);
+
+CREATE TABLE IF NOT EXISTS schedule_entries (
+    id             UUID PRIMARY KEY,
+    class_group_id UUID        NOT NULL REFERENCES class_groups (id) ON DELETE CASCADE,
+    teacher_id     UUID        NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
+    subject_id     UUID        NOT NULL REFERENCES subjects (id) ON DELETE CASCADE,
+    weekday        SMALLINT    NOT NULL CHECK (weekday >= 0 AND weekday <= 6),
+    start_min      INTEGER     NOT NULL CHECK (start_min >= 0 AND start_min < 1440),
+    end_min        INTEGER     NOT NULL CHECK (end_min > 0 AND end_min < 1440),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (start_min < end_min)
+);
+
+CREATE INDEX IF NOT EXISTS idx_schedule_teacher_id ON schedule_entries (teacher_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_group_id ON schedule_entries (class_group_id);

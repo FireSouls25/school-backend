@@ -12,6 +12,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
@@ -503,5 +504,82 @@ func TestClassesAndEnrollments(t *testing.T) {
 	hist, _ = enrollStore.PromotionsForStudent(ctx, sid)
 	if len(hist) != 0 {
 		t.Errorf("promotions not cascaded: %d records remain", len(hist))
+	}
+}
+
+func TestScheduleEntriesRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	yearsStore := pg.NewSchoolYearsStore(db)
+	year, err := yearsStore.Create(ctx, schoolyears.SchoolYear{
+		ID: "55555555-5555-4555-8555-555555555555", Year: 2028, Periods: 3,
+		StartDate: time.Date(2028, 2, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2028, 11, 24, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Create year: %v", err)
+	}
+	classesStore := pg.NewClassesStore(db)
+	group, err := classesStore.Create(ctx, classes.ClassGroup{
+		ID:           "66666666-6666-4666-8666-666666666666",
+		SchoolYearID: year.ID, Grade: 7, GroupNo: 1,
+	})
+	if err != nil {
+		t.Fatalf("Create class: %v", err)
+	}
+	teachersStore := pg.NewTeachersStore(db)
+	tid := "77777777-7777-4777-8777-777777777777"
+	if _, err := teachersStore.Create(ctx, teachers.Teacher{
+		ID: tid, Names: "Luis", Surnames: "Pardo", DocumentID: "80111222",
+	}); err != nil {
+		t.Fatalf("Create teacher: %v", err)
+	}
+	subjectsStore := pg.NewSubjectsStore(db)
+	subj, err := subjectsStore.CreateSubject(ctx, subjects.Subject{
+		ID: "88888888-8888-4888-8888-888888888888", Name: "Matemáticas", Active: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateSubject: %v", err)
+	}
+
+	store := pg.NewSchedulesStore(db)
+	want := schedules.Entry{
+		ID:           "99999999-9999-4999-8999-999999999999",
+		ClassGroupID: group.ID, TeacherID: tid, SubjectID: subj.ID,
+		Weekday: int(time.Monday), Start: schedules.MustClock("07:00"), End: schedules.MustClock("08:00"),
+	}
+	got, err := store.Create(ctx, want)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Create = %+v, want %+v", got, want)
+	}
+
+	byTeacher, err := store.EntriesForTeacher(ctx, tid)
+	if err != nil || len(byTeacher) != 1 {
+		t.Fatalf("EntriesForTeacher = %v, %d records", err, len(byTeacher))
+	}
+	byGroup, err := store.EntriesForGroup(ctx, group.ID)
+	if err != nil || len(byGroup) != 1 {
+		t.Fatalf("EntriesForGroup = %v, %d records", err, len(byGroup))
+	}
+
+	// Unknown references surface as coded errors, not raw PG errors.
+	ghost := want
+	ghost.ID = "00000000-0000-4000-8000-000000000000"
+	ghost.TeacherID = "00000000-0000-4000-8000-000000000001"
+	if _, err := store.Create(ctx, ghost); !errors.Is(err, schedules.ErrInvalidTeacher) {
+		t.Errorf("unknown teacher error = %v, want ErrInvalidTeacher", err)
+	}
+
+	// Deleting the group cascades its schedule: plans are derived data.
+	if err := classesStore.Delete(ctx, group.ID); err != nil {
+		t.Fatalf("Delete class: %v", err)
+	}
+	byTeacher, _ = store.EntriesForTeacher(ctx, tid)
+	if len(byTeacher) != 0 {
+		t.Errorf("schedule not cascaded: %d records remain", len(byTeacher))
 	}
 }

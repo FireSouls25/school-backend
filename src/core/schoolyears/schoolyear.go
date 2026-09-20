@@ -61,3 +61,19 @@ func normalizeHolidays(in []time.Time) []time.Time {
 func containsDate(d, start, end time.Time) bool {
 	return !d.Before(start) && !d.After(end)
 }
+
+// IsSchoolDay reports whether t is a school day in the year: inside the
+// date range and not a holiday. Weekday filtering composes on top using
+// schedule entries, since some schools teach on Saturdays.
+func (y SchoolYear) IsSchoolDay(t time.Time) bool {
+	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	if y.StartDate.IsZero() || y.EndDate.IsZero() || !containsDate(d, y.StartDate, y.EndDate) {
+		return false
+	}
+	for _, h := range y.Holidays {
+		if d.Equal(h) {
+			return false
+		}
+	}
+	return true
+}

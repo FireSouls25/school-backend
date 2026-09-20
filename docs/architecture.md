@@ -169,7 +169,6 @@ roles only authorizes.
   (`ErrHasEnrollments`).
 
 ## Enrollments (`src/core/enrollments`)
-
 - `Enrollment` places one student in one class-group (pair-unique);
   rosters come in enrollment order, alphabetical ordering is composed
   upstream. `Promotion` is the append-only audit of year-to-year movement
@@ -177,6 +176,19 @@ roles only authorizes.
   destination.
 - Student and group ids are opaque; dangling references surface as coded
   errors via FK translation. Full detail in `docs/school.md`.
+
+## Schedules (`src/core/schedules`)
+
+- `Entry` is one weekly slot `{ClassGroupID, TeacherID, SubjectID,
+  Weekday 0–6, Start/End}` with `Clock` times (`"07:30"`); placed manually,
+  never generated. `Service` rejects teacher and group overlaps
+  (`ErrTeacherConflict`/`ErrClassConflict`, touching edges allowed) and
+  verifies the pairing through the `Checker` port, implemented at the
+  composition root on top of `subjects` (`CurrentForTeacher`).
+- Read models: `EntriesForTeacherOnDay` (the teacher's day view; holidays
+  skip via `SchoolYear.IsSchoolDay`) and `EntriesForGroup` (the salon's
+  week). Colombian holidays seed from `ColombianHolidays` (Ley 51/1983).
+  Full detail in `docs/school.md`.
 
 ## Persistence (`src/platform/postgres`)
 
