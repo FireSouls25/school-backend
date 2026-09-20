@@ -28,4 +28,21 @@ var (
 	ErrInvalidClass = newError("students.err_invalid_class", "students: invalid class")
 	// ErrPhotoTooLarge is returned when a photo exceeds MaxPhotoSize.
 	ErrPhotoTooLarge = newError("students.err_photo_too_large", "students: photo too large")
+	// ErrInvalidDocument is returned when the identity document number is missing.
+	ErrInvalidDocument = newError("students.err_invalid_document", "students: invalid document")
+	// ErrInvalidBirth is returned when the birthdate is in the future.
+	ErrInvalidBirth = newError("students.err_invalid_birth", "students: invalid birth data")
+	// ErrInvalidBloodType is returned when the blood type is not a known label.
+	ErrInvalidBloodType = newError("students.err_invalid_blood_type", "students: invalid blood type")
+	// ErrInvalidEmail is returned when the email address is malformed.
+	ErrInvalidEmail = newError("students.err_invalid_email", "students: invalid email")
+	// ErrInvalidGuardian is returned when guardian data is incomplete.
+	ErrInvalidGuardian = newError("students.err_invalid_guardian", "students: invalid guardian")
+	// ErrInvalidSibling is returned when a sibling entry misses name or class.
+	ErrInvalidSibling = newError("students.err_invalid_sibling", "students: invalid sibling")
+	// ErrInvalidHealth is returned when a health condition is affirmative
+	// but its detail is missing.
+	ErrInvalidHealth = newError("students.err_invalid_health", "students: invalid health data")
+	// ErrInvalidRepeatCount is returned when the repeat count is negative.
+	ErrInvalidRepeatCount = newError("students.err_invalid_repeat_count", "students: invalid repeat count")
 )

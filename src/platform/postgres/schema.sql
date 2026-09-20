@@ -1,14 +1,90 @@
 -- Schema for the grade backend. Idempotent: safe to run on every start.
+-- Fresh installs get the full tables; existing installs are migrated with
+-- ADD COLUMN IF NOT EXISTS below.
 
 CREATE TABLE IF NOT EXISTS students (
-    id         UUID PRIMARY KEY,
-    names      TEXT        NOT NULL,
-    surnames   TEXT        NOT NULL,
-    class_id   TEXT        NOT NULL,
-    photo      BYTEA,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY,
+    names               TEXT        NOT NULL,
+    surnames            TEXT        NOT NULL,
+    class_id            TEXT        NOT NULL,
+    document_id         TEXT        NOT NULL DEFAULT '',
+    phone               TEXT        NOT NULL DEFAULT '',
+    address             TEXT        NOT NULL DEFAULT '',
+    birthplace          TEXT        NOT NULL DEFAULT '',
+    birthdate           DATE,
+    email               TEXT        NOT NULL DEFAULT '',
+    vision_has          BOOLEAN     NOT NULL DEFAULT FALSE,
+    vision_detail       TEXT        NOT NULL DEFAULT '',
+    hearing_has         BOOLEAN     NOT NULL DEFAULT FALSE,
+    hearing_detail      TEXT        NOT NULL DEFAULT '',
+    blood_type          TEXT        NOT NULL DEFAULT '',
+    is_new              BOOLEAN     NOT NULL DEFAULT FALSE,
+    previous_school     TEXT        NOT NULL DEFAULT '',
+    transfer_reason     TEXT        NOT NULL DEFAULT '',
+    repeat_count        INTEGER     NOT NULL DEFAULT 0,
+    mother_name         TEXT        NOT NULL DEFAULT '',
+    mother_document     TEXT        NOT NULL DEFAULT '',
+    mother_phone        TEXT        NOT NULL DEFAULT '',
+    mother_occupation   TEXT        NOT NULL DEFAULT '',
+    mother_address      TEXT        NOT NULL DEFAULT '',
+    father_name         TEXT        NOT NULL DEFAULT '',
+    father_document     TEXT        NOT NULL DEFAULT '',
+    father_phone        TEXT        NOT NULL DEFAULT '',
+    father_occupation   TEXT        NOT NULL DEFAULT '',
+    father_address      TEXT        NOT NULL DEFAULT '',
+    caregiver_name      TEXT        NOT NULL DEFAULT '',
+    caregiver_document  TEXT        NOT NULL DEFAULT '',
+    caregiver_phone     TEXT        NOT NULL DEFAULT '',
+    caregiver_occupation TEXT       NOT NULL DEFAULT '',
+    caregiver_address   TEXT        NOT NULL DEFAULT '',
+    lives_with          TEXT        NOT NULL DEFAULT '',
+    siblings            JSONB       NOT NULL DEFAULT '[]',
+    medical_report      TEXT        NOT NULL DEFAULT '',
+    diversity_condition TEXT        NOT NULL DEFAULT '',
+    specialist_has      BOOLEAN     NOT NULL DEFAULT FALSE,
+    specialist_detail   TEXT        NOT NULL DEFAULT '',
+    photo               BYTEA,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Migrate installs created before the extended profile existed.
+ALTER TABLE students ADD COLUMN IF NOT EXISTS document_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS birthplace TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS birthdate DATE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS vision_has BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS vision_detail TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS hearing_has BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS hearing_detail TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS blood_type TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS is_new BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS previous_school TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS transfer_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS repeat_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS mother_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS mother_document TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS mother_phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS mother_occupation TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS mother_address TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS father_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS father_document TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS father_phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS father_occupation TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS father_address TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS caregiver_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS caregiver_document TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS caregiver_phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS caregiver_occupation TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS caregiver_address TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS lives_with TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS siblings JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS medical_report TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS diversity_condition TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS specialist_has BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS specialist_detail TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_students_class_id ON students (class_id);
 
@@ -19,6 +95,12 @@ CREATE TABLE IF NOT EXISTS attendance_records (
     date       DATE        NOT NULL,
     reason     TEXT        NOT NULL CHECK (reason IN ('absence', 'evasion'))
 );
+
+-- Admit the "late" (atraso) reason on installs created before it existed.
+-- Drop + re-add keeps the statement idempotent on every start.
+ALTER TABLE attendance_records DROP CONSTRAINT IF EXISTS attendance_records_reason_check;
+ALTER TABLE attendance_records ADD CONSTRAINT attendance_records_reason_check
+    CHECK (reason IN ('absence', 'evasion', 'late'));
 
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance_records (student_id);
 
@@ -32,3 +114,24 @@ CREATE TABLE IF NOT EXISTS incident_faults (
 );
 
 CREATE INDEX IF NOT EXISTS idx_incident_faults_student_id ON incident_faults (student_id);
+
+CREATE TABLE IF NOT EXISTS warnings (
+    id                   UUID PRIMARY KEY,
+    student_id           UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    class_id             TEXT        NOT NULL,
+    teacher_id           TEXT        NOT NULL,
+    happened_at          TIMESTAMPTZ NOT NULL,
+    gravity              TEXT        NOT NULL CHECK (gravity IN ('mild', 'moderate', 'severe')),
+    title                TEXT        NOT NULL,
+    description          TEXT        NOT NULL,
+    snap_names           TEXT        NOT NULL DEFAULT '',
+    snap_surnames        TEXT        NOT NULL DEFAULT '',
+    snap_document_id     TEXT        NOT NULL DEFAULT '',
+    snap_class_id        TEXT        NOT NULL DEFAULT '',
+    snap_birthdate       DATE,
+    snap_age             INTEGER     NOT NULL DEFAULT -1,
+    snap_caregiver_name  TEXT        NOT NULL DEFAULT '',
+    snap_caregiver_phone TEXT        NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_warnings_student_id ON warnings (student_id);

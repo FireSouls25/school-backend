@@ -24,11 +24,19 @@ var statusByCode = map[string]int{
 	"roles.err_unknown_role":    http.StatusBadRequest,
 	"roles.err_invalid_subject": http.StatusBadRequest,
 
-	"students.err_not_found":       http.StatusNotFound,
-	"students.err_invalid_id":      http.StatusBadRequest,
-	"students.err_invalid_name":    http.StatusBadRequest,
-	"students.err_invalid_class":   http.StatusBadRequest,
-	"students.err_photo_too_large": http.StatusRequestEntityTooLarge,
+	"students.err_not_found":            http.StatusNotFound,
+	"students.err_invalid_id":           http.StatusBadRequest,
+	"students.err_invalid_name":         http.StatusBadRequest,
+	"students.err_invalid_class":        http.StatusBadRequest,
+	"students.err_photo_too_large":      http.StatusRequestEntityTooLarge,
+	"students.err_invalid_document":     http.StatusBadRequest,
+	"students.err_invalid_birth":        http.StatusBadRequest,
+	"students.err_invalid_blood_type":   http.StatusBadRequest,
+	"students.err_invalid_email":        http.StatusBadRequest,
+	"students.err_invalid_guardian":     http.StatusBadRequest,
+	"students.err_invalid_sibling":      http.StatusBadRequest,
+	"students.err_invalid_health":       http.StatusBadRequest,
+	"students.err_invalid_repeat_count": http.StatusBadRequest,
 
 	"attendance.err_unknown_reason":  http.StatusBadRequest,
 	"attendance.err_invalid_student": http.StatusBadRequest,
@@ -42,6 +50,16 @@ var statusByCode = map[string]int{
 	"incidents.err_invalid_date":      http.StatusBadRequest,
 	"incidents.err_empty_description": http.StatusBadRequest,
 	"incidents.err_not_found":         http.StatusNotFound,
+
+	"warnings.err_unknown_gravity":   http.StatusBadRequest,
+	"warnings.err_invalid_student":   http.StatusBadRequest,
+	"warnings.err_invalid_class":     http.StatusBadRequest,
+	"warnings.err_invalid_teacher":   http.StatusBadRequest,
+	"warnings.err_invalid_date":      http.StatusBadRequest,
+	"warnings.err_empty_title":       http.StatusBadRequest,
+	"warnings.err_empty_description": http.StatusBadRequest,
+	"warnings.err_invalid_snapshot":  http.StatusBadRequest,
+	"warnings.err_not_found":         http.StatusNotFound,
 }
 
 // writeJSON writes v as JSON with the given status code.

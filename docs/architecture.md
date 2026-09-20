@@ -76,20 +76,30 @@ roles only authorizes.
 
 ## Students (`src/core/students`)
 
-- `Student` is the profile aggregate: a stable UUID, names, surnames and an
-  opaque `ClassID` (owned by the future classes capability). `FullName`
-  renders surnames first (Colombian listing convention).
+- `Student` is the profile aggregate: a stable UUID, names, surnames, an
+  opaque `ClassID` (owned by the future classes capability), document
+  number, contact, birth data, health (vision/hearing/blood type/medical
+  report/diversity condition/specialist report), school trajectory
+  (new/previous school/transfer reason/repeat count), mother/father/
+  acudiente guardians, household and siblings. `FullName` renders surnames
+  first (Colombian listing convention); `AgeAt` derives age from the
+  birthdate (never stored).
 - `Store` port covers create/read/list-per-class/update/delete plus photo
   upload (`PutPhoto`, capped at `MaxPhotoSize`, 2 MiB) and retrieval.
   Implementations must return lists ordered alphabetically.
-- `Service` validates input, assigns UUIDs (`google/uuid`) and maps errors to
-  coded domain errors.
+- `Service` takes full `Student` values, normalizes (trim, blood-type
+  uppercase, email lowercase), validates (names/class/document/acudiente
+  required; email, blood type, guardians, siblings and health checked when
+  present), assigns UUIDs (`google/uuid`) and maps errors to coded domain
+  errors.
 
 ## Attendance (`src/core/attendance`)
 
 - `Record` keeps one entry per student per day with a `Reason`:
-  `absence` (inasistencia) or `evasion`. Records carry the `ClassID` so a
-  student's history spans current and previous class-groups and years.
+  `absence` (inasistencia), `evasion` (evasión) or `late` (atraso).
+  `Parse` accepts stable ids and Spanish terms, accent-insensitively.
+  Records carry the `ClassID` so a student's history spans current and
+  previous class-groups and years.
 - `Store` port: add, list per student (newest first), delete. History is
   cascade-deleted with the student.
 
@@ -100,11 +110,24 @@ roles only authorizes.
   terms. Like attendance records, faults keep the `ClassID` for full-history
   queries and cascade-delete with the student.
 
+## Warnings (`src/core/warnings`)
+
+- `Warning` is a llamado de atención: title, `Gravity` (`mild/moderate/
+  severe` = leve/medio/grave), description, event date and hour
+  (`HappenedAt`), issuing teacher (opaque id until `users` exists) and a
+  `StudentSnapshot` freezing the student's identity (names, document,
+  class, birthdate, age, caregiver contact) at issue time, decoupled from
+  later profile edits.
+- `Service.Issue` validates and assigns UUIDs; `Store` port mirrors the
+  other histories (add, list newest-first, delete, cascade on student
+  delete). Full detail in `docs/students.md`.
+
 ## Persistence (`src/platform/postgres`)
 
-- Production adapters implement the three Store ports on `pgx/v5`
+- Production adapters implement the four Store ports on `pgx/v5`
   (`pgxpool`). The idempotent schema lives in `schema.sql` (embedded) and is
-  applied at connect time.
+  applied at connect time, including `ADD COLUMN IF NOT EXISTS` migrations
+  for installs predating the extended profile and the `late` reason.
 - The composition root selects PostgreSQL when `DATABASE_URL` is set,
   otherwise in-memory stores (development only). Integration tests run
   against `TEST_DATABASE_URL` and skip when unset.

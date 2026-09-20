@@ -27,9 +27,10 @@ src/
   cmd/server/      # composition root: wires config, stores, services, router
   core/            # business capabilities (screaming architecture)
     roles/         # role system: Role, permission matrix, Store port, Authorizer
-    students/      # student profiles: UUID, names, class, photo
-    attendance/    # assistance history: inasistencia / evasión
+    students/      # student profiles: ficha completa, foto, acudiente, hermanos
+    attendance/    # assistance history: inasistencia / evasión / atraso
     incidents/     # faults graded leve / normal / grave
+    warnings/      # llamados de atención leve / medio / grave con snapshot
   platform/        # cross-cutting infrastructure
     config/        # environment configuration
     http/          # chi router, locale middleware, error responses

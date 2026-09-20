@@ -23,12 +23,19 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
+// clone returns a copy of st with its own siblings slice.
+func clone(st Student) Student {
+	st.Siblings = append([]Sibling(nil), st.Siblings...)
+	return st
+}
+
 // Create implements Store.
 func (s *MemoryStore) Create(_ context.Context, st Student) (Student, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	st = clone(st)
 	s.students[st.ID] = st
-	return st, nil
+	return clone(st), nil
 }
 
 // ByID implements Store.
@@ -39,7 +46,7 @@ func (s *MemoryStore) ByID(_ context.Context, id string) (Student, error) {
 	if !ok {
 		return Student{}, ErrNotFound
 	}
-	return st, nil
+	return clone(st), nil
 }
 
 // ListByClass implements Store.
@@ -49,7 +56,7 @@ func (s *MemoryStore) ListByClass(_ context.Context, classID string) ([]Student,
 	out := make([]Student, 0)
 	for _, st := range s.students {
 		if st.ClassID == classID {
-			out = append(out, st)
+			out = append(out, clone(st))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -65,8 +72,9 @@ func (s *MemoryStore) Update(_ context.Context, st Student) (Student, error) {
 	if _, ok := s.students[st.ID]; !ok {
 		return Student{}, ErrNotFound
 	}
+	st = clone(st)
 	s.students[st.ID] = st
-	return st, nil
+	return clone(st), nil
 }
 
 // Delete implements Store. Photos are dropped with the student.

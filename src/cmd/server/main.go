@@ -9,6 +9,7 @@ import (
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
 	"grade/src/core/students"
+	"grade/src/core/warnings"
 	"grade/src/platform/config"
 	httpapi "grade/src/platform/http"
 	"grade/src/platform/i18n"
@@ -29,6 +30,7 @@ func main() {
 		studentsStore   students.Store   = students.NewMemoryStore()
 		attendanceStore attendance.Store = attendance.NewMemoryStore()
 		incidentsStore  incidents.Store  = incidents.NewMemoryStore()
+		warningsStore   warnings.Store   = warnings.NewMemoryStore()
 	)
 	if cfg.DatabaseURL != "" {
 		db, err := pg.Connect(ctx, cfg.DatabaseURL)
@@ -40,6 +42,7 @@ func main() {
 		studentsStore = pg.NewStudentsStore(db)
 		attendanceStore = pg.NewAttendanceStore(db)
 		incidentsStore = pg.NewIncidentsStore(db)
+		warningsStore = pg.NewWarningsStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only)")
@@ -48,6 +51,7 @@ func main() {
 	_ = students.NewService(studentsStore)
 	_ = attendance.NewService(attendanceStore)
 	_ = incidents.NewService(incidentsStore)
+	_ = warnings.NewService(warningsStore)
 
 	roleStore := roles.NewMemoryStore()
 	roles.NewService(roleStore)

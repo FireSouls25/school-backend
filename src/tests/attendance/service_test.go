@@ -21,7 +21,11 @@ func TestReasonParsing(t *testing.T) {
 	}{
 		{"absence", attendance.ReasonAbsence, true},
 		{"  EVASION ", attendance.ReasonEvasion, true},
-		{"late", "", false},
+		{"late", attendance.ReasonLate, true},
+		{"  ATRASO ", attendance.ReasonLate, true},
+		{"inasistencia", attendance.ReasonAbsence, true},
+		{"Evasión", attendance.ReasonEvasion, true},
+		{"holiday", "", false},
 		{"", "", false},
 	} {
 		got, err := attendance.Parse(tc.in)
@@ -58,9 +62,18 @@ func TestRecordValidation(t *testing.T) {
 		}
 	})
 	t.Run("unknown reason", func(t *testing.T) {
-		_, err := svc.Record(ctx, "00000000-0000-0000-0000-000000000001", "9-1", day, attendance.Reason("late"))
+		_, err := svc.Record(ctx, "00000000-0000-0000-0000-000000000001", "9-1", day, attendance.Reason("holiday"))
 		if !errors.Is(err, attendance.ErrUnknownReason) {
 			t.Errorf("error = %v, want ErrUnknownReason", err)
+		}
+	})
+	t.Run("late arrival", func(t *testing.T) {
+		r, err := svc.Record(ctx, "00000000-0000-0000-0000-000000000001", "9-1", day, attendance.ReasonLate)
+		if err != nil {
+			t.Fatalf("Record late: %v", err)
+		}
+		if r.Reason != attendance.ReasonLate {
+			t.Errorf("Reason = %q, want late", r.Reason)
 		}
 	})
 }
