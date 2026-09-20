@@ -20,9 +20,10 @@ func NewService(store Store) *Service {
 }
 
 // Create validates the profile, assigns a fresh UUID and persists it.
-// The ID field of t is ignored.
+// The ID field of t is ignored. New teachers are always active.
 func (s *Service) Create(ctx context.Context, t Teacher) (Teacher, error) {
 	t.ID = uuid.NewString()
+	t.Active = true
 	t = normalize(t)
 	if err := validate(t); err != nil {
 		return Teacher{}, err

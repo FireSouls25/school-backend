@@ -32,13 +32,14 @@ const studentColumns = `id, names, surnames, class_id,
 	father_name, father_document, father_phone, father_occupation, father_address,
 	caregiver_name, caregiver_document, caregiver_phone, caregiver_occupation, caregiver_address,
 	lives_with, siblings, medical_report, diversity_condition,
-	specialist_has, specialist_detail`
+	specialist_has, specialist_detail, status`
 
 // scanStudent maps the current row (in studentColumns order) onto a Student.
 func scanStudent(scan func(dest ...any) error) (students.Student, error) {
 	var st students.Student
 	var birthdate *time.Time
 	var siblingsJSON []byte
+	var status string
 	err := scan(
 		&st.ID, &st.Names, &st.Surnames, &st.ClassID,
 		&st.DocumentID, &st.Phone, &st.Address, &st.Birthplace, &birthdate, &st.Email,
@@ -48,11 +49,12 @@ func scanStudent(scan func(dest ...any) error) (students.Student, error) {
 		&st.Father.Names, &st.Father.DocumentID, &st.Father.Phone, &st.Father.Occupation, &st.Father.Address,
 		&st.Caregiver.Names, &st.Caregiver.DocumentID, &st.Caregiver.Phone, &st.Caregiver.Occupation, &st.Caregiver.Address,
 		&st.LivesWith, &siblingsJSON, &st.MedicalReport, &st.DiversityCondition,
-		&st.SpecialistReport.Has, &st.SpecialistReport.Detail,
+		&st.SpecialistReport.Has, &st.SpecialistReport.Detail, &status,
 	)
 	if err != nil {
 		return students.Student{}, err
 	}
+	st.Status = students.Status(status)
 	if birthdate != nil {
 		st.Birthdate = *birthdate
 	}
@@ -84,7 +86,7 @@ func studentArgs(st students.Student) []any {
 		st.Father.Names, st.Father.DocumentID, st.Father.Phone, st.Father.Occupation, st.Father.Address,
 		st.Caregiver.Names, st.Caregiver.DocumentID, st.Caregiver.Phone, st.Caregiver.Occupation, st.Caregiver.Address,
 		st.LivesWith, string(siblingsJSON), st.MedicalReport, st.DiversityCondition,
-		st.SpecialistReport.Has, st.SpecialistReport.Detail,
+		st.SpecialistReport.Has, st.SpecialistReport.Detail, string(st.Status),
 	}
 }
 
@@ -99,11 +101,11 @@ func (s *StudentsStore) Create(ctx context.Context, st students.Student) (studen
 			father_name, father_document, father_phone, father_occupation, father_address,
 			caregiver_name, caregiver_document, caregiver_phone, caregiver_occupation, caregiver_address,
 			lives_with, siblings, medical_report, diversity_condition,
-			specialist_has, specialist_detail)
+			specialist_has, specialist_detail, status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 			$11, $12, $13, $14, $15, $16, $17, $18, $19,
 			$20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
-			$30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+			$30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
 		RETURNING `+studentColumns,
 		studentArgs(st)...)
 	out, err := scanStudent(row.Scan)
@@ -164,7 +166,7 @@ func (s *StudentsStore) Update(ctx context.Context, st students.Student) (studen
 			father_name = $25, father_document = $26, father_phone = $27, father_occupation = $28, father_address = $29,
 			caregiver_name = $30, caregiver_document = $31, caregiver_phone = $32, caregiver_occupation = $33, caregiver_address = $34,
 			lives_with = $35, siblings = $36, medical_report = $37, diversity_condition = $38,
-			specialist_has = $39, specialist_detail = $40, updated_at = now()
+			specialist_has = $39, specialist_detail = $40, status = $41, updated_at = now()
 		WHERE id = $1
 		RETURNING `+studentColumns,
 		args...)

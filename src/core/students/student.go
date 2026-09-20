@@ -61,6 +61,32 @@ type Sibling struct {
 	ClassID string
 }
 
+// Status is the lifecycle state of a student. Stable identifiers;
+// user-facing names live in the i18n catalog (student.status.<id>).
+type Status string
+
+const (
+	// StatusActive is an enrolled student.
+	StatusActive Status = "active"
+	// StatusGraduated marks the end of the lifecycle (promoted from grade 11).
+	StatusGraduated Status = "graduated"
+)
+
+// IsValid reports whether s is a known status.
+func (s Status) IsValid() bool {
+	switch s {
+	case StatusActive, StatusGraduated:
+		return true
+	}
+	return false
+}
+
+// String returns the stable identifier of s.
+func (s Status) String() string { return string(s) }
+
+// MessageKey returns the i18n catalog key holding the user-facing name.
+func (s Status) MessageKey() string { return "student.status." + s.String() }
+
 // Student is the profile of one enrolled student.
 type Student struct {
 	// ID is the unique, immutable UUID of the student.
@@ -117,6 +143,9 @@ type Student struct {
 	// SpecialistReport records whether a specialist report exists and
 	// which one.
 	SpecialistReport Condition
+	// Status is the lifecycle state. New students are active; graduation
+	// moves it to graduated via Graduate, never through Update.
+	Status Status
 }
 
 // FullName returns the display name with surnames first, the ordering

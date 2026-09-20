@@ -47,3 +47,22 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	delete(s.warnings, id)
 	return nil
 }
+
+// ForGroup implements Store.
+func (s *MemoryStore) ForGroup(_ context.Context, groupID string) ([]Warning, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Warning, 0)
+	for _, w := range s.warnings {
+		if w.GroupID == groupID && groupID != "" {
+			out = append(out, w)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].HappenedAt.Equal(out[j].HappenedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].HappenedAt.Before(out[j].HappenedAt)
+	})
+	return out, nil
+}

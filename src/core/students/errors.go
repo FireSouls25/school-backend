@@ -45,4 +45,6 @@ var (
 	ErrInvalidHealth = newError("students.err_invalid_health", "students: invalid health data")
 	// ErrInvalidRepeatCount is returned when the repeat count is negative.
 	ErrInvalidRepeatCount = newError("students.err_invalid_repeat_count", "students: invalid repeat count")
+	// ErrAlreadyGraduated is returned when graduating an already graduated student.
+	ErrAlreadyGraduated = newError("students.err_already_graduated", "students: already graduated")
 )

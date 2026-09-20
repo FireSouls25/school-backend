@@ -14,6 +14,7 @@ import (
 	"grade/src/core/incidents"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
+	"grade/src/core/sessions"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
 	"grade/src/core/teachers"
@@ -581,5 +582,168 @@ func TestScheduleEntriesRoundTrip(t *testing.T) {
 	byTeacher, _ = store.EntriesForTeacher(ctx, tid)
 	if len(byTeacher) != 0 {
 		t.Errorf("schedule not cascaded: %d records remain", len(byTeacher))
+	}
+}
+
+func TestSessionsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	yearsStore := pg.NewSchoolYearsStore(db)
+	year, err := yearsStore.Create(ctx, schoolyears.SchoolYear{
+		ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Year: 2029, Periods: 3,
+		StartDate: time.Date(2029, 2, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2029, 11, 23, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Create year: %v", err)
+	}
+	classesStore := pg.NewClassesStore(db)
+	group, err := classesStore.Create(ctx, classes.ClassGroup{
+		ID:           "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+		SchoolYearID: year.ID, Grade: 9, GroupNo: 1,
+	})
+	if err != nil {
+		t.Fatalf("Create class: %v", err)
+	}
+	studentsStore := pg.NewStudentsStore(db)
+	sid := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	prof := fullProfile(sid)
+	if _, err := studentsStore.Create(ctx, prof); err != nil {
+		t.Fatalf("Create student: %v", err)
+	}
+
+	store := pg.NewSessionsStore(db)
+	want := sessions.Session{
+		ID: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", ClassGroupID: group.ID,
+		ClassLabel: "9-1", SchoolYear: 2029,
+		TeacherID: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+		SubjectID: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+		Date:      time.Date(2029, 8, 20, 0, 0, 0, 0, time.UTC), Period: 2,
+		Roster: []sessions.RosterEntry{
+			{StudentID: sid, Names: "Ana", Surnames: "Gómez", DocumentID: "1234567890"},
+		},
+	}
+	got, err := store.CreateSession(ctx, want)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CreateSession = %+v, want %+v", got, want)
+	}
+
+	rev, err := store.AppendRevision(ctx, sessions.Revision{
+		ID: "11111111-1111-4111-8111-111111111111", SessionID: got.ID, Number: 1,
+		StudentID: sid, From: "", To: sessions.MarkLate,
+		ChangedBy: "teacher-1", ChangedAt: time.Date(2029, 8, 20, 8, 5, 0, 0, time.UTC),
+		Note: "llegó 8:05",
+	})
+	if err != nil {
+		t.Fatalf("AppendRevision: %v", err)
+	}
+	if rev.Number != 1 || rev.To != sessions.MarkLate {
+		t.Errorf("revision = %+v", rev)
+	}
+	revs, err := store.RevisionsForSession(ctx, got.ID)
+	if err != nil || len(revs) != 1 {
+		t.Fatalf("RevisionsForSession = %v, %d records", err, len(revs))
+	}
+
+	byGroup, err := store.SessionsForGroup(ctx, group.ID)
+	if err != nil || len(byGroup) != 1 {
+		t.Fatalf("SessionsForGroup = %v, %d records", err, len(byGroup))
+	}
+	if len(byGroup[0].Roster) != 1 {
+		t.Errorf("roster = %+v, want 1 frozen entry", byGroup[0].Roster)
+	}
+
+	// A group with sessions cannot be deleted.
+	if err := classesStore.Delete(ctx, group.ID); !errors.Is(err, classes.ErrHasSessions) {
+		t.Errorf("delete group error = %v, want ErrHasSessions", err)
+	}
+
+	// Deleting the student cascades roster rows and revisions.
+	if err := studentsStore.Delete(ctx, sid); err != nil {
+		t.Fatalf("Delete student: %v", err)
+	}
+	after, err := store.SessionByID(ctx, got.ID)
+	if err != nil {
+		t.Fatalf("SessionByID: %v", err)
+	}
+	if len(after.Roster) != 0 {
+		t.Errorf("roster not cascaded: %+v", after.Roster)
+	}
+	revs, _ = store.RevisionsForSession(ctx, got.ID)
+	if len(revs) != 0 {
+		t.Errorf("revisions not cascaded: %d records remain", len(revs))
+	}
+}
+
+func TestWarningGroupAndLifecycleFlags(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	studentsStore := pg.NewStudentsStore(db)
+	sid := "22222222-2222-4222-8222-222222222222"
+	prof := fullProfile(sid)
+	created, err := studentsStore.Create(ctx, prof)
+	if err != nil {
+		t.Fatalf("Create student: %v", err)
+	}
+	if created.Status != students.StatusActive {
+		t.Errorf("new student status = %q, want active", created.Status)
+	}
+	created.Status = students.StatusGraduated
+	grad, err := studentsStore.Update(ctx, created)
+	if err != nil {
+		t.Fatalf("Update status: %v", err)
+	}
+	if grad.Status != students.StatusGraduated {
+		t.Errorf("status = %q, want graduated", grad.Status)
+	}
+
+	teachersStore := pg.NewTeachersStore(db)
+	tid := "33333333-3333-4333-8333-333333333333"
+	tc, err := teachersStore.Create(ctx, teachers.Teacher{
+		ID: tid, Names: "Luis", Surnames: "Pardo", DocumentID: "80111222", Active: false,
+	})
+	if err != nil {
+		t.Fatalf("Create teacher: %v", err)
+	}
+	if tc.Active {
+		t.Errorf("store did not persist Active=false: %+v", tc)
+	}
+	tc.Active = true
+	upd, err := teachersStore.Update(ctx, tc)
+	if err != nil {
+		t.Fatalf("Update teacher: %v", err)
+	}
+	if !upd.Active {
+		t.Errorf("teacher Active = false, want true")
+	}
+
+	warnStore := pg.NewWarningsStore(db)
+	w, err := warnStore.Add(ctx, warnings.Warning{
+		ID: "44444444-4444-4444-8444-444444444444", StudentID: sid,
+		ClassID: "9-1", TeacherID: tid,
+		HappenedAt: time.Date(2029, 8, 20, 10, 30, 0, 0, time.UTC),
+		Gravity:    warnings.GravityModerate,
+		Title:      "Desorden", Description: "Interrumpió la clase.",
+		GroupID: "55555555-5555-4555-8555-555555555555",
+		Snapshot: warnings.StudentSnapshot{
+			Names: "Ana", Surnames: "Gómez", DocumentID: "1234567890",
+			ClassID: "9-1", Age: 14,
+			CaregiverName: "María Gómez", CaregiverPhone: "3101112233",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Add warning: %v", err)
+	}
+	grouped, err := warnStore.ForGroup(ctx, w.GroupID)
+	if err != nil || len(grouped) != 1 {
+		t.Fatalf("ForGroup = %v, %d records", err, len(grouped))
+	}
+	if grouped[0].ID != w.ID {
+		t.Errorf("ForGroup[0] = %+v, want %+v", grouped[0], w)
 	}
 }

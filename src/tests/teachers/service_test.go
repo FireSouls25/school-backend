@@ -79,6 +79,19 @@ func TestServiceCreateAssignsUUID(t *testing.T) {
 	if got.DocumentID != "79888777" || !got.IsHomeroomDirector() || got.HomeroomClassID != "9-1" {
 		t.Errorf("ByID = %+v", got)
 	}
+	if !got.Active {
+		t.Errorf("new teacher Active = false, want true")
+	}
+
+	// Create ignores an incoming inactive flag.
+	p.Active = false
+	c, err := svc.Create(ctx, p)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !c.Active {
+		t.Errorf("Create with Active=false stayed inactive, want forced active")
+	}
 }
 
 func TestHomeroomDirectorFlag(t *testing.T) {
@@ -155,6 +168,16 @@ func TestUpdateAndDelete(t *testing.T) {
 	}
 	if upd.IsHomeroomDirector() || upd.MedicalConditions != "Ninguna" {
 		t.Errorf("Update = %+v", upd)
+	}
+
+	// Retiring flips Active instead of deleting the profile.
+	upd.Active = false
+	retired, err := svc.Update(ctx, upd)
+	if err != nil {
+		t.Fatalf("Update retire: %v", err)
+	}
+	if retired.Active {
+		t.Errorf("retired Active = true, want false")
 	}
 
 	ghost := validProfile()

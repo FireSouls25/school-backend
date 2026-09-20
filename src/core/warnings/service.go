@@ -29,11 +29,50 @@ func (s *Service) Issue(ctx context.Context, in Input) (Warning, error) {
 		Title:       strings.TrimSpace(in.Title),
 		Description: strings.TrimSpace(in.Description),
 		Snapshot:    normalizeSnapshot(in.Snapshot),
+		GroupID:     strings.TrimSpace(in.GroupID),
 	}
 	if err := validate(w); err != nil {
 		return Warning{}, err
 	}
 	return s.store.Add(ctx, w)
+}
+
+// IssueBatch issues one event against several students: every warning
+// shares a fresh GroupID while each student keeps its own history. All
+// items validate before anything persists.
+func (s *Service) IssueBatch(ctx context.Context, in BatchInput) ([]Warning, error) {
+	if len(in.Items) == 0 {
+		return nil, ErrEmptyBatch
+	}
+	groupID := uuid.NewString()
+	warnings := make([]Warning, 0, len(in.Items))
+	for _, item := range in.Items {
+		w := Warning{
+			ID:          uuid.NewString(),
+			StudentID:   strings.TrimSpace(item.StudentID),
+			ClassID:     strings.TrimSpace(in.ClassID),
+			TeacherID:   strings.TrimSpace(in.TeacherID),
+			HappenedAt:  in.HappenedAt,
+			Gravity:     in.Gravity,
+			Title:       strings.TrimSpace(in.Title),
+			Description: strings.TrimSpace(in.Description),
+			Snapshot:    normalizeSnapshot(item.Snapshot),
+			GroupID:     groupID,
+		}
+		if err := validate(w); err != nil {
+			return nil, err
+		}
+		warnings = append(warnings, w)
+	}
+	out := make([]Warning, 0, len(warnings))
+	for _, w := range warnings {
+		stored, err := s.store.Add(ctx, w)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, stored)
+	}
+	return out, nil
 }
 
 // ForStudent returns the full warning history of studentID, newest first.
@@ -42,6 +81,14 @@ func (s *Service) ForStudent(ctx context.Context, studentID string) ([]Warning, 
 		return nil, ErrInvalidStudent
 	}
 	return s.store.ForStudent(ctx, studentID)
+}
+
+// ForGroup returns every warning sharing a batch id, oldest first.
+func (s *Service) ForGroup(ctx context.Context, groupID string) ([]Warning, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(groupID)); err != nil {
+		return nil, ErrInvalidGroup
+	}
+	return s.store.ForGroup(ctx, strings.TrimSpace(groupID))
 }
 
 // Remove deletes a warning record.
@@ -88,6 +135,11 @@ func validate(w Warning) error {
 	if w.Snapshot.Names == "" || w.Snapshot.Surnames == "" ||
 		w.Snapshot.DocumentID == "" || w.Snapshot.ClassID == "" {
 		return ErrInvalidSnapshot
+	}
+	if w.GroupID != "" {
+		if _, err := uuid.Parse(w.GroupID); err != nil {
+			return ErrInvalidGroup
+		}
 	}
 	return nil
 }

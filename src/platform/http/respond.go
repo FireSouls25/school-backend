@@ -37,6 +37,7 @@ var statusByCode = map[string]int{
 	"students.err_invalid_sibling":      http.StatusBadRequest,
 	"students.err_invalid_health":       http.StatusBadRequest,
 	"students.err_invalid_repeat_count": http.StatusBadRequest,
+	"students.err_already_graduated":    http.StatusBadRequest,
 
 	"attendance.err_unknown_reason":  http.StatusBadRequest,
 	"attendance.err_invalid_student": http.StatusBadRequest,
@@ -59,6 +60,8 @@ var statusByCode = map[string]int{
 	"warnings.err_empty_title":       http.StatusBadRequest,
 	"warnings.err_empty_description": http.StatusBadRequest,
 	"warnings.err_invalid_snapshot":  http.StatusBadRequest,
+	"warnings.err_invalid_group":     http.StatusBadRequest,
+	"warnings.err_empty_batch":       http.StatusBadRequest,
 	"warnings.err_not_found":         http.StatusNotFound,
 
 	"teachers.err_not_found":        http.StatusNotFound,
@@ -97,6 +100,7 @@ var statusByCode = map[string]int{
 	"classes.err_invalid_group":       http.StatusBadRequest,
 	"classes.err_duplicate_class":     http.StatusBadRequest,
 	"classes.err_has_enrollments":     http.StatusBadRequest,
+	"classes.err_has_sessions":        http.StatusBadRequest,
 
 	"enrollments.err_invalid_id":           http.StatusBadRequest,
 	"enrollments.err_invalid_student":      http.StatusBadRequest,
@@ -117,6 +121,24 @@ var statusByCode = map[string]int{
 	"schedules.err_teacher_conflict":     http.StatusBadRequest,
 	"schedules.err_class_conflict":       http.StatusBadRequest,
 	"schedules.err_not_teaching_subject": http.StatusBadRequest,
+
+	"sessions.err_not_found":           http.StatusNotFound,
+	"sessions.err_invalid_id":          http.StatusBadRequest,
+	"sessions.err_invalid_class_group": http.StatusBadRequest,
+	"sessions.err_invalid_teacher":     http.StatusBadRequest,
+	"sessions.err_invalid_subject":     http.StatusBadRequest,
+	"sessions.err_invalid_date":        http.StatusBadRequest,
+	"sessions.err_invalid_period":      http.StatusBadRequest,
+	"sessions.err_invalid_class_label": http.StatusBadRequest,
+	"sessions.err_invalid_school_year": http.StatusBadRequest,
+	"sessions.err_empty_roster":        http.StatusBadRequest,
+	"sessions.err_invalid_roster":      http.StatusBadRequest,
+	"sessions.err_duplicate_roster":    http.StatusBadRequest,
+	"sessions.err_unknown_mark":        http.StatusBadRequest,
+	"sessions.err_invalid_student":     http.StatusBadRequest,
+	"sessions.err_not_enrolled":        http.StatusBadRequest,
+	"sessions.err_no_change":           http.StatusBadRequest,
+	"sessions.err_invalid_actor":       http.StatusBadRequest,
 }
 
 // writeJSON writes v as JSON with the given status code.

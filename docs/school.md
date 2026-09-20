@@ -1,10 +1,11 @@
-# School years, class-groups, enrollments and schedules
+# School years, class-groups, enrollments, schedules and sessions
 
-This document covers four related capabilities: `schoolyears` (años
+This document covers five related capabilities: `schoolyears` (años
 lectivos), `classes` (salones por año), `enrollments` (matrículas y
-auditoría de promociones) and `schedules` (horarios semanales), plus their
-PostgreSQL persistence. Sessions and the promotion flow build on these
-records in later phases.
+auditoría de promociones), `schedules` (horarios semanales) and `sessions`
+(llamados a lista con historial de revisiones), plus their PostgreSQL
+persistence. The promotion flow and statistics build on these records in
+later phases.
 
 ## Overview
 
@@ -83,6 +84,15 @@ EntriesForTeacher(ctx, teacherID) ([]Entry, error) // by weekday, then start
 EntriesForGroup(ctx, classGroupID) ([]Entry, error) // the weekly schedule
 Update(ctx, Entry) (Entry, error)
 Delete(ctx, id string) error                       // no-op when absent
+
+// sessions.Store
+CreateSession(ctx, Session) (Session, error)       // session + frozen roster, atomic
+SessionByID(ctx, id string) (Session, error)       // ErrNotFound; roster included
+SessionsForGroup(ctx, classGroupID) ([]Session, error)   // newest first
+SessionsForTeacher(ctx, teacherID) ([]Session, error)    // newest first
+DeleteSession(ctx, id string) error                // no-op when absent; cascades roster+revisions
+AppendRevision(ctx, Revision) (Revision, error)
+RevisionsForSession(ctx, sessionID) ([]Revision, error)  // oldest first
 ```
 
 `Service` types wrap each store with validation and UUID assignment
@@ -97,7 +107,9 @@ adapters (`src/platform/postgres/pgerrors.go`):
 
 - Deleting a year with groups → `RESTRICT` → `schoolyears.ErrHasClasses`.
 - Deleting a group with enrollments → `RESTRICT` → `classes.ErrHasEnrollments`.
+- Deleting a group with sessions → `RESTRICT` → `classes.ErrHasSessions`.
 - Enrolling an unknown student/group → FK violation → `enrollments.ErrInvalidStudent` / `ErrInvalidClassGroup`.
+- Opening a session for an unknown group → FK violation → `sessions.ErrInvalidClassGroup`.
 - Duplicate year / group / enrollment → unique violation → `ErrDuplicateYear` / `ErrDuplicateClass` / `ErrDuplicateEnrollment` (race-safe behind the service-level checks, which keep memory stores consistent).
 
 Within one package the service checks first (unique names, duplicate
@@ -123,6 +135,28 @@ package generates nothing by itself. Rules enforced by
 - Read models: `EntriesForTeacherOnDay` (the teacher's day view; holiday
   skipping composes on top via `SchoolYear.IsSchoolDay`) and
   `EntriesForGroup` (the salon's weekly schedule, e.g. 7-1/2026).
+
+### Sessions: frozen roll calls with git-like revisions
+
+`Session` is one attendance call: class-group, frozen `ClassLabel` (e.g.
+"9-1") and `SchoolYear` (e.g. 2026), teacher, optional subject (empty for
+homeroom rolls), date, period (1-based) and the frozen `Roster`
+(`StudentID` + names + document per student). Later profile or group edits
+never rewrite it, so admins always see each record as it was.
+
+Marks are event-sourced lite: there is no marks table. `RecordMark`
+appends a `Revision{Number, StudentID, From, To, ChangedBy, ChangedAt,
+Note}` — including the first mark (`From` = present `""`) — and the
+current state folds from revisions (`SessionDetail{Session, Marks,
+Revisions}`). Students without a mark count as present. Corrections keep
+both states: absence → late when the student arrives, late → present on a
+mistake. Repeating the current mark fails with `ErrNoChange`; marking
+outside the roster fails with `ErrNotEnrolled`. Revisions are append-only;
+timestamps are set by the Service, never the caller.
+
+Marks reuse the attendance vocabulary (`absence` / `evasion` / `late`,
+labels from the `reason.*` catalog) without importing the attendance
+package: each capability stays decoupled.
 
 ## Database schema
 
@@ -155,6 +189,17 @@ schedule_entries(id uuid PK,
                  subject_id uuid FK->subjects ON DELETE CASCADE,
                  weekday CHECK 0..6, start_min, end_min CHECK start < end,
                  created_at, updated_at)
+sessions(id uuid PK,
+         class_group_id uuid FK->class_groups ON DELETE RESTRICT,
+         class_label, school_year, teacher_id TEXT (no FK: history survives),
+         subject_id TEXT ('' = homeroom roll), date DATE, period CHECK >= 1,
+         created_at, updated_at)
+session_rosters(session_id FK->sessions CASCADE, student_id FK->students CASCADE,
+                names, surnames, document_id; PK(session_id, student_id))
+session_revisions(id uuid PK, session_id FK->sessions CASCADE, rev_no,
+                  student_id FK->students CASCADE,
+                  from_mark/to_mark CHECK IN ('', 'absence', 'evasion', 'late'),
+                  changed_by, changed_at, note; UNIQUE(session_id, rev_no))
 ```
 
 Deleting a student cascades its enrollments and promotions (consistent
@@ -182,15 +227,16 @@ explicitly once empty.
 | `enrollments.err_invalid_id` / `err_invalid_student` / `err_invalid_class_group` / `err_duplicate_enrollment` / `err_invalid_decision` / `err_invalid_promotion` / `err_invalid_date` / `err_invalid_actor` | 400 |
 | `schedules.err_not_found` | 404 |
 | `schedules.err_invalid_id` / `err_invalid_class_group` / `err_invalid_teacher` / `err_invalid_subject` / `err_invalid_weekday` / `err_invalid_time` / `err_teacher_conflict` / `err_class_conflict` / `err_not_teaching_subject` | 400 |
+| `sessions.err_not_found` | 404 |
+| `sessions.err_invalid_id` / `err_invalid_class_group` / `err_invalid_teacher` / `err_invalid_subject` / `err_invalid_date` / `err_invalid_period` / `err_invalid_class_label` / `err_invalid_school_year` / `err_empty_roster` / `err_invalid_roster` / `err_duplicate_roster` / `err_unknown_mark` / `err_invalid_student` / `err_not_enrolled` / `err_no_change` / `err_invalid_actor` | 400 |
+| `classes.err_has_sessions` | 400 |
 
 All messages are localized through `src/platform/i18n/catalogs/es.json`
 (`enrollment.decision.*` holds the display names Promovido/Repite/Graduado).
 
 ## What's next (later phases)
 
-- **Sessions**: attendance calls reference `ClassGroupID` and freeze the
-  roster from its enrollments + student profiles.
 - **Promotion flow**: suggestions + per-student destination choice write
   next-year enrollments, update `Student.ClassID` and record `Promotion`
-  rows; graduating from grade 11 marks the student graduated.
+  rows; graduating from grade 11 calls `Student.Graduate`.
 - **Statistics**: aggregations over these records need no new tables.

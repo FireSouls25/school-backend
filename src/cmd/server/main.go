@@ -12,6 +12,7 @@ import (
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
+	"grade/src/core/sessions"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
 	"grade/src/core/teachers"
@@ -43,6 +44,7 @@ func main() {
 		classesStore     classes.Store     = classes.NewMemoryStore()
 		enrollmentsStore enrollments.Store = enrollments.NewMemoryStore()
 		schedulesStore   schedules.Store   = schedules.NewMemoryStore()
+		sessionsStore    sessions.Store    = sessions.NewMemoryStore()
 	)
 	if cfg.DatabaseURL != "" {
 		db, err := pg.Connect(ctx, cfg.DatabaseURL)
@@ -61,6 +63,7 @@ func main() {
 		classesStore = pg.NewClassesStore(db)
 		enrollmentsStore = pg.NewEnrollmentsStore(db)
 		schedulesStore = pg.NewSchedulesStore(db)
+		sessionsStore = pg.NewSessionsStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only)")
@@ -77,6 +80,7 @@ func main() {
 
 	subjectsSvc := subjects.NewService(subjectsStore)
 	_ = schedules.NewService(schedulesStore, subjectChecker{subjectsSvc})
+	_ = sessions.NewService(sessionsStore)
 
 	roleStore := roles.NewMemoryStore()
 	roles.NewService(roleStore)

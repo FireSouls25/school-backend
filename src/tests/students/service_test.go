@@ -240,6 +240,43 @@ func TestUpdateAndDelete(t *testing.T) {
 	}
 }
 
+func TestGraduateLifecycle(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	st, err := svc.Create(ctx, validProfile())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if st.Status != students.StatusActive {
+		t.Errorf("new student status = %q, want active", st.Status)
+	}
+
+	// Update cannot flip the lifecycle state.
+	st.Status = students.StatusGraduated
+	upd, err := svc.Update(ctx, st)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if upd.Status != students.StatusActive {
+		t.Errorf("Update status = %q, want preserved active", upd.Status)
+	}
+
+	grad, err := svc.Graduate(ctx, st.ID)
+	if err != nil {
+		t.Fatalf("Graduate: %v", err)
+	}
+	if grad.Status != students.StatusGraduated {
+		t.Errorf("Graduate status = %q, want graduated", grad.Status)
+	}
+	if _, err := svc.Graduate(ctx, st.ID); !errors.Is(err, students.ErrAlreadyGraduated) {
+		t.Errorf("second Graduate error = %v, want ErrAlreadyGraduated", err)
+	}
+	if _, err := svc.Graduate(ctx, "00000000-0000-0000-0000-000000000001"); !errors.Is(err, students.ErrNotFound) {
+		t.Errorf("Graduate unknown error = %v, want ErrNotFound", err)
+	}
+}
+
 func TestPhotoLifecycle(t *testing.T) {
 	ctx := context.Background()
 	svc := newService()

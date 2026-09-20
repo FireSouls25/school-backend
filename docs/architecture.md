@@ -190,9 +190,21 @@ roles only authorizes.
   week). Colombian holidays seed from `ColombianHolidays` (Ley 51/1983).
   Full detail in `docs/school.md`.
 
+## Sessions (`src/core/sessions`)
+
+- `Session` is one attendance call (llamado a lista): class-group, frozen
+  `ClassLabel`/`SchoolYear`, teacher, optional subject, date, period and
+  the frozen `Roster`. `Mark` (`absence`/`evasion`/`late`, `""` = present)
+  reuses the attendance vocabulary without importing the package.
+- `RecordMark` appends a `Revision{Number, From, To, ChangedBy, ChangedAt,
+  Note}` — including the first mark — and current state folds from
+  revisions (`SessionDetail`). Both states are always kept; repeating a
+  mark fails with `ErrNoChange`, marking outside the roster with
+  `ErrNotEnrolled`. Full detail in `docs/school.md`.
+
 ## Persistence (`src/platform/postgres`)
 
-- Production adapters implement the nine Store ports on `pgx/v5`
+- Production adapters implement the ten Store ports on `pgx/v5`
   (`pgxpool`). The idempotent schema lives in `schema.sql` (embedded) and is
   applied at connect time, including `ADD COLUMN IF NOT EXISTS` migrations
   for installs predating the extended profile and the `late` reason.

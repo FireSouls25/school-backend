@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS students (
     diversity_condition TEXT        NOT NULL DEFAULT '',
     specialist_has      BOOLEAN     NOT NULL DEFAULT FALSE,
     specialist_detail   TEXT        NOT NULL DEFAULT '',
+    status              TEXT        NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'graduated')),
     photo               BYTEA,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -85,6 +87,7 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS medical_report TEXT NOT NULL DEFAU
 ALTER TABLE students ADD COLUMN IF NOT EXISTS diversity_condition TEXT NOT NULL DEFAULT '';
 ALTER TABLE students ADD COLUMN IF NOT EXISTS specialist_has BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS specialist_detail TEXT NOT NULL DEFAULT '';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 
 CREATE INDEX IF NOT EXISTS idx_students_class_id ON students (class_id);
 
@@ -136,6 +139,10 @@ CREATE TABLE IF NOT EXISTS warnings (
 
 CREATE INDEX IF NOT EXISTS idx_warnings_student_id ON warnings (student_id);
 
+-- Correlate warnings issued in one batch against several students.
+ALTER TABLE warnings ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_warnings_group_id ON warnings (group_id);
+
 CREATE TABLE IF NOT EXISTS teachers (
     id                  UUID PRIMARY KEY,
     names               TEXT        NOT NULL,
@@ -148,9 +155,13 @@ CREATE TABLE IF NOT EXISTS teachers (
     email               TEXT        NOT NULL DEFAULT '',
     medical_conditions  TEXT        NOT NULL DEFAULT '',
     homeroom_class_id   TEXT        NOT NULL DEFAULT '',
+    active              BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Retiring a teacher flips active instead of deleting the profile.
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
 
@@ -251,3 +262,48 @@ CREATE TABLE IF NOT EXISTS schedule_entries (
 
 CREATE INDEX IF NOT EXISTS idx_schedule_teacher_id ON schedule_entries (teacher_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_group_id ON schedule_entries (class_group_id);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id             UUID PRIMARY KEY,
+    class_group_id UUID        NOT NULL REFERENCES class_groups (id) ON DELETE RESTRICT,
+    class_label    TEXT        NOT NULL DEFAULT '',
+    school_year    INTEGER     NOT NULL DEFAULT 0,
+    teacher_id     TEXT        NOT NULL,
+    subject_id     TEXT        NOT NULL DEFAULT '',
+    date           DATE        NOT NULL,
+    period         INTEGER     NOT NULL DEFAULT 1 CHECK (period >= 1),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_group_id ON sessions (class_group_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_teacher_id ON sessions (teacher_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions (date);
+
+CREATE TABLE IF NOT EXISTS session_rosters (
+    session_id  UUID NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+    student_id  UUID NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    names       TEXT NOT NULL DEFAULT '',
+    surnames    TEXT NOT NULL DEFAULT '',
+    document_id TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (session_id, student_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_rosters_student_id ON session_rosters (student_id);
+
+CREATE TABLE IF NOT EXISTS session_revisions (
+    id         UUID PRIMARY KEY,
+    session_id UUID        NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+    rev_no     INTEGER     NOT NULL,
+    student_id UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    from_mark  TEXT        NOT NULL DEFAULT ''
+        CHECK (from_mark IN ('', 'absence', 'evasion', 'late')),
+    to_mark    TEXT        NOT NULL DEFAULT ''
+        CHECK (to_mark IN ('', 'absence', 'evasion', 'late')),
+    changed_by TEXT        NOT NULL,
+    changed_at TIMESTAMPTZ NOT NULL,
+    note       TEXT        NOT NULL DEFAULT '',
+    UNIQUE (session_id, rev_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_revisions_session_id ON session_revisions (session_id);

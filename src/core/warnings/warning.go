@@ -20,7 +20,9 @@ type StudentSnapshot struct {
 	CaregiverPhone string
 }
 
-// Warning is one llamado de atención issued to a student.
+// Warning is one llamado de atención issued to a student. Warnings
+// issued together share a GroupID, so one event against several students
+// stays grouped while each student keeps its own history.
 type Warning struct {
 	ID          string
 	StudentID   string
@@ -31,6 +33,9 @@ type Warning struct {
 	Title       string
 	Description string
 	Snapshot    StudentSnapshot
+	// GroupID correlates warnings issued in one batch; empty for single
+	// warnings.
+	GroupID string
 }
 
 // Input carries the fields needed to issue a warning. The ID is assigned
@@ -44,6 +49,27 @@ type Input struct {
 	Title       string
 	Description string
 	Snapshot    StudentSnapshot
+	// GroupID correlates the warning with a batch; empty for singles.
+	// IssueBatch assigns one shared id instead.
+	GroupID string
+}
+
+// BatchInput carries one event against several students: shared fields
+// plus one item per student. The Service assigns a single GroupID.
+type BatchInput struct {
+	ClassID     string
+	TeacherID   string
+	HappenedAt  time.Time
+	Gravity     Gravity
+	Title       string
+	Description string
+	Items       []BatchItem
+}
+
+// BatchItem is one student inside a batch, with its frozen snapshot.
+type BatchItem struct {
+	StudentID string
+	Snapshot  StudentSnapshot
 }
 
 // Store is the persistence port for warnings. Implementations must be
@@ -56,4 +82,6 @@ type Store interface {
 	// Delete removes the warning with the given id. Removing an unknown
 	// warning is a no-op.
 	Delete(ctx context.Context, id string) error
+	// ForGroup returns every warning sharing a batch id, oldest first.
+	ForGroup(ctx context.Context, groupID string) ([]Warning, error)
 }

@@ -20,9 +20,10 @@ func NewService(store Store) *Service {
 }
 
 // Create validates the profile, assigns a fresh UUID and persists it.
-// The ID field of st is ignored.
+// The ID field of st is ignored. New students are always active.
 func (s *Service) Create(ctx context.Context, st Student) (Student, error) {
 	st.ID = uuid.NewString()
+	st.Status = StatusActive
 	st = normalize(st)
 	if err := validate(st); err != nil {
 		return Student{}, err
@@ -46,13 +47,37 @@ func (s *Service) ListByClass(ctx context.Context, classID string) ([]Student, e
 	return s.store.ListByClass(ctx, classID)
 }
 
-// Update replaces the profile of an existing student.
+// Update replaces the profile of an existing student. Status is managed
+// by Graduate and preserved here: the incoming value is ignored.
 func (s *Service) Update(ctx context.Context, st Student) (Student, error) {
 	st.ID = strings.TrimSpace(st.ID)
+	current, err := s.store.ByID(ctx, st.ID)
+	if err != nil {
+		return Student{}, err
+	}
+	st.Status = current.Status
 	st = normalize(st)
 	if err := validate(st); err != nil {
 		return Student{}, err
 	}
+	return s.store.Update(ctx, st)
+}
+
+// Graduate marks the end of the student's lifecycle (promoted from grade
+// 11). History stays frozen in past records; the profile simply stops
+// being enrollable.
+func (s *Service) Graduate(ctx context.Context, id string) (Student, error) {
+	if err := validateID(id); err != nil {
+		return Student{}, err
+	}
+	st, err := s.store.ByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return Student{}, err
+	}
+	if st.Status == StatusGraduated {
+		return Student{}, ErrAlreadyGraduated
+	}
+	st.Status = StatusGraduated
 	return s.store.Update(ctx, st)
 }
 

@@ -24,7 +24,7 @@ var _ teachers.Store = (*TeachersStore)(nil)
 
 // teacherColumns is the full column list used by every teacher SELECT.
 const teacherColumns = `id, names, surnames, document_id, phone, address,
-	birthplace, birthdate, email, medical_conditions, homeroom_class_id`
+	birthplace, birthdate, email, medical_conditions, homeroom_class_id, active`
 
 // scanTeacher maps the current row (in teacherColumns order) onto a Teacher.
 func scanTeacher(scan func(dest ...any) error) (teachers.Teacher, error) {
@@ -32,7 +32,7 @@ func scanTeacher(scan func(dest ...any) error) (teachers.Teacher, error) {
 	var birthdate *time.Time
 	err := scan(
 		&t.ID, &t.Names, &t.Surnames, &t.DocumentID, &t.Phone, &t.Address,
-		&t.Birthplace, &birthdate, &t.Email, &t.MedicalConditions, &t.HomeroomClassID,
+		&t.Birthplace, &birthdate, &t.Email, &t.MedicalConditions, &t.HomeroomClassID, &t.Active,
 	)
 	if err != nil {
 		return teachers.Teacher{}, err
@@ -52,7 +52,7 @@ func teacherArgs(t teachers.Teacher) []any {
 	}
 	return []any{
 		t.ID, t.Names, t.Surnames, t.DocumentID, t.Phone, t.Address,
-		t.Birthplace, birthdate, t.Email, t.MedicalConditions, t.HomeroomClassID,
+		t.Birthplace, birthdate, t.Email, t.MedicalConditions, t.HomeroomClassID, t.Active,
 	}
 }
 
@@ -60,8 +60,8 @@ func teacherArgs(t teachers.Teacher) []any {
 func (s *TeachersStore) Create(ctx context.Context, t teachers.Teacher) (teachers.Teacher, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		INSERT INTO teachers (id, names, surnames, document_id, phone, address,
-			birthplace, birthdate, email, medical_conditions, homeroom_class_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			birthplace, birthdate, email, medical_conditions, homeroom_class_id, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING `+teacherColumns,
 		teacherArgs(t)...)
 	out, err := scanTeacher(row.Scan)
@@ -113,7 +113,7 @@ func (s *TeachersStore) Update(ctx context.Context, t teachers.Teacher) (teacher
 		UPDATE teachers
 		SET names = $2, surnames = $3, document_id = $4, phone = $5, address = $6,
 			birthplace = $7, birthdate = $8, email = $9, medical_conditions = $10,
-			homeroom_class_id = $11, updated_at = now()
+			homeroom_class_id = $11, active = $12, updated_at = now()
 		WHERE id = $1
 		RETURNING `+teacherColumns,
 		teacherArgs(t)...)

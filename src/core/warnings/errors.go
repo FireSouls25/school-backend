@@ -34,6 +34,10 @@ var (
 	ErrEmptyDescription = newError("warnings.err_empty_description", "warnings: empty description")
 	// ErrInvalidSnapshot is returned when the frozen student identity is incomplete.
 	ErrInvalidSnapshot = newError("warnings.err_invalid_snapshot", "warnings: invalid snapshot")
+	// ErrInvalidGroup is returned when a batch correlation id is malformed.
+	ErrInvalidGroup = newError("warnings.err_invalid_group", "warnings: invalid group id")
+	// ErrEmptyBatch is returned when issuing a batch without students.
+	ErrEmptyBatch = newError("warnings.err_empty_batch", "warnings: empty batch")
 	// ErrNotFound is returned when the requested warning does not exist.
 	ErrNotFound = newError("warnings.err_not_found", "warnings: not found")
 )

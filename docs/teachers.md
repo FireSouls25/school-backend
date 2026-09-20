@@ -107,7 +107,9 @@ RemoveAssignment(ctx, id string) error           // no-op when absent, correctio
 
 Required: names, surnames, document number. Validated when present: email
 format, birthdate not in the future. All free text is trimmed and email
-lowercased before storage.
+lowercased before storage. New teachers are always active (`Active=true`,
+ignored on input); retiring sets `Active=false` through `Update` instead
+of deleting the profile, so history keeps resolving.
 
 ## Database schema
 
@@ -118,7 +120,7 @@ EXISTS`).
 ```
 teachers(id uuid PK, names, surnames, document_id, phone, address,
          birthplace, birthdate DATE NULL, email, medical_conditions,
-         homeroom_class_id, created_at, updated_at)
+         homeroom_class_id, active, created_at, updated_at)
 subjects(id uuid PK, name, code, description, active,
          created_at, updated_at;
          UNIQUE (lower(name)))

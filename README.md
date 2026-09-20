@@ -37,6 +37,7 @@ src/
     classes/       # salones por año: grado 1-11 + grupo
     enrollments/   # matrículas por salón + auditoría de promociones
     schedules/     # horarios semanales por salón
+    sessions/      # llamados a lista con nómina congelada + revisiones
   platform/        # cross-cutting infrastructure
     config/        # environment configuration
     http/          # chi router, locale middleware, error responses

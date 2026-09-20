@@ -138,3 +138,87 @@ func TestForStudentRejectsBadID(t *testing.T) {
 		t.Errorf("error = %v, want ErrInvalidStudent", err)
 	}
 }
+
+func validBatch() warnings.BatchInput {
+	snap := func(doc string) warnings.StudentSnapshot {
+		return warnings.StudentSnapshot{
+			Names: "Ana", Surnames: "Gómez", DocumentID: doc,
+			ClassID: "9-1", Age: 14,
+			CaregiverName: "María Gómez", CaregiverPhone: "3101112233",
+		}
+	}
+	return warnings.BatchInput{
+		ClassID:     "9-1",
+		TeacherID:   "teacher-1",
+		HappenedAt:  time.Date(2026, 8, 20, 10, 30, 0, 0, time.UTC),
+		Gravity:     warnings.GravityModerate,
+		Title:       "Desorden colectivo",
+		Description: "Varios estudiantes interrumpieron la clase.",
+		Items: []warnings.BatchItem{
+			{StudentID: "11111111-1111-1111-1111-111111111111", Snapshot: snap("1234567890")},
+			{StudentID: "22222222-2222-2222-2222-222222222222", Snapshot: snap("0987654321")},
+		},
+	}
+}
+
+func TestIssueBatch(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	if _, err := svc.IssueBatch(ctx, warnings.BatchInput{}); !errors.Is(err, warnings.ErrEmptyBatch) {
+		t.Errorf("empty batch error = %v, want ErrEmptyBatch", err)
+	}
+
+	out, err := svc.IssueBatch(ctx, validBatch())
+	if err != nil {
+		t.Fatalf("IssueBatch: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+	if out[0].GroupID == "" || out[0].GroupID != out[1].GroupID {
+		t.Errorf("batch warnings do not share a group: %q vs %q", out[0].GroupID, out[1].GroupID)
+	}
+
+	// Each student keeps its own history including the batch warning.
+	for _, w := range out {
+		hist, err := svc.ForStudent(ctx, w.StudentID)
+		if err != nil {
+			t.Fatalf("ForStudent: %v", err)
+		}
+		if len(hist) != 1 || hist[0].ID != w.ID {
+			t.Fatalf("ForStudent(%s) = %+v", w.StudentID, hist)
+		}
+	}
+
+	// The group view returns the whole event.
+	grouped, err := svc.ForGroup(ctx, out[0].GroupID)
+	if err != nil {
+		t.Fatalf("ForGroup: %v", err)
+	}
+	if len(grouped) != 2 {
+		t.Errorf("len(grouped) = %d, want 2", len(grouped))
+	}
+
+	if _, err := svc.ForGroup(ctx, "nope"); !errors.Is(err, warnings.ErrInvalidGroup) {
+		t.Errorf("bad group error = %v, want ErrInvalidGroup", err)
+	}
+}
+
+func TestIssueBatchValidatesAllBeforePersisting(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	bad := validBatch()
+	bad.Items[1].Snapshot.DocumentID = ""
+	if _, err := svc.IssueBatch(ctx, bad); !errors.Is(err, warnings.ErrInvalidSnapshot) {
+		t.Errorf("batch error = %v, want ErrInvalidSnapshot", err)
+	}
+	hist, err := svc.ForStudent(ctx, bad.Items[0].StudentID)
+	if err != nil {
+		t.Fatalf("ForStudent: %v", err)
+	}
+	if len(hist) != 0 {
+		t.Errorf("partial batch persisted: %+v", hist)
+	}
+}

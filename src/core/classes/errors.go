@@ -34,4 +34,6 @@ var (
 	ErrDuplicateClass = newError("classes.err_duplicate_class", "classes: duplicate class")
 	// ErrHasEnrollments is returned when deleting a group that keeps enrollments.
 	ErrHasEnrollments = newError("classes.err_has_enrollments", "classes: class has enrollments")
+	// ErrHasSessions is returned when deleting a group that keeps sessions.
+	ErrHasSessions = newError("classes.err_has_sessions", "classes: class has sessions")
 )

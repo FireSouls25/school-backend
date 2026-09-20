@@ -87,6 +87,7 @@ Delete(ctx, id string) error
 // warnings.Store
 Add(ctx, Warning) (Warning, error)
 ForStudent(ctx, studentID) ([]Warning, error)    // newest first
+ForGroup(ctx, groupID string) ([]Warning, error) // oldest first
 Delete(ctx, id string) error
 ```
 
@@ -100,7 +101,11 @@ Required: names, surnames, class, document number, acudiente name.
 Validated when present: email format, blood-type label, birthdate not in
 the future, non-negative repeat count, health/specialist detail when
 affirmative, sibling name + class. All free text is trimmed; blood type is
-uppercased and email lowercased before storage.
+uppercased and email lowercased before storage. New students are always
+active; `Graduate(id)` moves `Status` to graduated (end of the lifecycle),
+refusing repeats with `ErrAlreadyGraduated`. `Update` preserves the stored
+status: graduation only happens through `Graduate`, which the future
+promotion flow calls.
 
 ### warnings.Service and the snapshot
 
@@ -110,6 +115,12 @@ caregiver name/phone). The snapshot is a frozen copy: later profile edits
 never rewrite it. The future HTTP layer builds it from the current
 profile (`AgeAt` computes the age at event time). The teacher is an opaque
 id today; the future `users`/`auth` feature will own it.
+
+`IssueBatch(ctx, BatchInput)` issues one event against several students:
+all items validate before anything persists, then every warning shares a
+fresh `GroupID` while each student keeps its own history (`ForStudent`).
+`ForGroup` returns the whole event, oldest first. Warnings stay immutable
+after issue: corrections belong to sessions, not to formal notices.
 
 ## Database schema
 
@@ -124,7 +135,7 @@ students(id uuid PK, names, surnames, class_id,
          blood_type, is_new, previous_school, transfer_reason, repeat_count,
          mother_*, father_*, caregiver_* (name, document, phone, occupation, address),
          lives_with, siblings JSONB, medical_report, diversity_condition,
-         specialist_has, specialist_detail,
+         specialist_has, specialist_detail, status CHECK IN ('active','graduated'),
          photo bytea, created_at, updated_at)
 attendance_records(id uuid PK, student_id uuid FK->students ON DELETE CASCADE,
                    class_id text, date date,
@@ -136,7 +147,7 @@ incident_faults(id uuid PK, student_id uuid FK->students ON DELETE CASCADE,
 warnings(id uuid PK, student_id uuid FK->students ON DELETE CASCADE,
          class_id text, teacher_id text, happened_at timestamptz,
          gravity text CHECK IN ('mild','moderate','severe'),
-         title text, description text,
+         title text, description text, group_id TEXT ('' = single),
          snap_* (frozen identity: names, surnames, document, class,
                  birthdate, age, caregiver name/phone))
 ```
@@ -159,13 +170,13 @@ display text; Spanish labels come from the i18n catalog
 | Code | HTTP |
 |---|---|
 | `students.err_not_found` | 404 |
-| `students.err_invalid_id` / `err_invalid_name` / `err_invalid_class` / `err_invalid_document` / `err_invalid_birth` / `err_invalid_blood_type` / `err_invalid_email` / `err_invalid_guardian` / `err_invalid_sibling` / `err_invalid_health` / `err_invalid_repeat_count` | 400 |
+| `students.err_invalid_id` / `err_invalid_name` / `err_invalid_class` / `err_invalid_document` / `err_invalid_birth` / `err_invalid_blood_type` / `err_invalid_email` / `err_invalid_guardian` / `err_invalid_sibling` / `err_invalid_health` / `err_invalid_repeat_count` / `err_already_graduated` | 400 |
 | `students.err_photo_too_large` | 413 |
 | `attendance.err_unknown_reason` / `err_invalid_student` / `err_invalid_class` / `err_invalid_date` | 400 |
 | `attendance.err_not_found` | 404 |
 | `incidents.err_unknown_severity` / `err_invalid_student` / `err_invalid_class` / `err_invalid_date` / `err_empty_description` | 400 |
 | `incidents.err_not_found` | 404 |
-| `warnings.err_unknown_gravity` / `err_invalid_student` / `err_invalid_class` / `err_invalid_teacher` / `err_invalid_date` / `err_empty_title` / `err_empty_description` / `err_invalid_snapshot` | 400 |
+| `warnings.err_unknown_gravity` / `err_invalid_student` / `err_invalid_class` / `err_invalid_teacher` / `err_invalid_date` / `err_empty_title` / `err_empty_description` / `err_invalid_snapshot` / `err_invalid_group` / `err_empty_batch` | 400 |
 | `warnings.err_not_found` | 404 |
 
 All messages are localized through `src/platform/i18n/catalogs/es.json`.

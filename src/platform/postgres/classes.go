@@ -115,10 +115,13 @@ func (s *ClassesStore) Update(ctx context.Context, g classes.ClassGroup) (classe
 	return out, nil
 }
 
-// Delete implements classes.Store. Groups with enrollments or promotion
-// history are protected by the database.
+// Delete implements classes.Store. Groups with enrollments, sessions or
+// other history are protected by the database.
 func (s *ClassesStore) Delete(ctx context.Context, id string) error {
 	if _, err := s.db.pool.Exec(ctx, `DELETE FROM class_groups WHERE id = $1`, id); err != nil {
+		if isForeignKeyViolationOn(err, "sessions") {
+			return classes.ErrHasSessions
+		}
 		if isForeignKeyViolation(err) {
 			return classes.ErrHasEnrollments
 		}

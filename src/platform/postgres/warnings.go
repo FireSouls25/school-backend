@@ -24,7 +24,7 @@ var _ warnings.Store = (*WarningsStore)(nil)
 
 // warningColumns is the full column list used by every warning SELECT.
 const warningColumns = `id, student_id, class_id, teacher_id, happened_at,
-	gravity, title, description,
+	gravity, title, description, group_id,
 	snap_names, snap_surnames, snap_document_id, snap_class_id,
 	snap_birthdate, snap_age, snap_caregiver_name, snap_caregiver_phone`
 
@@ -35,7 +35,7 @@ func scanWarning(scan func(dest ...any) error) (warnings.Warning, error) {
 	var birthdate *time.Time
 	err := scan(
 		&w.ID, &w.StudentID, &w.ClassID, &w.TeacherID, &w.HappenedAt,
-		&gravity, &w.Title, &w.Description,
+		&gravity, &w.Title, &w.Description, &w.GroupID,
 		&w.Snapshot.Names, &w.Snapshot.Surnames, &w.Snapshot.DocumentID, &w.Snapshot.ClassID,
 		&birthdate, &w.Snapshot.Age, &w.Snapshot.CaregiverName, &w.Snapshot.CaregiverPhone,
 	)
@@ -58,7 +58,7 @@ func warningArgs(w warnings.Warning) []any {
 	}
 	return []any{
 		w.ID, w.StudentID, w.ClassID, w.TeacherID, w.HappenedAt,
-		string(w.Gravity), w.Title, w.Description,
+		string(w.Gravity), w.Title, w.Description, w.GroupID,
 		w.Snapshot.Names, w.Snapshot.Surnames, w.Snapshot.DocumentID, w.Snapshot.ClassID,
 		birthdate, w.Snapshot.Age, w.Snapshot.CaregiverName, w.Snapshot.CaregiverPhone,
 	}
@@ -68,10 +68,10 @@ func warningArgs(w warnings.Warning) []any {
 func (s *WarningsStore) Add(ctx context.Context, w warnings.Warning) (warnings.Warning, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		INSERT INTO warnings (id, student_id, class_id, teacher_id, happened_at,
-			gravity, title, description,
+			gravity, title, description, group_id,
 			snap_names, snap_surnames, snap_document_id, snap_class_id,
 			snap_birthdate, snap_age, snap_caregiver_name, snap_caregiver_phone)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		RETURNING `+warningColumns,
 		warningArgs(w)...)
 	out, err := scanWarning(row.Scan)
@@ -91,6 +91,30 @@ func (s *WarningsStore) ForStudent(ctx context.Context, studentID string) ([]war
 		studentID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list warnings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]warnings.Warning, 0)
+	for rows.Next() {
+		w, err := scanWarning(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan warning: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// ForGroup implements warnings.Store.
+func (s *WarningsStore) ForGroup(ctx context.Context, groupID string) ([]warnings.Warning, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+warningColumns+`
+		FROM warnings
+		WHERE group_id = $1
+		ORDER BY happened_at, id`,
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list warning group: %w", err)
 	}
 	defer rows.Close()
 

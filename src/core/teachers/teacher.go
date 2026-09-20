@@ -36,6 +36,10 @@ type Teacher struct {
 	// de grupo (e.g. "9-1"). Empty means the teacher leads no class-group.
 	// Opaque here; the classes capability owns its format.
 	HomeroomClassID string
+	// Active reports whether the teacher is currently working. Retiring a
+	// teacher sets it to false instead of deleting the profile, so history
+	// keeps resolving.
+	Active bool
 }
 
 // FullName returns the display name with surnames first, the ordering
