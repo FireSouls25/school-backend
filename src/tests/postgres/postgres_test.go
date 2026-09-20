@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"grade/src/core/attendance"
+	"grade/src/core/classes"
+	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/schoolyears"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
 	"grade/src/core/teachers"
@@ -357,5 +360,148 @@ func TestSubjectsTimelineRoundTrip(t *testing.T) {
 	// Subjects survive: only the timeline is gone.
 	if _, err := store.SubjectByID(ctx, math.ID); err != nil {
 		t.Errorf("SubjectByID after teacher delete: %v", err)
+	}
+}
+
+func TestSchoolYearRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+	store := pg.NewSchoolYearsStore(db)
+
+	want := schoolyears.SchoolYear{
+		ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Year: 2026, Periods: 4,
+		StartDate: time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2026, 11, 27, 0, 0, 0, 0, time.UTC),
+		Holidays: []time.Time{
+			time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	got, err := store.Create(ctx, want)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Create = %+v, want %+v", got, want)
+	}
+	byYear, err := store.ByYear(ctx, 2026)
+	if err != nil {
+		t.Fatalf("ByYear: %v", err)
+	}
+	if !reflect.DeepEqual(byYear, want) {
+		t.Errorf("ByYear = %+v, want %+v", byYear, want)
+	}
+
+	dup := want
+	dup.ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	if _, err := store.Create(ctx, dup); !errors.Is(err, schoolyears.ErrDuplicateYear) {
+		t.Errorf("duplicate year error = %v, want ErrDuplicateYear", err)
+	}
+
+	got.Closed = true
+	upd, err := store.Update(ctx, got)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !upd.Closed {
+		t.Errorf("Update = %+v, want closed", upd)
+	}
+}
+
+func TestClassesAndEnrollments(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	yearsStore := pg.NewSchoolYearsStore(db)
+	year, err := yearsStore.Create(ctx, schoolyears.SchoolYear{
+		ID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", Year: 2027, Periods: 3,
+		StartDate: time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2027, 11, 26, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("Create year: %v", err)
+	}
+
+	classesStore := pg.NewClassesStore(db)
+	g, err := classesStore.Create(ctx, classes.ClassGroup{
+		ID:           "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+		SchoolYearID: year.ID, Grade: 7, GroupNo: 1,
+	})
+	if err != nil {
+		t.Fatalf("Create class: %v", err)
+	}
+	if g.Label() != "7-1" {
+		t.Errorf("Label = %q, want 7-1", g.Label())
+	}
+
+	dup := g
+	dup.ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+	if _, err := classesStore.Create(ctx, dup); !errors.Is(err, classes.ErrDuplicateClass) {
+		t.Errorf("duplicate class error = %v, want ErrDuplicateClass", err)
+	}
+
+	ghost := classes.ClassGroup{
+		ID:           "ffffffff-ffff-4fff-8fff-ffffffffffff",
+		SchoolYearID: "00000000-0000-4000-8000-000000000000", Grade: 7, GroupNo: 2,
+	}
+	if _, err := classesStore.Create(ctx, ghost); !errors.Is(err, classes.ErrInvalidSchoolYear) {
+		t.Errorf("unknown year error = %v, want ErrInvalidSchoolYear", err)
+	}
+
+	enrollStore := pg.NewEnrollmentsStore(db)
+	sid := "11111111-aaaa-4aaa-8aaa-111111111111"
+	studentsStore := pg.NewStudentsStore(db)
+	prof := fullProfile(sid)
+	if _, err := studentsStore.Create(ctx, prof); err != nil {
+		t.Fatalf("Create student: %v", err)
+	}
+	e, err := enrollStore.AddEnrollment(ctx, enrollments.Enrollment{
+		ID: "22222222-bbbb-4bbb-8bbb-222222222222", StudentID: sid, ClassGroupID: g.ID,
+	})
+	if err != nil {
+		t.Fatalf("AddEnrollment: %v", err)
+	}
+	if _, err := enrollStore.AddEnrollment(ctx, enrollments.Enrollment{
+		ID: "33333333-cccc-4ccc-8ccc-333333333333", StudentID: sid, ClassGroupID: g.ID,
+	}); !errors.Is(err, enrollments.ErrDuplicateEnrollment) {
+		t.Errorf("duplicate enrollment error = %v, want ErrDuplicateEnrollment", err)
+	}
+
+	p, err := enrollStore.RecordPromotion(ctx, enrollments.Promotion{
+		ID: "44444444-dddd-4ddd-8ddd-444444444444", StudentID: sid,
+		FromGroupID: g.ID, ToGroupID: g.ID, Decision: enrollments.DecisionRepeat,
+		DecidedBy: "admin-1", DecidedAt: time.Date(2027, 11, 26, 10, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("RecordPromotion: %v", err)
+	}
+	hist, err := enrollStore.PromotionsForStudent(ctx, sid)
+	if err != nil || len(hist) != 1 {
+		t.Fatalf("PromotionsForStudent = %v, %d records", err, len(hist))
+	}
+	if !reflect.DeepEqual(hist[0], p) {
+		t.Errorf("promotion = %+v, want %+v", hist[0], p)
+	}
+	_ = e
+
+	// A group with enrollments cannot be deleted; the year neither.
+	if err := classesStore.Delete(ctx, g.ID); !errors.Is(err, classes.ErrHasEnrollments) {
+		t.Errorf("delete group error = %v, want ErrHasEnrollments", err)
+	}
+	if err := yearsStore.Delete(ctx, year.ID); !errors.Is(err, schoolyears.ErrHasClasses) {
+		t.Errorf("delete year error = %v, want ErrHasClasses", err)
+	}
+
+	// Deleting the student cascades its enrollments and promotions.
+	if err := studentsStore.Delete(ctx, sid); err != nil {
+		t.Fatalf("Delete student: %v", err)
+	}
+	roster, _ := enrollStore.EnrollmentsForGroup(ctx, g.ID)
+	if len(roster) != 0 {
+		t.Errorf("enrollments not cascaded: %d records remain", len(roster))
+	}
+	hist, _ = enrollStore.PromotionsForStudent(ctx, sid)
+	if len(hist) != 0 {
+		t.Errorf("promotions not cascaded: %d records remain", len(hist))
 	}
 }

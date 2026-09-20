@@ -6,8 +6,11 @@ import (
 	"os"
 
 	"grade/src/core/attendance"
+	"grade/src/core/classes"
+	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
+	"grade/src/core/schoolyears"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
 	"grade/src/core/teachers"
@@ -29,12 +32,15 @@ func main() {
 	}
 
 	var (
-		studentsStore   students.Store   = students.NewMemoryStore()
-		attendanceStore attendance.Store = attendance.NewMemoryStore()
-		incidentsStore  incidents.Store  = incidents.NewMemoryStore()
-		warningsStore   warnings.Store   = warnings.NewMemoryStore()
-		teachersStore   teachers.Store   = teachers.NewMemoryStore()
-		subjectsStore   subjects.Store   = subjects.NewMemoryStore()
+		studentsStore    students.Store    = students.NewMemoryStore()
+		attendanceStore  attendance.Store  = attendance.NewMemoryStore()
+		incidentsStore   incidents.Store   = incidents.NewMemoryStore()
+		warningsStore    warnings.Store    = warnings.NewMemoryStore()
+		teachersStore    teachers.Store    = teachers.NewMemoryStore()
+		subjectsStore    subjects.Store    = subjects.NewMemoryStore()
+		yearsStore       schoolyears.Store = schoolyears.NewMemoryStore()
+		classesStore     classes.Store     = classes.NewMemoryStore()
+		enrollmentsStore enrollments.Store = enrollments.NewMemoryStore()
 	)
 	if cfg.DatabaseURL != "" {
 		db, err := pg.Connect(ctx, cfg.DatabaseURL)
@@ -49,6 +55,9 @@ func main() {
 		warningsStore = pg.NewWarningsStore(db)
 		teachersStore = pg.NewTeachersStore(db)
 		subjectsStore = pg.NewSubjectsStore(db)
+		yearsStore = pg.NewSchoolYearsStore(db)
+		classesStore = pg.NewClassesStore(db)
+		enrollmentsStore = pg.NewEnrollmentsStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only)")
@@ -60,6 +69,9 @@ func main() {
 	_ = warnings.NewService(warningsStore)
 	_ = teachers.NewService(teachersStore)
 	_ = subjects.NewService(subjectsStore)
+	_ = schoolyears.NewService(yearsStore)
+	_ = classes.NewService(classesStore)
+	_ = enrollments.NewService(enrollmentsStore)
 
 	roleStore := roles.NewMemoryStore()
 	roles.NewService(roleStore)

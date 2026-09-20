@@ -52,6 +52,9 @@ func (s *SubjectsStore) CreateSubject(ctx context.Context, subj subjects.Subject
 		subj.ID, subj.Name, subj.Code, subj.Description, subj.Active)
 	var out subjects.Subject
 	if err := row.Scan(&out.ID, &out.Name, &out.Code, &out.Description, &out.Active); err != nil {
+		if isUniqueViolationOn(err, "subjects") {
+			return subjects.Subject{}, subjects.ErrDuplicateSubject
+		}
 		return subjects.Subject{}, fmt.Errorf("postgres: create subject: %w", err)
 	}
 	return out, nil
@@ -108,6 +111,9 @@ func (s *SubjectsStore) UpdateSubject(ctx context.Context, subj subjects.Subject
 		return subjects.Subject{}, subjects.ErrNotFound
 	}
 	if err != nil {
+		if isUniqueViolationOn(err, "subjects") {
+			return subjects.Subject{}, subjects.ErrDuplicateSubject
+		}
 		return subjects.Subject{}, fmt.Errorf("postgres: update subject: %w", err)
 	}
 	return out, nil

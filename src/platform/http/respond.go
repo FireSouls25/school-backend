@@ -80,6 +80,32 @@ var statusByCode = map[string]int{
 	"subjects.err_already_assigned":     http.StatusBadRequest,
 	"subjects.err_already_ended":        http.StatusBadRequest,
 	"subjects.err_has_assignments":      http.StatusBadRequest,
+
+	"schoolyears.err_not_found":       http.StatusNotFound,
+	"schoolyears.err_invalid_id":      http.StatusBadRequest,
+	"schoolyears.err_invalid_year":    http.StatusBadRequest,
+	"schoolyears.err_invalid_periods": http.StatusBadRequest,
+	"schoolyears.err_invalid_dates":   http.StatusBadRequest,
+	"schoolyears.err_invalid_holiday": http.StatusBadRequest,
+	"schoolyears.err_duplicate_year":  http.StatusBadRequest,
+	"schoolyears.err_has_classes":     http.StatusBadRequest,
+
+	"classes.err_not_found":           http.StatusNotFound,
+	"classes.err_invalid_id":          http.StatusBadRequest,
+	"classes.err_invalid_school_year": http.StatusBadRequest,
+	"classes.err_invalid_grade":       http.StatusBadRequest,
+	"classes.err_invalid_group":       http.StatusBadRequest,
+	"classes.err_duplicate_class":     http.StatusBadRequest,
+	"classes.err_has_enrollments":     http.StatusBadRequest,
+
+	"enrollments.err_invalid_id":           http.StatusBadRequest,
+	"enrollments.err_invalid_student":      http.StatusBadRequest,
+	"enrollments.err_invalid_class_group":  http.StatusBadRequest,
+	"enrollments.err_duplicate_enrollment": http.StatusBadRequest,
+	"enrollments.err_invalid_decision":     http.StatusBadRequest,
+	"enrollments.err_invalid_promotion":    http.StatusBadRequest,
+	"enrollments.err_invalid_date":         http.StatusBadRequest,
+	"enrollments.err_invalid_actor":        http.StatusBadRequest,
 }
 
 // writeJSON writes v as JSON with the given status code.

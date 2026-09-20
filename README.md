@@ -31,6 +31,11 @@ src/
     attendance/    # assistance history: inasistencia / evasión / atraso
     incidents/     # faults graded leve / normal / grave
     warnings/      # llamados de atención leve / medio / grave con snapshot
+    teachers/      # teacher profiles: documento, contacto, salud, dirección de grupo
+    subjects/      # subject catalog + teacher assignment timeline
+    schoolyears/   # años lectivos: periodos, fechas, festivos
+    classes/       # salones por año: grado 1-11 + grupo
+    enrollments/   # matrículas por salón + auditoría de promociones
   platform/        # cross-cutting infrastructure
     config/        # environment configuration
     http/          # chi router, locale middleware, error responses
@@ -43,5 +48,7 @@ User-facing text is never hardcoded: it lives in the i18n catalogs
 (`src/platform/i18n/catalogs/`). Spanish is the only shipped locale; code and
 internal error text stay in English.
 
-See `docs/architecture.md` for the design principles and
-`docs/students.md` for the student profile and history feature.
+See `docs/architecture.md` for the design principles,
+`docs/students.md` for the student profile and history feature,
+`docs/teachers.md` for teachers and subjects, and
+`docs/school.md` for years, class-groups and enrollments.

@@ -182,3 +182,56 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_assignments_open_pair
 
 CREATE INDEX IF NOT EXISTS idx_assignments_teacher_id ON subject_assignments (teacher_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_subject_id ON subject_assignments (subject_id);
+
+CREATE TABLE IF NOT EXISTS school_years (
+    id          UUID PRIMARY KEY,
+    year        INTEGER     NOT NULL,
+    periods     INTEGER     NOT NULL DEFAULT 3,
+    start_date  DATE        NOT NULL,
+    end_date    DATE        NOT NULL,
+    holidays    DATE[]      NOT NULL DEFAULT '{}',
+    closed      BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (periods >= 1 AND periods <= 6),
+    CHECK (start_date < end_date)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_school_years_year ON school_years (year);
+
+CREATE TABLE IF NOT EXISTS class_groups (
+    id             UUID PRIMARY KEY,
+    school_year_id UUID        NOT NULL REFERENCES school_years (id) ON DELETE RESTRICT,
+    grade          INTEGER     NOT NULL CHECK (grade >= 1 AND grade <= 11),
+    group_no       INTEGER     NOT NULL CHECK (group_no >= 1),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_class_groups_unique
+    ON class_groups (school_year_id, grade, group_no);
+
+CREATE TABLE IF NOT EXISTS enrollments (
+    id             UUID PRIMARY KEY,
+    student_id     UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    class_group_id UUID        NOT NULL REFERENCES class_groups (id) ON DELETE RESTRICT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_enrollments_pair
+    ON enrollments (student_id, class_group_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_group_id ON enrollments (class_group_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_student_id ON enrollments (student_id);
+
+CREATE TABLE IF NOT EXISTS promotions (
+    id            UUID PRIMARY KEY,
+    student_id    UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    from_group_id UUID        NOT NULL REFERENCES class_groups (id) ON DELETE RESTRICT,
+    to_group_id   UUID        REFERENCES class_groups (id) ON DELETE RESTRICT,
+    decision      TEXT        NOT NULL CHECK (decision IN ('promote', 'repeat', 'graduate')),
+    decided_by    TEXT        NOT NULL,
+    decided_at    TIMESTAMPTZ NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_promotions_student_id ON promotions (student_id);

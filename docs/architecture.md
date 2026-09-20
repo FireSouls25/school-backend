@@ -135,7 +135,6 @@ roles only authorizes.
   normalizes, validates and assigns UUIDs (`google/uuid`).
 
 ## Subjects (`src/core/subjects`)
-
 - `Subject` is a catalog entry (unique name, optional code, `Active`
   flag to retire without losing history). `Assignment` is one timeline
   entry `{TeacherID, SubjectID, StartedAt, EndedAt}`; zero `EndedAt`
@@ -149,12 +148,46 @@ roles only authorizes.
   `CurrentForTeacher`, chronological `AssignmentsForSubject`.
   Full detail in `docs/teachers.md`.
 
+## School years (`src/core/schoolyears`)
+
+- `SchoolYear` is one año lectivo: unique calendar year, customizable
+  period count (1–6, usually 3), start/end dates, Colombian holidays
+  (date-only, sorted, deduplicated, all within range) and a `Closed` flag.
+- `Service` validates ranges, normalizes holidays and assigns UUIDs
+  (`google/uuid`). Deletion with class-groups is blocked by the database
+  (`ErrHasClasses`).
+
+## Classes (`src/core/classes`)
+
+- `ClassGroup` is one salón within one year: grade 1–11 + group number.
+  The display label (`Label()`, e.g. `"7-1"`) derives from both. Groups are
+  per-year rows, so adding/removing a group means creating it or not.
+- `Service` validates grades/groups, keeps grade+group unique per year
+  (`ErrDuplicateClass`) and assigns UUIDs. School year ids are opaque;
+  unknown years surface as `ErrInvalidSchoolYear` via FK translation.
+  Deletion with enrollments is blocked by the database
+  (`ErrHasEnrollments`).
+
+## Enrollments (`src/core/enrollments`)
+
+- `Enrollment` places one student in one class-group (pair-unique);
+  rosters come in enrollment order, alphabetical ordering is composed
+  upstream. `Promotion` is the append-only audit of year-to-year movement
+  (`promote`/`repeat`/`graduate`, who, when); graduation carries an empty
+  destination.
+- Student and group ids are opaque; dangling references surface as coded
+  errors via FK translation. Full detail in `docs/school.md`.
+
 ## Persistence (`src/platform/postgres`)
 
-- Production adapters implement the six Store ports on `pgx/v5`
+- Production adapters implement the nine Store ports on `pgx/v5`
   (`pgxpool`). The idempotent schema lives in `schema.sql` (embedded) and is
   applied at connect time, including `ADD COLUMN IF NOT EXISTS` migrations
   for installs predating the extended profile and the `late` reason.
+- Cross-capability rules rely on the database: `RESTRICT` guards deletion
+  of referenced years/groups, foreign keys guard dangling references, and
+  `src/platform/postgres/pgerrors.go` translates violations (`23503`,
+  `23505`) into coded domain errors so services stay decoupled.
 - The composition root selects PostgreSQL when `DATABASE_URL` is set,
   otherwise in-memory stores (development only). Integration tests run
   against `TEST_DATABASE_URL` and skip when unset.
