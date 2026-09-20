@@ -23,6 +23,25 @@ type ErrorBody struct {
 var statusByCode = map[string]int{
 	"roles.err_unknown_role":    http.StatusBadRequest,
 	"roles.err_invalid_subject": http.StatusBadRequest,
+
+	"students.err_not_found":       http.StatusNotFound,
+	"students.err_invalid_id":      http.StatusBadRequest,
+	"students.err_invalid_name":    http.StatusBadRequest,
+	"students.err_invalid_class":   http.StatusBadRequest,
+	"students.err_photo_too_large": http.StatusRequestEntityTooLarge,
+
+	"attendance.err_unknown_reason":  http.StatusBadRequest,
+	"attendance.err_invalid_student": http.StatusBadRequest,
+	"attendance.err_invalid_class":   http.StatusBadRequest,
+	"attendance.err_invalid_date":    http.StatusBadRequest,
+	"attendance.err_not_found":       http.StatusNotFound,
+
+	"incidents.err_unknown_severity":  http.StatusBadRequest,
+	"incidents.err_invalid_student":   http.StatusBadRequest,
+	"incidents.err_invalid_class":     http.StatusBadRequest,
+	"incidents.err_invalid_date":      http.StatusBadRequest,
+	"incidents.err_empty_description": http.StatusBadRequest,
+	"incidents.err_not_found":         http.StatusNotFound,
 }
 
 // writeJSON writes v as JSON with the given status code.

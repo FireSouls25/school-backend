@@ -8,7 +8,8 @@ screaming architecture: code is organized by business capability, not by layer.
 
 - Go 1.26.5
 - Python 3.8+ (only for the task runner)
-- (optional) PostgreSQL in mind for production; dev uses an in-memory store
+- PostgreSQL for production (set `DATABASE_URL`); dev falls back to in-memory
+  stores. Integration tests use `TEST_DATABASE_URL`.
 
 ## Commands
 
@@ -26,13 +27,20 @@ src/
   cmd/server/      # composition root: wires config, stores, services, router
   core/            # business capabilities (screaming architecture)
     roles/         # role system: Role, permission matrix, Store port, Authorizer
+    students/      # student profiles: UUID, names, class, photo
+    attendance/    # assistance history: inasistencia / evasión
+    incidents/     # faults graded leve / normal / grave
   platform/        # cross-cutting infrastructure
     config/        # environment configuration
     http/          # chi router, locale middleware, error responses
     i18n/          # multilanguage support (go-i18n/v2), catalogs
+    postgres/      # pgx/v5 adapters for the core Store ports + schema
   tests/           # external test packages, one folder per package under test
 ```
 
 User-facing text is never hardcoded: it lives in the i18n catalogs
 (`src/platform/i18n/catalogs/`). Spanish is the only shipped locale; code and
-internal error text stay in English. See `docs/architecture.md`.
+internal error text stay in English.
+
+See `docs/architecture.md` for the design principles and
+`docs/students.md` for the student profile and history feature.

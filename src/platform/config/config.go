@@ -7,6 +7,9 @@ import "os"
 type Config struct {
 	// Port is the TCP port the HTTP server listens on.
 	Port string
+	// DatabaseURL is the PostgreSQL connection string. When empty the
+	// in-memory stores are used (development only).
+	DatabaseURL string
 }
 
 // Default returns a Config with production-sane defaults.
@@ -19,6 +22,9 @@ func FromEnv() Config {
 	cfg := Default()
 	if v := os.Getenv("PORT"); v != "" {
 		cfg.Port = v
+	}
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.DatabaseURL = v
 	}
 	return cfg
 }

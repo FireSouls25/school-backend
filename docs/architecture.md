@@ -74,6 +74,41 @@ so feature handlers depend on the port, never on the concrete store.
 users/auth feature will produce real identifiers and enforce authentication;
 roles only authorizes.
 
+## Students (`src/core/students`)
+
+- `Student` is the profile aggregate: a stable UUID, names, surnames and an
+  opaque `ClassID` (owned by the future classes capability). `FullName`
+  renders surnames first (Colombian listing convention).
+- `Store` port covers create/read/list-per-class/update/delete plus photo
+  upload (`PutPhoto`, capped at `MaxPhotoSize`, 2 MiB) and retrieval.
+  Implementations must return lists ordered alphabetically.
+- `Service` validates input, assigns UUIDs (`google/uuid`) and maps errors to
+  coded domain errors.
+
+## Attendance (`src/core/attendance`)
+
+- `Record` keeps one entry per student per day with a `Reason`:
+  `absence` (inasistencia) or `evasion`. Records carry the `ClassID` so a
+  student's history spans current and previous class-groups and years.
+- `Store` port: add, list per student (newest first), delete. History is
+  cascade-deleted with the student.
+
+## Incidents (`src/core/incidents`)
+
+- `Fault` records misbehavior with a `Severity`: `minor` (leve),
+  `ordinary` (normal) or `severe` (grave). `Parse` also accepts the Spanish
+  terms. Like attendance records, faults keep the `ClassID` for full-history
+  queries and cascade-delete with the student.
+
+## Persistence (`src/platform/postgres`)
+
+- Production adapters implement the three Store ports on `pgx/v5`
+  (`pgxpool`). The idempotent schema lives in `schema.sql` (embedded) and is
+  applied at connect time.
+- The composition root selects PostgreSQL when `DATABASE_URL` is set,
+  otherwise in-memory stores (development only). Integration tests run
+  against `TEST_DATABASE_URL` and skip when unset.
+
 ## Multilanguage support (`src/platform/i18n`)
 
 - Catalogs are embedded JSON files, one per locale, under
@@ -104,9 +139,6 @@ consequences:
 ## Roadmap (future `src/core/` capabilities)
 
 - `users` / `auth` - authentication, user lifecycle, per-user language pref
-- `students` - student records, alphabetical ordering per class
 - `classes` - grades 1-11, groups (9-1, 9-2, ...), years, periods
-- `attendance` - class assistance history
-- `incidents` - faults and misbehavior records
 - `notifications` - WhatsApp delivery to guardians
 - `statistics` - per-class and per-student aggregations
