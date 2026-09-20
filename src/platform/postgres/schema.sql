@@ -135,3 +135,50 @@ CREATE TABLE IF NOT EXISTS warnings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_warnings_student_id ON warnings (student_id);
+
+CREATE TABLE IF NOT EXISTS teachers (
+    id                  UUID PRIMARY KEY,
+    names               TEXT        NOT NULL,
+    surnames            TEXT        NOT NULL,
+    document_id         TEXT        NOT NULL DEFAULT '',
+    phone               TEXT        NOT NULL DEFAULT '',
+    address             TEXT        NOT NULL DEFAULT '',
+    birthplace          TEXT        NOT NULL DEFAULT '',
+    birthdate           DATE,
+    email               TEXT        NOT NULL DEFAULT '',
+    medical_conditions  TEXT        NOT NULL DEFAULT '',
+    homeroom_class_id   TEXT        NOT NULL DEFAULT '',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
+
+CREATE TABLE IF NOT EXISTS subjects (
+    id          UUID PRIMARY KEY,
+    name        TEXT        NOT NULL,
+    code        TEXT        NOT NULL DEFAULT '',
+    description TEXT        NOT NULL DEFAULT '',
+    active      BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Subject names are unique, case-insensitively.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_subjects_lower_name ON subjects (lower(name));
+
+CREATE TABLE IF NOT EXISTS subject_assignments (
+    id          UUID PRIMARY KEY,
+    teacher_id  UUID        NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
+    subject_id  UUID        NOT NULL REFERENCES subjects (id) ON DELETE CASCADE,
+    started_at  DATE        NOT NULL,
+    ended_at    DATE,
+    CHECK (ended_at IS NULL OR ended_at >= started_at)
+);
+
+-- A teacher cannot teach the same subject in two open assignments.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assignments_open_pair
+    ON subject_assignments (teacher_id, subject_id) WHERE ended_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_assignments_teacher_id ON subject_assignments (teacher_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_subject_id ON subject_assignments (subject_id);

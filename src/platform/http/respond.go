@@ -60,6 +60,26 @@ var statusByCode = map[string]int{
 	"warnings.err_empty_description": http.StatusBadRequest,
 	"warnings.err_invalid_snapshot":  http.StatusBadRequest,
 	"warnings.err_not_found":         http.StatusNotFound,
+
+	"teachers.err_not_found":        http.StatusNotFound,
+	"teachers.err_invalid_id":       http.StatusBadRequest,
+	"teachers.err_invalid_name":     http.StatusBadRequest,
+	"teachers.err_invalid_document": http.StatusBadRequest,
+	"teachers.err_invalid_birth":    http.StatusBadRequest,
+	"teachers.err_invalid_email":    http.StatusBadRequest,
+
+	"subjects.err_not_found":            http.StatusNotFound,
+	"subjects.err_assignment_not_found": http.StatusNotFound,
+	"subjects.err_invalid_id":           http.StatusBadRequest,
+	"subjects.err_invalid_name":         http.StatusBadRequest,
+	"subjects.err_invalid_teacher":      http.StatusBadRequest,
+	"subjects.err_invalid_subject":      http.StatusBadRequest,
+	"subjects.err_invalid_date":         http.StatusBadRequest,
+	"subjects.err_invalid_end":          http.StatusBadRequest,
+	"subjects.err_duplicate_subject":    http.StatusBadRequest,
+	"subjects.err_already_assigned":     http.StatusBadRequest,
+	"subjects.err_already_ended":        http.StatusBadRequest,
+	"subjects.err_has_assignments":      http.StatusBadRequest,
 }
 
 // writeJSON writes v as JSON with the given status code.

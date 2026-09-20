@@ -11,6 +11,8 @@ import (
 	"grade/src/core/attendance"
 	"grade/src/core/incidents"
 	"grade/src/core/students"
+	"grade/src/core/subjects"
+	"grade/src/core/teachers"
 	"grade/src/core/warnings"
 	pg "grade/src/platform/postgres"
 )
@@ -227,5 +229,133 @@ func TestHistoriesCascadeOnStudentDelete(t *testing.T) {
 	warns, _ = warnStore.ForStudent(ctx, sid)
 	if len(warns) != 0 {
 		t.Errorf("warnings not cascaded: %d records remain", len(warns))
+	}
+}
+
+func TestTeachersStoreRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+	store := pg.NewTeachersStore(db)
+
+	want := teachers.Teacher{
+		ID: "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa", Names: "Carlos", Surnames: "Mendoza Ruiz",
+		DocumentID: "79888777", Phone: "3205556677", Address: "Carrera 15 # 30-10",
+		Birthplace: "Medellín", Birthdate: time.Date(1985, 6, 20, 0, 0, 0, 0, time.UTC),
+		Email: "carlos.mendoza@example.com", MedicalConditions: "Hipertensión controlada",
+		HomeroomClassID: "9-1",
+	}
+	got, err := store.Create(ctx, want)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Create = %+v, want %+v", got, want)
+	}
+	byID, err := store.ByID(ctx, want.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if !reflect.DeepEqual(byID, want) {
+		t.Errorf("ByID = %+v, want %+v", byID, want)
+	}
+
+	// Update exercises the full-column UPDATE path.
+	byID.HomeroomClassID = ""
+	upd, err := store.Update(ctx, byID)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if upd.IsHomeroomDirector() {
+		t.Errorf("Update = %+v, want no homeroom", upd)
+	}
+
+	list, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("List = %+v, want 1 teacher", list)
+	}
+
+	if _, err := store.ByID(ctx, "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"); !errors.Is(err, teachers.ErrNotFound) {
+		t.Errorf("ByID unknown error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSubjectsTimelineRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	teachersStore := pg.NewTeachersStore(db)
+	tid := "cccccccc-3333-4333-8333-cccccccccccc"
+	if _, err := teachersStore.Create(ctx, teachers.Teacher{
+		ID: tid, Names: "Ana", Surnames: "Ríos", DocumentID: "51999111",
+	}); err != nil {
+		t.Fatalf("Create teacher: %v", err)
+	}
+
+	store := pg.NewSubjectsStore(db)
+	math, err := store.CreateSubject(ctx, subjects.Subject{
+		ID: "dddddddd-4444-4444-8444-dddddddddddd", Name: "Matemáticas", Code: "MAT", Active: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateSubject: %v", err)
+	}
+	physics, err := store.CreateSubject(ctx, subjects.Subject{
+		ID: "eeeeeeee-5555-4555-8555-eeeeeeeeeeee", Name: "Física", Active: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateSubject: %v", err)
+	}
+
+	a, err := store.AddAssignment(ctx, subjects.Assignment{
+		ID: "ffffffff-6666-4666-8666-ffffffffffff", TeacherID: tid, SubjectID: math.ID,
+		StartedAt: time.Date(2021, 2, 1, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("AddAssignment: %v", err)
+	}
+	if !a.IsOpen() {
+		t.Error("new assignment should be open")
+	}
+
+	ended, err := store.EndAssignment(ctx, a.ID, time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("EndAssignment: %v", err)
+	}
+	if ended.IsOpen() {
+		t.Error("ended assignment should be closed")
+	}
+
+	if _, err := store.AddAssignment(ctx, subjects.Assignment{
+		ID: "99999999-7777-4777-8777-999999999999", TeacherID: tid, SubjectID: physics.ID,
+		StartedAt: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("AddAssignment physics: %v", err)
+	}
+
+	timeline, err := store.AssignmentsForTeacher(ctx, tid)
+	if err != nil {
+		t.Fatalf("AssignmentsForTeacher: %v", err)
+	}
+	if len(timeline) != 2 || timeline[0].SubjectID != math.ID || timeline[1].SubjectID != physics.ID {
+		t.Errorf("timeline = %+v, want math then physics", timeline)
+	}
+	forSubj, err := store.AssignmentsForSubject(ctx, math.ID)
+	if err != nil || len(forSubj) != 1 {
+		t.Fatalf("AssignmentsForSubject = %v, %d records", err, len(forSubj))
+	}
+
+	// Deleting the teacher cascades its assignments.
+	if err := teachersStore.Delete(ctx, tid); err != nil {
+		t.Fatalf("Delete teacher: %v", err)
+	}
+	timeline, _ = store.AssignmentsForTeacher(ctx, tid)
+	if len(timeline) != 0 {
+		t.Errorf("assignments not cascaded: %d records remain", len(timeline))
+	}
+	// Subjects survive: only the timeline is gone.
+	if _, err := store.SubjectByID(ctx, math.ID); err != nil {
+		t.Errorf("SubjectByID after teacher delete: %v", err)
 	}
 }

@@ -122,9 +122,36 @@ roles only authorizes.
   other histories (add, list newest-first, delete, cascade on student
   delete). Full detail in `docs/students.md`.
 
+## Teachers (`src/core/teachers`)
+
+- `Teacher` is the profile aggregate: a stable UUID, names, surnames,
+  national identity document (`DocumentID`, cédula), phone, address,
+  birth data, email, free-text medical conditions and `HomeroomClassID`
+  (empty = no es director de grupo; otherwise the led class-group).
+  `FullName` renders surnames first; `AgeAt` derives age from the
+  birthdate (never stored).
+- `Store` port covers create/read/list/update/delete; lists come back
+  ordered alphabetically. `Service` takes full `Teacher` values,
+  normalizes, validates and assigns UUIDs (`google/uuid`).
+
+## Subjects (`src/core/subjects`)
+
+- `Subject` is a catalog entry (unique name, optional code, `Active`
+  flag to retire without losing history). `Assignment` is one timeline
+  entry `{TeacherID, SubjectID, StartedAt, EndedAt}`; zero `EndedAt`
+  means currently taught. Teacher ids are opaque; subject ids are stable
+  for reuse by future capabilities such as a calendar.
+- `Service` enforces the timeline rules: no duplicate open pair
+  (`ErrAlreadyAssigned`, also a partial unique index), overlapping across
+  subjects allowed, `EndAssignment` preserves closed periods,
+  `DeleteSubject` blocked while history exists (`ErrHasAssignments`).
+  Read models: chronological `AssignmentsForTeacher`, open-only
+  `CurrentForTeacher`, chronological `AssignmentsForSubject`.
+  Full detail in `docs/teachers.md`.
+
 ## Persistence (`src/platform/postgres`)
 
-- Production adapters implement the four Store ports on `pgx/v5`
+- Production adapters implement the six Store ports on `pgx/v5`
   (`pgxpool`). The idempotent schema lives in `schema.sql` (embedded) and is
   applied at connect time, including `ADD COLUMN IF NOT EXISTS` migrations
   for installs predating the extended profile and the `late` reason.
