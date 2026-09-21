@@ -1,7 +1,10 @@
 // Package config loads runtime configuration from the environment.
 package config
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // Config holds the runtime configuration for the backend.
 type Config struct {
@@ -10,6 +13,9 @@ type Config struct {
 	// DatabaseURL is the PostgreSQL connection string. When empty the
 	// in-memory stores are used (development only).
 	DatabaseURL string
+	// AllowedOrigins lists browser origins accepted by CORS,
+	// comma-separated. Empty means same-origin only.
+	AllowedOrigins []string
 }
 
 // Default returns a Config with production-sane defaults.
@@ -25,6 +31,13 @@ func FromEnv() Config {
 	}
 	if v := os.Getenv("DATABASE_URL"); v != "" {
 		cfg.DatabaseURL = v
+	}
+	if v := os.Getenv("ALLOWED_ORIGINS"); v != "" {
+		for _, o := range strings.Split(v, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				cfg.AllowedOrigins = append(cfg.AllowedOrigins, o)
+			}
+		}
 	}
 	return cfg
 }

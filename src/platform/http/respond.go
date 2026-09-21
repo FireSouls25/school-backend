@@ -21,6 +21,11 @@ type ErrorBody struct {
 // statusByCode maps coded domain errors to HTTP status codes.
 // Codes not listed fall back to 500.
 var statusByCode = map[string]int{
+	"http.err_bad_request":  http.StatusBadRequest,
+	"http.err_unauthorized": http.StatusUnauthorized,
+	"http.err_forbidden":    http.StatusForbidden,
+	"http.err_not_found":    http.StatusNotFound,
+
 	"roles.err_unknown_role":    http.StatusBadRequest,
 	"roles.err_invalid_subject": http.StatusBadRequest,
 

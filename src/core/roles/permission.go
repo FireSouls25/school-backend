@@ -13,6 +13,8 @@ const (
 	PermissionViewStudents Permission = "view-students"
 	// PermissionRecordIncidents lets a teacher register faults and misbehavior.
 	PermissionRecordIncidents Permission = "record-incidents"
+	// PermissionRecordAttendance lets a teacher take and correct roll calls.
+	PermissionRecordAttendance Permission = "record-attendance"
 	// PermissionViewClassStats lets a teacher see class statistics.
 	PermissionViewClassStats Permission = "view-class-statistics"
 	// PermissionManageStudents lets an admin manage student records.
@@ -30,6 +32,7 @@ var permissionCatalog = []Permission{
 	PermissionViewOwnHistory,
 	PermissionViewStudents,
 	PermissionRecordIncidents,
+	PermissionRecordAttendance,
 	PermissionViewClassStats,
 	PermissionManageStudents,
 	PermissionManageUsers,
@@ -47,6 +50,7 @@ var rolePermissions = func() map[Role][]Permission {
 		RoleTeacher: {
 			PermissionViewStudents,
 			PermissionRecordIncidents,
+			PermissionRecordAttendance,
 			PermissionViewClassStats,
 		},
 	}

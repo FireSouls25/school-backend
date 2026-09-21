@@ -31,7 +31,7 @@ func writeTestJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func TestHealthz(t *testing.T) {
-	handler := httpapi.Router(newI18n(t))
+	handler := httpapi.Router(httpapi.Dependencies{}, newI18n(t))
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

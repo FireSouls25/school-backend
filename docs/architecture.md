@@ -42,7 +42,12 @@ so they also only see the public API of the packages they cover.
   the catalog (`role.<id>`).
 - `Permission` is a fine-grained action. The permission matrix maps each role
   to the permissions it grants; `admin` is expanded to the union of all
-  permissions at init.
+  permissions at init. Students see only their own history
+  (`view-own-history`); teachers see students, take roll calls and record
+  incidents (`view-students`, `record-attendance`, `record-incidents`) plus
+  class statistics (`view-class-statistics`); full cross-year reports and
+  management stay admin-only (`manage-system`, …). Route mapping in
+  `docs/api.md`.
 - Domain errors implement a structural `Code() string` (see
   `Coded` in `src/platform/i18n`), giving every error a stable catalog key.
 
@@ -226,8 +231,26 @@ roles only authorizes.
   `src/platform/postgres/pgerrors.go` translates violations (`23503`,
   `23505`) into coded domain errors so services stay decoupled.
 - The composition root selects PostgreSQL when `DATABASE_URL` is set,
-  otherwise in-memory stores (development only). Integration tests run
-  against `TEST_DATABASE_URL` and skip when unset.
+  otherwise in-memory stores (development only). Integration tests run in
+  an isolated database: `testDB` truncates every table (`CASCADE`) per
+  test, so tests share a server but never share rows. `compose.yaml` runs
+  that disposable Postgres locally; `docker compose down -v` wipes it.
+  `pg.Truncate` quotes identifiers and only accepts trusted constants.
+
+## HTTP transport (`src/platform/http`)
+
+- Versioned routes under `/v1` (`/healthz` stays public). Handlers depend
+  on core services; only `cmd/server` builds the `Dependencies`.
+- Identity is a UUID `X-Subject-ID` header until `users`/`auth` lands
+  (missing/invalid → `401 http.err_unauthorized`). `RequirePermission`
+  enforces one permission per route against `roles.Authorizer`
+  (denied → `403 http.err_forbidden`); self-scoped student reads also
+  accept `view-own-history` on the caller's own id.
+- No redirects on denial: the SPA navigates back on `403`, defaulting to
+  the `GET /v1/me` home (`/admin`, `/docente`, `/estudiante`).
+- Bodies are capped at 1 MiB with strict JSON; authorship always comes
+  from the context subject. CORS reflects only `ALLOWED_ORIGINS`.
+  Full contract in `docs/api.md`.
 
 ## Multilanguage support (`src/platform/i18n`)
 

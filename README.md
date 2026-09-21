@@ -38,6 +38,10 @@ The schema in `src/platform/postgres/schema.sql` applies automatically on
 connect and is idempotent, so wiping data is just
 `docker compose down -v`.
 
+Browser SPAs on another origin need `ALLOWED_ORIGINS` (comma-separated);
+empty means same-origin only. Auth is a pre-`users` placeholder header
+(`X-Subject-ID`, a UUID); see `docs/api.md` for the access rules.
+
 ## Structure
 
 ```

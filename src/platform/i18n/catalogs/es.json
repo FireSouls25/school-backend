@@ -126,6 +126,8 @@
   "warning.gravity.moderate": "Medio",
   "warning.gravity.severe": "Grave",
   "http.err_bad_request": "Solicitud inválida",
+  "http.err_unauthorized": "Autenticación requerida",
+  "http.err_forbidden": "Acceso denegado",
   "http.err_not_found": "Recurso no encontrado",
   "http.err_internal": "Error interno del servidor"
 }

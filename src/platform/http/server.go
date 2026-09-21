@@ -17,10 +17,11 @@ import (
 )
 
 // Router builds the application's HTTP routes.
-func Router(i18nSvc *i18n.Service) http.Handler {
+func Router(deps Dependencies, i18nSvc *i18n.Service) http.Handler {
 	r := chi.NewRouter()
 	r.Use(MiddlewareLocale(i18nSvc))
-	r.Get("/healthz", handleHealthz)
+	r.Use(MiddlewareCORS(deps.AllowedOrigins))
+	routes(r, deps)
 	return r
 }
 
@@ -36,6 +37,9 @@ func Run(addr string, handler http.Handler) error {
 		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	errCh := make(chan error, 1)

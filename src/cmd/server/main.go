@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 
 	"grade/src/core/attendance"
 	"grade/src/core/classes"
@@ -72,7 +73,6 @@ func main() {
 
 	_ = students.NewService(studentsStore)
 	_ = attendance.NewService(attendanceStore)
-	_ = teachers.NewService(teachersStore)
 	_ = schoolyears.NewService(yearsStore)
 	_ = classes.NewService(classesStore)
 	_ = enrollments.NewService(enrollmentsStore)
@@ -82,21 +82,59 @@ func main() {
 	sessionsSvc := sessions.NewService(sessionsStore)
 	warningsSvc := warnings.NewService(warningsStore)
 	incidentsSvc := incidents.NewService(incidentsStore)
-	_ = statistics.NewService(
+	statisticsSvc := statistics.NewService(
 		statisticsSessions{sessionsSvc},
 		statisticsWarnings{warningsSvc},
 		statisticsFaults{incidentsSvc},
 	)
 
 	roleStore := roles.NewMemoryStore()
-	roles.NewService(roleStore)
+	rolesSvc := roles.NewService(roleStore)
+	seedRoles(ctx, rolesSvc, "SEED_ADMINS", roles.RoleAdmin)
+	seedRoles(ctx, rolesSvc, "SEED_TEACHERS", roles.RoleTeacher)
+	teachersSvc := teachers.NewService(teachersStore)
 
 	addr := ":" + cfg.Port
 	slog.Info("starting server", "addr", addr)
-	if err := httpapi.Run(addr, httpapi.Router(i18nSvc)); err != nil {
+	deps := httpapi.Dependencies{
+		Auth:           rolesSvc,
+		Roles:          rolesSvc,
+		RolesSvc:       rolesSvc,
+		Students:       students.NewService(studentsStore),
+		Teachers:       teachersSvc,
+		Warnings:       warningsSvc,
+		Sessions:       sessionsSvc,
+		Statistics:     statisticsSvc,
+		AllowedOrigins: cfg.AllowedOrigins,
+	}
+	if err := httpapi.Run(addr, httpapi.Router(deps, i18nSvc)); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+// seedRoles grants role to every subject id listed in a comma-separated
+// env var. Test accounts only: roles live in memory until users/auth
+// lands, so without seeding nobody has any role after each restart.
+// Never set these in production: anyone holding a listed id is admin.
+func seedRoles(ctx context.Context, svc *roles.Service, envVar string, role roles.Role) {
+	raw := strings.TrimSpace(os.Getenv(envVar))
+	if raw == "" {
+		return
+	}
+	count := 0
+	for _, id := range strings.Split(raw, ",") {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if err := svc.Assign(ctx, id, role); err != nil {
+			slog.Warn("seed role skipped", "env", envVar, "role", role.String(), "error", err)
+			continue
+		}
+		count++
+	}
+	slog.Info("seed roles granted", "env", envVar, "role", role.String(), "count", count)
 }
 
 // subjectChecker implements schedules.Checker on top of the subjects

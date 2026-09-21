@@ -22,8 +22,29 @@ import (
 	pg "grade/src/platform/postgres"
 )
 
+// testTables lists every table in dependency-safe order for truncation.
+// testDB truncates them (CASCADE) so each test starts from an empty,
+// freshly-migrated database even though all tests share one server.
+var testTables = []string{
+	"session_revisions",
+	"session_rosters",
+	"sessions",
+	"schedule_entries",
+	"promotions",
+	"enrollments",
+	"subject_assignments",
+	"warnings",
+	"incident_faults",
+	"attendance_records",
+	"class_groups",
+	"subjects",
+	"teachers",
+	"students",
+	"school_years",
+}
+
 // testDB skips the suite unless TEST_DATABASE_URL points at an isolated
-// PostgreSQL database (schema is created and torn down per run).
+// PostgreSQL database (the compose.yaml database is disposable by design).
 func testDB(t *testing.T) *pg.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -35,6 +56,9 @@ func testDB(t *testing.T) *pg.DB {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(db.Close)
+	if err := pg.Truncate(context.Background(), db, testTables); err != nil {
+		t.Fatalf("Truncate: %v", err)
+	}
 	return db
 }
 
@@ -70,6 +94,7 @@ func fullProfile(id string) students.Student {
 		MedicalReport:      "Asma leve",
 		DiversityCondition: "",
 		SpecialistReport:   students.Condition{Has: true, Detail: "Neumología"},
+		Status:             students.StatusActive,
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -45,6 +46,23 @@ func (db *DB) Close() { db.pool.Close() }
 
 // Pool exposes the underlying pool to the adapters in this package.
 func (db *DB) Pool() *pgxpool.Pool { return db.pool }
+
+// Truncate empties tables (CASCADE) so integration tests start isolated.
+// Identifiers are quoted; table names must be trusted constants, never
+// user input.
+func Truncate(ctx context.Context, db *DB, tables []string) error {
+	if len(tables) == 0 {
+		return nil
+	}
+	quoted := make([]string, len(tables))
+	for i, t := range tables {
+		quoted[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"`
+	}
+	if _, err := db.pool.Exec(ctx, `TRUNCATE `+strings.Join(quoted, ", ")+` CASCADE`); err != nil {
+		return fmt.Errorf("postgres: truncate: %w", err)
+	}
+	return nil
+}
 
 func mustSchema() []byte {
 	b, err := schemaFS.ReadFile("schema.sql")
