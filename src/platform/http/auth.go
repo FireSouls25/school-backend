@@ -10,9 +10,10 @@ import (
 	"grade/src/core/roles"
 )
 
-// SubjectHeader carries the caller identity until users/auth lands. The
-// backend is agnostic to the request origin as long as the id is valid;
-// a real token scheme replaces this header without touching handlers.
+// SubjectHeader carries the caller identity until the auth token scheme
+// lands. The backend is agnostic to the request origin as long as the id
+// is valid; a real token scheme replaces this header without touching
+// handlers.
 const SubjectHeader = "X-Subject-ID"
 
 // codedError is a transport-level error with a stable catalog key.

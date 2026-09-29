@@ -307,3 +307,22 @@ CREATE TABLE IF NOT EXISTS session_revisions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_revisions_session_id ON session_revisions (session_id);
+
+-- Login accounts. The id doubles as the subject identifier for role
+-- assignments. Passwords are stored as bcrypt hashes, never plaintext.
+CREATE TABLE IF NOT EXISTS users (
+    id            UUID PRIMARY KEY,
+    username      TEXT        NOT NULL DEFAULT '',
+    email         TEXT        NOT NULL DEFAULT '',
+    password_hash TEXT        NOT NULL DEFAULT '',
+    active        BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Usernames are unique, case-insensitively.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique
+    ON users (lower(username));
+-- Emails are unique when present, case-insensitively.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+    ON users (lower(email)) WHERE email <> '';

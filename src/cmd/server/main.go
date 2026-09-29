@@ -18,6 +18,7 @@ import (
 	"grade/src/core/students"
 	"grade/src/core/subjects"
 	"grade/src/core/teachers"
+	"grade/src/core/users"
 	"grade/src/core/warnings"
 	"grade/src/platform/config"
 	httpapi "grade/src/platform/http"
@@ -47,6 +48,7 @@ func main() {
 		enrollmentsStore enrollments.Store = enrollments.NewMemoryStore()
 		schedulesStore   schedules.Store   = schedules.NewMemoryStore()
 		sessionsStore    sessions.Store    = sessions.NewMemoryStore()
+		usersStore       users.Store       = users.NewMemoryStore()
 	)
 	if cfg.DatabaseURL != "" {
 		db, err := pg.Connect(ctx, cfg.DatabaseURL)
@@ -66,6 +68,7 @@ func main() {
 		enrollmentsStore = pg.NewEnrollmentsStore(db)
 		schedulesStore = pg.NewSchedulesStore(db)
 		sessionsStore = pg.NewSessionsStore(db)
+		usersStore = pg.NewUsersStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only)")
@@ -93,6 +96,8 @@ func main() {
 	seedRoles(ctx, rolesSvc, "SEED_ADMINS", roles.RoleAdmin)
 	seedRoles(ctx, rolesSvc, "SEED_TEACHERS", roles.RoleTeacher)
 	teachersSvc := teachers.NewService(teachersStore)
+	usersSvc := users.NewService(usersStore)
+	bootstrapAdmin(ctx, usersSvc, rolesSvc)
 
 	addr := ":" + cfg.Port
 	slog.Info("starting server", "addr", addr)
@@ -102,6 +107,7 @@ func main() {
 		RolesSvc:       rolesSvc,
 		Students:       students.NewService(studentsStore),
 		Teachers:       teachersSvc,
+		Users:          usersSvc,
 		Warnings:       warningsSvc,
 		Sessions:       sessionsSvc,
 		Statistics:     statisticsSvc,
@@ -114,8 +120,8 @@ func main() {
 }
 
 // seedRoles grants role to every subject id listed in a comma-separated
-// env var. Test accounts only: roles live in memory until users/auth
-// lands, so without seeding nobody has any role after each restart.
+// env var. Test accounts only: roles live in memory, so without seeding
+// nobody has any role after each restart.
 // Never set these in production: anyone holding a listed id is admin.
 func seedRoles(ctx context.Context, svc *roles.Service, envVar string, role roles.Role) {
 	raw := strings.TrimSpace(os.Getenv(envVar))
@@ -135,6 +141,39 @@ func seedRoles(ctx context.Context, svc *roles.Service, envVar string, role role
 		count++
 	}
 	slog.Info("seed roles granted", "env", envVar, "role", role.String(), "count", count)
+}
+
+// bootstrapAdmin creates the first login account when BOOTSTRAP_ADMIN_*
+// env vars are set (BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD
+// required, BOOTSTRAP_ADMIN_EMAIL optional) and grants it the admin role.
+// It solves the chicken-and-egg problem: nobody can grant the first role
+// through the API before an admin exists. Existing accounts are never
+// modified: when the username already exists only the admin role is
+// ensured. Never set these vars with a weak password in production; rotate
+// the password after the first login (users.Service.SetPassword).
+func bootstrapAdmin(ctx context.Context, userSvc *users.Service, roleSvc *roles.Service) {
+	username := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_USERNAME"))
+	password := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
+	if username == "" || password == "" {
+		return
+	}
+	email := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))
+	u, err := userSvc.Create(ctx, username, email, password)
+	if err != nil {
+		if existing, lookupErr := userSvc.ByUsername(ctx, username); lookupErr == nil {
+			u = existing
+			slog.Info("bootstrap admin already exists; ensuring admin role", "username", u.Username)
+		} else {
+			slog.Error("bootstrap admin creation failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		slog.Info("bootstrap admin created", "username", u.Username)
+	}
+	if err := roleSvc.Assign(ctx, u.ID, roles.RoleAdmin); err != nil {
+		slog.Error("bootstrap admin role grant failed", "error", err)
+		os.Exit(1)
+	}
 }
 
 // subjectChecker implements schedules.Checker on top of the subjects

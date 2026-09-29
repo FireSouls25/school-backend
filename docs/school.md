@@ -272,5 +272,5 @@ All messages are localized through `src/platform/i18n/catalogs/es.json`
   next-year enrollments, update `Student.ClassID` and record `Promotion`
   rows; graduating from grade 11 calls `Student.Graduate`.
 - **Graphs**: chart-ready endpoints over the statistics reports.
-- **Remaining roadmap**: `users`/`auth`, WhatsApp `notifications`, HTTP
+- **Remaining roadmap**: `auth` (login tokens on top of `users`), WhatsApp `notifications`, HTTP
   endpoints with role gating, audit logging.

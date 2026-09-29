@@ -5,8 +5,10 @@ all user-facing text is Spanish from the i18n catalogs.
 
 ## Identity (pre-auth)
 
-Until `users`/`auth` lands, the caller identifies with the
-`X-Subject-ID` header carrying a valid UUID:
+Real accounts already exist in the `users` table (bcrypt passwords,
+`docs/users.md`), but no login/token endpoint issues sessions yet, so the
+caller still identifies with the `X-Subject-ID` header carrying a valid
+UUID (which is a `User.ID` once the account is created):
 
 - Missing or malformed id → `401 http.err_unauthorized`, nothing runs.
 - The header is trusted transport, not proof: it is only acceptable

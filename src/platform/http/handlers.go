@@ -13,6 +13,7 @@ import (
 	"grade/src/core/statistics"
 	"grade/src/core/students"
 	"grade/src/core/teachers"
+	"grade/src/core/users"
 	"grade/src/core/warnings"
 )
 
@@ -30,6 +31,7 @@ type Dependencies struct {
 	RolesSvc   *roles.Service
 	Students   *students.Service
 	Teachers   *teachers.Service
+	Users      *users.Service
 	Warnings   *warnings.Service
 	Sessions   *sessions.Service
 	Statistics *statistics.Service
@@ -228,7 +230,7 @@ func handleCreateStudent(deps Dependencies) http.HandlerFunc {
 // handleCreateTeacher persists a new teacher profile. The service assigns
 // the id and forces active status; any incoming ID or Active is ignored.
 // Login identity for the new teacher is granted separately through
-// POST /v1/roles until users/auth lands.
+// POST /v1/roles until the auth phase links teachers to user accounts.
 func handleCreateTeacher(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body teachers.Teacher

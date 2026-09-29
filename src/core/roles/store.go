@@ -4,8 +4,8 @@ import "context"
 
 // Store is the persistence port for role assignments. Implementations must
 // be safe for concurrent use. A subject is identified by an opaque id so this
-// package stays decoupled from the users/auth features. Replace MemoryStore
-// with a PostgreSQL adapter in production.
+// package stays decoupled from the users feature (a User.ID is a valid
+// subject). Replace MemoryStore with a PostgreSQL adapter in production.
 type Store interface {
 	// AssignRole grants role to subjectID, overwriting any previous grant.
 	AssignRole(ctx context.Context, subjectID string, role Role) error

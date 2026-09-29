@@ -18,6 +18,7 @@ import (
 	"grade/src/core/students"
 	"grade/src/core/subjects"
 	"grade/src/core/teachers"
+	"grade/src/core/users"
 	"grade/src/core/warnings"
 	pg "grade/src/platform/postgres"
 )
@@ -39,6 +40,7 @@ var testTables = []string{
 	"class_groups",
 	"subjects",
 	"teachers",
+	"users",
 	"students",
 	"school_years",
 }
@@ -309,6 +311,93 @@ func TestTeachersStoreRoundTrip(t *testing.T) {
 
 	if _, err := store.ByID(ctx, "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"); !errors.Is(err, teachers.ErrNotFound) {
 		t.Errorf("ByID unknown error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestUsersStoreRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+	store := pg.NewUsersStore(db)
+
+	// The store persists the hash opaquely: no bcrypt needed here, the
+	// service owns hashing (covered in src/tests/users).
+	want := users.User{
+		ID: "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa", Username: "admin",
+		Email: "admin@observador.edu.co", PasswordHash: "$2a$10$testhashforroundtriponly0000000000000000000000",
+		Active: true,
+	}
+	got, err := store.Create(ctx, want)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got.Username != want.Username || got.PasswordHash != want.PasswordHash || !got.Active {
+		t.Errorf("Create = %+v, want %+v", got, want)
+	}
+
+	byID, err := store.ByID(ctx, want.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if byID.Username != want.Username {
+		t.Errorf("ByID = %+v, want %+v", byID, want)
+	}
+
+	// Lookups are case-insensitive.
+	byName, err := store.ByUsername(ctx, "ADMIN")
+	if err != nil {
+		t.Fatalf("ByUsername: %v", err)
+	}
+	if byName.ID != want.ID {
+		t.Errorf("ByUsername id = %q, want %q", byName.ID, want.ID)
+	}
+	byEmail, err := store.ByEmail(ctx, "ADMIN@OBSERVADOR.EDU.CO")
+	if err != nil {
+		t.Fatalf("ByEmail: %v", err)
+	}
+	if byEmail.ID != want.ID {
+		t.Errorf("ByEmail id = %q, want %q", byEmail.ID, want.ID)
+	}
+
+	// Race-safe backstop: duplicates surface as coded errors, not raw PG errors.
+	dupName := want
+	dupName.ID = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
+	dupName.Email = "other@observador.edu.co"
+	if _, err := store.Create(ctx, dupName); !errors.Is(err, users.ErrDuplicateUsername) {
+		t.Errorf("duplicate username error = %v, want ErrDuplicateUsername", err)
+	}
+	dupEmail := want
+	dupEmail.ID = "cccccccc-3333-4333-8333-cccccccccccc"
+	dupEmail.Username = "other"
+	if _, err := store.Create(ctx, dupEmail); !errors.Is(err, users.ErrDuplicateEmail) {
+		t.Errorf("duplicate email error = %v, want ErrDuplicateEmail", err)
+	}
+
+	// Update persists profile fields but never the password hash.
+	byID.Active = false
+	byID.PasswordHash = "tampered"
+	upd, err := store.Update(ctx, byID)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if upd.Active || upd.PasswordHash != want.PasswordHash {
+		t.Errorf("Update = %+v, want inactive with untouched hash", upd)
+	}
+	if err := store.SetPasswordHash(ctx, want.ID, "newhash"); err != nil {
+		t.Fatalf("SetPasswordHash: %v", err)
+	}
+	after, err := store.ByID(ctx, want.ID)
+	if err != nil {
+		t.Fatalf("ByID after SetPasswordHash: %v", err)
+	}
+	if after.PasswordHash != "newhash" {
+		t.Errorf("PasswordHash = %q, want %q", after.PasswordHash, "newhash")
+	}
+
+	if err := store.Delete(ctx, want.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := store.ByID(ctx, want.ID); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("ByID after delete error = %v, want ErrNotFound", err)
 	}
 }
 

@@ -39,8 +39,10 @@ connect and is idempotent, so wiping data is just
 `docker compose down -v`.
 
 Browser SPAs on another origin need `ALLOWED_ORIGINS` (comma-separated);
-empty means same-origin only. Auth is a pre-`users` placeholder header
-(`X-Subject-ID`, a UUID); see `docs/api.md` for the access rules.
+empty means same-origin only. Auth is still a placeholder header
+(`X-Subject-ID`, a UUID) until the token scheme lands; the `users` table
+already stores real accounts with bcrypt passwords (see `docs/users.md`
+and `BOOTSTRAP_ADMIN_*` in `src/cmd/server/main.go`).
 
 ## Structure
 
@@ -49,6 +51,7 @@ src/
   cmd/server/      # composition root: wires config, stores, services, router
   core/            # business capabilities (screaming architecture)
     roles/         # role system: Role, permission matrix, Store port, Authorizer
+    users/         # login accounts: username/email, bcrypt password hash, Active flag
     students/      # student profiles: ficha completa, foto, acudiente, hermanos
     attendance/    # assistance history: inasistencia / evasión / atraso
     incidents/     # faults graded leve / normal / grave
@@ -74,6 +77,7 @@ User-facing text is never hardcoded: it lives in the i18n catalogs
 internal error text stay in English.
 
 See `docs/architecture.md` for the design principles,
+`docs/users.md` for login accounts and passwords,
 `docs/students.md` for the student profile and history feature,
 `docs/teachers.md` for teachers and subjects, and
 `docs/school.md` for years, class-groups and enrollments.

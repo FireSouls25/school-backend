@@ -29,6 +29,15 @@ var statusByCode = map[string]int{
 	"roles.err_unknown_role":    http.StatusBadRequest,
 	"roles.err_invalid_subject": http.StatusBadRequest,
 
+	"users.err_not_found":           http.StatusNotFound,
+	"users.err_invalid_id":          http.StatusBadRequest,
+	"users.err_invalid_username":    http.StatusBadRequest,
+	"users.err_invalid_email":       http.StatusBadRequest,
+	"users.err_weak_password":       http.StatusBadRequest,
+	"users.err_duplicate_username":  http.StatusBadRequest,
+	"users.err_duplicate_email":     http.StatusBadRequest,
+	"users.err_invalid_credentials": http.StatusUnauthorized,
+
 	"students.err_not_found":            http.StatusNotFound,
 	"students.err_invalid_id":           http.StatusBadRequest,
 	"students.err_invalid_name":         http.StatusBadRequest,

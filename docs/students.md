@@ -114,7 +114,8 @@ promotion flow calls.
 caregiver name/phone). The snapshot is a frozen copy: later profile edits
 never rewrite it. The future HTTP layer builds it from the current
 profile (`AgeAt` computes the age at event time). The teacher is an opaque
-id today; the future `users`/`auth` feature will own it.
+id today; linking it to a login account belongs to the future `auth`
+feature.
 
 `IssueBatch(ctx, BatchInput)` issues one event against several students:
 all items validate before anything persists, then every warning shares a

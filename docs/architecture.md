@@ -76,8 +76,30 @@ injected from `cmd/server`. `Service` implements `Authorizer` and `RoleGetter`
 so feature handlers depend on the port, never on the concrete store.
 
 `subjectID` is intentionally opaque: roles does not know about users. The
-users/auth feature will produce real identifiers and enforce authentication;
-roles only authorizes.
+users capability produces real identifiers (`User.ID` is the subject) and
+verifies passwords; the token scheme that replaces the `X-Subject-ID`
+header is still pending (see `docs/users.md`).
+
+## Users (`src/core/users`)
+
+- `User` is one login account: immutable UUID (which doubles as the
+  roles subject id), unique lowercase `Username`, optional unique
+  `Email`, bcrypt `PasswordHash` (never serialized, `json:"-"`), `Active`
+  flag and timestamps. Public `Service` results are always sanitized
+  (empty hash); only the `Store` sees hashes.
+- `Store` port: create, lookup by id/username/email (case-insensitive),
+  profile update (username/email/active, never the hash), password-hash
+  replacement, delete. Uniqueness is enforced by both adapters plus
+  partial unique indexes, race-safe.
+- `Service` owns the policy: username `^[a-z0-9][a-z0-9._-]*$` (3–32),
+  optional `net/mail` email, password 8–72 bytes with letter + number,
+  `bcrypt.DefaultCost` in production (`NewServiceWithCost` with
+  `bcrypt.MinCost` exists for fast tests). `Authenticate` resolves
+  username vs email by the presence of `@` and reports every failure as
+  `ErrInvalidCredentials` (no account enumeration). Full detail in
+  `docs/users.md`.
+
+### Ports (unchanged)
 
 ## Students (`src/core/students`)
 
@@ -119,7 +141,8 @@ roles only authorizes.
 
 - `Warning` is a llamado de atención: title, `Gravity` (`mild/moderate/
   severe` = leve/medio/grave), description, event date and hour
-  (`HappenedAt`), issuing teacher (opaque id until `users` exists) and a
+  (`HappenedAt`), issuing teacher (opaque id until login accounts link to
+  teachers in the future `auth` phase) and a
   `StudentSnapshot` freezing the student's identity (names, document,
   class, birthdate, age, caregiver contact) at issue time, decoupled from
   later profile edits.
@@ -222,7 +245,7 @@ roles only authorizes.
 
 ## Persistence (`src/platform/postgres`)
 
-- Production adapters implement the eleven Store ports on `pgx/v5`
+- Production adapters implement the twelve Store ports on `pgx/v5`
   (`pgxpool`). The idempotent schema lives in `schema.sql` (embedded) and is
   applied at connect time, including `ADD COLUMN IF NOT EXISTS` migrations
   for installs predating the extended profile and the `late` reason.
@@ -241,7 +264,9 @@ roles only authorizes.
 
 - Versioned routes under `/v1` (`/healthz` stays public). Handlers depend
   on core services; only `cmd/server` builds the `Dependencies`.
-- Identity is a UUID `X-Subject-ID` header until `users`/`auth` lands
+- Identity is a UUID `X-Subject-ID` header until the `auth` token scheme
+  lands (the `users` table already stores real accounts; see
+  `docs/users.md`)
   (missing/invalid → `401 http.err_unauthorized`). `RequirePermission`
   enforces one permission per route against `roles.Authorizer`
   (denied → `403 http.err_forbidden`); self-scoped student reads also
@@ -264,9 +289,9 @@ roles only authorizes.
 - Error responses use a fixed envelope: `{"error": {"code", "message"}}`.
   `code` is the stable key; `message` is localized. Status codes are mapped
   from known codes in `src/platform/http/respond.go`.
-- A per-user language preference is not implemented yet; it belongs to the
-  users feature. Non-HTTP consumers (WhatsApp notifications) will pass an
-  explicit language.
+- A per-user language preference is not implemented yet; it belongs to
+  the future `auth` phase. Non-HTTP consumers (WhatsApp notifications)
+  will pass an explicit language.
 
 ## Colombian data law (Ley 1581 de 2012)
 
@@ -281,7 +306,7 @@ consequences:
 
 ## Roadmap (future `src/core/` capabilities)
 
-- `users` / `auth` - authentication, user lifecycle, per-user language pref
+- `auth` - login/logout/refresh tokens on top of `users`, per-user language pref
 - `classes` - grades 1-11, groups (9-1, 9-2, ...), years, periods
 - `notifications` - WhatsApp delivery to guardians
 - `statistics` - per-class and per-student aggregations
