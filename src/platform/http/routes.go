@@ -84,5 +84,7 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/teachers/{id}", handleGetTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/users", handleCreateUser(deps))
 	})
 }

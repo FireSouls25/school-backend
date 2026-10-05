@@ -8,47 +8,73 @@ screaming architecture: code is organized by business capability, not by layer.
 
 - Go 1.26.5
 - Python 3.8+ (only for the task runner)
-- PostgreSQL for production (set `DATABASE_URL`); dev falls back to in-memory
-  stores. Integration tests use `TEST_DATABASE_URL`.
-- Docker (only to run the local test database, nothing else is containerized)
+- Docker (runs the local stack: Postgres + the API image)
+
+## Quick start
+
+```sh
+python3 scripts/dev.py up
+```
+
+Builds the API, starts Postgres, and starts the API with a demo school
+seeded, so there is something to click through right away.
+
+```sh
+curl localhost:8080/healthz
+curl -H "X-Subject-ID: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" localhost:8080/v1/me
+```
+
+Demo logins (development only): `admin` / `admin123*` and
+`carlos.mendoza` / `docente123*`. The seeded school has a school year with
+Colombian holidays, seven class-groups, five teachers, five subjects, twenty
+students with enrollments, roll calls with marks, a warning and a fault.
+
+Without Docker, `python3 scripts/dev.py run` starts the API on the in-memory
+stores with the same demo data (lost on every restart).
 
 ## Commands
 
 ```sh
-python3 scripts/dev.py run     # start the API server (PORT env, default 8080)
+python3 scripts/dev.py up      # start the stack (db + api, demo data)
+python3 scripts/dev.py logs    # follow the api logs
+python3 scripts/dev.py down    # stop (add --volumes to wipe the database)
+python3 scripts/dev.py reset   # stop and wipe: clean slate
+python3 scripts/dev.py seed    # create the demo data (idempotent)
+python3 scripts/dev.py run     # run the API locally (PORT env, default 8080)
 python3 scripts/dev.py test    # run all tests with the race detector
 python3 scripts/dev.py testdb  # run the Postgres integration suite
 python3 scripts/dev.py lint    # gofmt + go vet
 python3 scripts/dev.py tidy    # go mod tidy
 ```
 
-## Local test database
+## Configuration
 
-`compose.yaml` runs a single Postgres for tests and manual trials:
+`.env` (gitignored) holds the settings; `.env.example` documents every
+variable: `APP_ENV`, `PORT`, `DATABASE_URL`, `ALLOWED_ORIGINS`, `SEED_DEMO`,
+`BOOTSTRAP_ADMIN_*`. Compose reads it automatically.
 
-```sh
-docker compose up -d            # start Postgres on localhost:5433
-python3 scripts/dev.py testdb   # integration suite (uses the compose DSN
-                                # unless TEST_DATABASE_URL is already set)
-```
+`APP_ENV=production` refuses to start without `DATABASE_URL`, forces
+`SEED_DEMO` off, and rejects the shipped development passwords for the
+bootstrap admin. The first admin is created at boot from
+`BOOTSTRAP_ADMIN_*` (or `..._PASSWORD_FILE` for secret stores); an existing
+account is never overwritten. Identity is still the placeholder
+`X-Subject-ID` header until the token scheme lands, although the `users`
+table already stores real accounts with bcrypt passwords.
 
-Point the API at it with
-`DATABASE_URL=postgres://grade:grade@localhost:5433/gradedb?sslmode=disable`.
 The schema in `src/platform/postgres/schema.sql` applies automatically on
-connect and is idempotent, so wiping data is just
-`docker compose down -v`.
+connect and is idempotent, so deploying is just starting the new image.
 
-Browser SPAs on another origin need `ALLOWED_ORIGINS` (comma-separated);
-empty means same-origin only. Auth is still a placeholder header
-(`X-Subject-ID`, a UUID) until the token scheme lands; the `users` table
-already stores real accounts with bcrypt passwords (see `docs/users.md`
-and `BOOTSTRAP_ADMIN_*` in `src/cmd/server/main.go`).
+Full instructions, including the honest list of what still needs work before
+real data (tokens, persistent roles, audit log): `docs/deploy.md`.
 
 ## Structure
 
 ```
 src/
-  cmd/server/      # composition root: wires config, stores, services, router
+  cmd/server/      # the API binary: config, bootstrap, HTTP router
+  cmd/devseed/     # the demo data CLI (idempotent)
+  app/             # composition root: adapter selection + service wiring
+  devseed/         # demo school generator (development only)
   core/            # business capabilities (screaming architecture)
     roles/         # role system: Role, permission matrix, Store port, Authorizer
     users/         # login accounts: username/email, bcrypt password hash, Active flag
@@ -77,6 +103,7 @@ User-facing text is never hardcoded: it lives in the i18n catalogs
 internal error text stay in English.
 
 See `docs/architecture.md` for the design principles,
+`docs/deploy.md` for setup and deployment,
 `docs/users.md` for login accounts and passwords,
 `docs/students.md` for the student profile and history feature,
 `docs/teachers.md` for teachers and subjects, and

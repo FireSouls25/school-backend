@@ -246,6 +246,82 @@ func handleCreateTeacher(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// createUserRequest is the body for creating a login account.
+type createUserRequest struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	// Role is optional (e.g. "teacher"). Granting it additionally
+	// requires manage-roles; admins hold every permission.
+	Role string `json:"role"`
+}
+
+// userAccount is the response after creating a login account. It never
+// carries the password hash (the service sanitizes, and the hash field
+// is excluded from JSON anyway).
+type userAccount struct {
+	ID       string       `json:"ID"`
+	Username string       `json:"Username"`
+	Email    string       `json:"Email"`
+	Active   bool         `json:"Active"`
+	Roles    []roles.Role `json:"Roles"`
+}
+
+// handleCreateUser creates a login account for a teacher (or any future
+// profile): username + bcrypt password, no self-registration involved.
+// Only admins reach it (manage-users); the optional role grant needs
+// manage-roles on top, so a lesser role can never escalate.
+func handleCreateUser(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body createUserRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		u, err := deps.Users.Create(
+			r.Context(),
+			strings.TrimSpace(body.Username),
+			strings.TrimSpace(body.Email),
+			body.Password,
+		)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if raw := strings.TrimSpace(body.Role); raw != "" {
+			role, err := roles.Parse(raw)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			subject, _ := SubjectFrom(r.Context())
+			allowed, err := deps.Auth.Can(r.Context(), subject, roles.PermissionManageRoles)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			if !allowed {
+				WriteError(w, r, errForbidden)
+				return
+			}
+			if err := deps.RolesSvc.Assign(r.Context(), u.ID, role); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		rs, err := deps.Roles.Roles(r.Context(), u.ID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if rs == nil {
+			rs = []roles.Role{}
+		}
+		writeJSON(w, http.StatusCreated, userAccount{
+			ID: u.ID, Username: u.Username, Email: u.Email, Active: u.Active, Roles: rs,
+		})
+	}
+}
+
 // roleAssignment is the body for granting a role to a subject.
 type roleAssignment struct {
 	SubjectID string `json:"subjectID"`

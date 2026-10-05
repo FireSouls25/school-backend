@@ -32,8 +32,10 @@ The account keeps:
 
 ```
 src/core/users/          account: model, Store port, Service, MemoryStore
+src/devseed/             demo accounts seeded on boot (development only)
 src/platform/postgres/   production adapter (UsersStore) + embedded schema.sql
 src/tests/users/         service tests (policy, duplicates, authentication)
+src/tests/devseed/       demo seeding: consistency and idempotency
 src/tests/postgres/      TestUsersStoreRoundTrip (round trip + duplicate mapping)
 ```
 
@@ -131,8 +133,30 @@ BOOTSTRAP_ADMIN_PASSWORD='admin123*' \
 python3 scripts/dev.py run
 ```
 
+Prefer `BOOTSTRAP_ADMIN_PASSWORD_FILE` where the platform provides secrets
+(docker secrets, Kubernetes): it takes precedence over the env var, so the
+password never shows up in `docker inspect` or a process listing.
+`APP_ENV=production` rejects the development passwords above, so a real
+deployment must set its own; see `docs/deploy.md`.
+
 `SEED_ADMINS` / `SEED_TEACHERS` keep working unchanged: they grant roles
-to subject UUIDs, and a user id is a valid subject id.
+to subject UUIDs, and a user id is a valid subject id. They are a
+development hook (roles live in memory until the auth phase).
+
+### Demo data
+
+`SEED_DEMO` (on by default in development, forced off in production) seeds
+the demo school through `src/devseed`, including these two accounts, so a
+developer can sign in without setting anything by hand:
+
+| User | Password | Role |
+|---|---|---|
+| `admin` | `admin123*` | admin |
+| `carlos.mendoza` | `docente123*` | teacher |
+
+Both carry the fixed UUIDs the SPA dev login mock sends. Seeding is
+idempotent, and an account that already exists (say a bootstrap admin named
+`admin`) is reused rather than duplicated.
 
 ## Error codes and HTTP mapping
 
@@ -156,6 +180,32 @@ service results), so no error path can leak it.
   separate aggregates with their own lifecycle.
 - Audit logging of reads/writes is still pending (see roadmap).
 
+## HTTP (implementado)
+
+`POST /v1/users` (permiso `manage-users`, solo admin) crea la cuenta de
+acceso de un docente: sin registro público, el admin le pone la
+contraseña inicial.
+
+```json
+// POST /v1/users {"username","email","password","role?"}
+{
+  "ID": "uuid de la cuenta (subject para roles)",
+  "Username": "laura.torres",
+  "Email": "laura.torres@observador.edu.co",
+  "Active": true,
+  "Roles": ["teacher"]
+}
+```
+
+- El cuerpo es JSON estricto (desconocidos → `400`); la contraseña nunca
+  vuelve en la respuesta.
+- `"role"` es opcional (`teacher`, `admin`, `student`); otorgarlo exige
+  además `manage-roles` (el admin tiene todos los permisos, así que en la
+  práctica sigue siendo solo-admin).
+- Errores con códigos estables: `users.err_duplicate_username` /
+  `err_duplicate_email` / `err_weak_password` (`400`),
+  `roles.err_unknown_role` (`400`).
+
 ## What's next (auth phase, not this change)
 
 - `POST /v1/login {"identifier","password"}` → token + expiry + subject
@@ -169,7 +219,9 @@ service results), so no error path can leak it.
 
 ## Cambios pendientes en el frontend (documentados, NO implementados)
 
-Por pedido explícito no se tocó `frontend/`. Cuando el backend exponga
+Por pedido explícito no se tocó `frontend/`. Estado: `POST /v1/users`
+ya existe (el admin crea la cuenta del docente con su contraseña
+inicial); el login con token sigue pendiente. Cuando el backend exponga
 el login, estos son los cambios correspondientes, todos del lado del
 frontend:
 

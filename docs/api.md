@@ -49,6 +49,16 @@ Self-scoped reads (`view-own-history`) additionally require
 Unknown subjects (valid UUID, no roles) are denied everywhere guarded.
 Authorizer failures fail closed: no data, `500` with no details.
 
+### User accounts (admin only)
+
+`POST /v1/users` (`manage-users`) creates a login account with an
+initial password: no self-registration. Body
+`{"username","email","password","role?"}`; `201` returns the sanitized
+account `{ID, Username, Email, Active, Roles}`. The optional `role`
+additionally requires `manage-roles`. Teachers get their account (and
+role) from this endpoint when the admin creates their profile; they only
+ever log in. Frontend flow in `docs/users.md`.
+
 ## Denials and frontend navigation
 
 Denials never leak data and always carry a stable code:

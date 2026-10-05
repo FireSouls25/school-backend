@@ -9,11 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"grade/src/core/roles"
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
 	"grade/src/core/students"
 	"grade/src/core/teachers"
+	"grade/src/core/users"
 	"grade/src/core/warnings"
 	httpapi "grade/src/platform/http"
 )
@@ -112,6 +115,7 @@ func testStack(t *testing.T) http.Handler {
 		RolesSvc:   roleSvc,
 		Students:   studentsSvc,
 		Teachers:   teachersSvc,
+		Users:      users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost),
 		Warnings:   warningsSvc,
 		Sessions:   sessionsSvc,
 		Statistics: statsSvc,
@@ -434,5 +438,72 @@ func TestAdminListsAndReadsTeachers(t *testing.T) {
 	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/00000000-0000-4000-8000-000000000000", adminSubject, "")
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("unknown teacher status = %d, want 404", rec.Code)
+	}
+}
+
+func TestAdminCreatesUserAccount(t *testing.T) {
+	h := testStack(t)
+
+	// Admin creates a login account with the teacher role in one call.
+	rec := doRequest(t, h, http.MethodPost, "/v1/users", adminSubject,
+		`{"username":"laura.torres","email":"laura.torres@observador.edu.co","password":"docente123*","role":"teacher"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("admin create status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var acct struct {
+		ID       string       `json:"ID"`
+		Username string       `json:"Username"`
+		Email    string       `json:"Email"`
+		Active   bool         `json:"Active"`
+		Roles    []roles.Role `json:"Roles"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &acct); err != nil {
+		t.Fatalf("decode account: %v", err)
+	}
+	if acct.ID == "" || acct.Username != "laura.torres" || !acct.Active {
+		t.Errorf("account = %+v, want id, username and active", acct)
+	}
+	if len(acct.Roles) != 1 || acct.Roles[0] != roles.RoleTeacher {
+		t.Errorf("roles = %+v, want [teacher]", acct.Roles)
+	}
+	if strings.Contains(rec.Body.String(), "hash") || strings.Contains(rec.Body.String(), "$2a$") {
+		t.Errorf("response leaks password hash: %s", rec.Body.String())
+	}
+
+	// Teacher cannot create accounts.
+	rec = doRequest(t, h, http.MethodPost, "/v1/users", teacherSubject,
+		`{"username":"otro.docente","password":"docente123*"}`)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("teacher create status = %d, want 403", rec.Code)
+	}
+
+	// Duplicates fail with a stable code, not a 500.
+	rec = doRequest(t, h, http.MethodPost, "/v1/users", adminSubject,
+		`{"username":"LAURA.TORRES","password":"docente123*"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("duplicate status = %d, want 400", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "users.err_duplicate_username" {
+		t.Errorf("code = %q, want users.err_duplicate_username", code)
+	}
+
+	// Weak passwords are rejected before anything is stored.
+	rec = doRequest(t, h, http.MethodPost, "/v1/users", adminSubject,
+		`{"username":"debil.cuenta","password":"corta"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("weak password status = %d, want 400", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "users.err_weak_password" {
+		t.Errorf("code = %q, want users.err_weak_password", code)
+	}
+
+	// Unknown roles fail with a stable code.
+	rec = doRequest(t, h, http.MethodPost, "/v1/users", adminSubject,
+		`{"username":"rara.cuenta","password":"docente123*","role":"principal"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad role status = %d, want 400", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "roles.err_unknown_role" {
+		t.Errorf("code = %q, want roles.err_unknown_role", code)
 	}
 }

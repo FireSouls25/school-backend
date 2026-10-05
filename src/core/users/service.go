@@ -52,6 +52,49 @@ func NewServiceWithCost(store Store, cost int) *Service {
 // fresh UUID and persists the account. New users are always active. The
 // returned user carries no password hash.
 func (s *Service) Create(ctx context.Context, username, email, password string) (User, error) {
+	u, err := buildAccount(uuid.NewString(), username, email, password, s.cost)
+	if err != nil {
+		return User{}, err
+	}
+	if err := s.assertFree(ctx, u); err != nil {
+		return User{}, err
+	}
+	stored, err := s.store.Create(ctx, u)
+	if err != nil {
+		return User{}, err
+	}
+	return stored.Sanitized(), nil
+}
+
+// NewAccount builds an active account with an explicit id, applying the
+// same policy and hashing as Create. It does not persist anything.
+//
+// It exists for seeding and tests, where reproducible ids matter: the
+// SPA mock resolves its dev logins to fixed UUIDs, so demo data has to
+// keep working those logins. User-facing flows (HTTP, bootstrap) always
+// go through Service.Create, which assigns a fresh id.
+func NewAccount(id, username, email, password string) (User, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(id)); err != nil {
+		return User{}, ErrInvalidID
+	}
+	return buildAccount(strings.TrimSpace(id), username, email, password, bcrypt.DefaultCost)
+}
+
+// assertFree fails when the username or email is already taken.
+func (s *Service) assertFree(ctx context.Context, u User) error {
+	if _, err := s.store.ByUsername(ctx, u.Username); err == nil {
+		return ErrDuplicateUsername
+	}
+	if u.Email != "" {
+		if _, err := s.store.ByEmail(ctx, u.Email); err == nil {
+			return ErrDuplicateEmail
+		}
+	}
+	return nil
+}
+
+// buildAccount validates the input and hashes the password.
+func buildAccount(id, username, email, password string, cost int) (User, error) {
 	username = normalizeUsername(username)
 	email = normalizeEmail(email)
 	if err := validateUsername(username); err != nil {
@@ -63,32 +106,20 @@ func (s *Service) Create(ctx context.Context, username, email, password string) 
 	if err := validatePassword(password); err != nil {
 		return User{}, err
 	}
-	if _, err := s.store.ByUsername(ctx, username); err == nil {
-		return User{}, ErrDuplicateUsername
-	}
-	if email != "" {
-		if _, err := s.store.ByEmail(ctx, email); err == nil {
-			return User{}, ErrDuplicateEmail
-		}
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.cost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	if err != nil {
 		return User{}, err
 	}
 	now := time.Now()
-	u, err := s.store.Create(ctx, User{
-		ID:           uuid.NewString(),
+	return User{
+		ID:           id,
 		Username:     username,
 		Email:        email,
 		PasswordHash: string(hash),
 		Active:       true,
 		CreatedAt:    now,
 		UpdatedAt:    now,
-	})
-	if err != nil {
-		return User{}, err
-	}
-	return u.Sanitized(), nil
+	}, nil
 }
 
 // Authenticate verifies an identifier (username, or email when it contains

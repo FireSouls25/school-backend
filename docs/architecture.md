@@ -20,18 +20,28 @@
 
 ```
 src/
-  cmd/server/   composition root. Only place allowed to wire concrete types.
+  cmd/server/   the API binary: reads config, calls app.Prepare, serves HTTP
+  cmd/devseed/  the demo data CLI
+  app/          composition root. The only place allowed to pick concrete
+                adapters and wire services across capabilities.
+  devseed/      demo school generator (development only, outside core)
   core/         business capabilities. Each folder is a feature.
-  platform/     cross-cutting infrastructure (config, http, i18n). Depends on
-                core only through ports.
+  platform/     cross-cutting infrastructure (config, http, i18n, postgres).
+                Depends on core only through ports.
   tests/        test suites, kept apart from production code. Each subfolder
                 is an external test package (package <name>_test) exercising
                 the package under test through its public API.
 ```
 
-Dependency direction: `cmd -> platform -> core`. `core` has no dependencies
-outside the standard library. Tests in `src/tests` are external test packages,
-so they also only see the public API of the packages they cover.
+Dependency direction: `cmd -> app -> platform -> core`. `core` has no
+dependencies outside the standard library. Tests in `src/tests` are external
+test packages, so they also only see the public API of the packages they
+cover.
+
+`app` exists so both binaries (`cmd/server`, `cmd/devseed`) build stores and
+services the same way and cannot drift apart. `devseed` sits next to it,
+outside `core`, because it writes across every capability at once — demo data
+is composition-level work, not a business rule.
 
 ## Role system (`src/core/roles`)
 
@@ -96,8 +106,10 @@ header is still pending (see `docs/users.md`).
   `bcrypt.DefaultCost` in production (`NewServiceWithCost` with
   `bcrypt.MinCost` exists for fast tests). `Authenticate` resolves
   username vs email by the presence of `@` and reports every failure as
-  `ErrInvalidCredentials` (no account enumeration). Full detail in
-  `docs/users.md`.
+  `ErrInvalidCredentials` (no account enumeration). `NewAccount` builds an
+  account with an explicit id for seeding/tests, where reproducible ids
+  matter; user-facing flows always go through `Service.Create`, which
+  assigns a fresh one. Full detail in `docs/users.md`.
 
 ### Ports (unchanged)
 
@@ -259,6 +271,33 @@ header is still pending (see `docs/users.md`).
   test, so tests share a server but never share rows. `compose.yaml` runs
   that disposable Postgres locally; `docker compose down -v` wipes it.
   `pg.Truncate` quotes identifiers and only accepts trusted constants.
+
+## Deployment shape (`src/platform/config`, `src/app`)
+
+- `config.FromEnv` reads the environment and returns an error on anything
+  malformed: an unknown `APP_ENV`, a non-boolean `SEED_DEMO`, or a
+  half-configured bootstrap admin all refuse to boot rather than fall back
+  to a silent default. `Validate` then enforces the production rules
+  (real database, no demo data, no shipped dev passwords). Secrets can come
+  from a file (`BOOTSTRAP_ADMIN_PASSWORD_FILE`) for docker/k8s secret stores.
+- `app.New` selects adapters (PostgreSQL when `DATABASE_URL` is set,
+  in-memory otherwise) and wires every service. `app.Prepare` runs the
+  bootstrap admin and, in development, the demo data — both idempotent, so
+  running them on every boot is the intended behaviour. Full instructions in
+  `docs/deploy.md`.
+
+## Demo data (`src/devseed`)
+
+- Builds a usable school in one step: school year with Colombian holidays,
+  seven class-groups, five teachers with subject assignments, subjects,
+  students with guardians, enrollments, roll calls with marks, a warning and
+  a fault. Faked people only, so no personal data is involved (Ley 1581).
+- Idempotent through a fixed marker account: the second run detects it and
+  changes nothing. The two SPA login accounts carry the fixed UUIDs the dev
+  login mock sends, and reuse an existing account (e.g. a bootstrap admin
+  already named `admin`) instead of colliding.
+- Refused outright when `APP_ENV=production`, and by
+  `cmd/devseed` before it touches the database.
 
 ## HTTP transport (`src/platform/http`)
 
