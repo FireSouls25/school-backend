@@ -1,0 +1,22 @@
+# Local-only developer files
+.mise.toml
+AGENTS.md
+.gitignore
+
+# Agent tooling (harness-local, never committed)
+.pi/
+.agents/
+skills-lock.json
+.opencode/
+
+# Go build artifacts
+/bin/
+*.test
+*.out
+coverage.out
+
+# Local environment
+.env
+.env.*
+# ...except the documented reference, which is meant to be committed.
+!.env.example

@@ -131,19 +131,21 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 	sum.SchoolYear = year
 
 	// Accounts first: everything else references them (roles, sessions).
-	admin, err := deps.ensureAccount(ctx, AdminSubject, AdminUsername,
-		"admin@observador.edu.co", AdminPassword)
-	if err != nil {
+	// ensureAccount may reuse a colliding username owned by another id
+	// (e.g. the bootstrap admin created before the demo seed runs), so the
+	// roles below attach to the fixed placeholder subject ids the SPA
+	// actually sends, never to whichever account row won the username.
+	if _, err := deps.ensureAccount(ctx, AdminSubject, AdminUsername,
+		"admin@observador.edu.co", AdminPassword); err != nil {
 		return sum, err
 	}
-	teacher, err := deps.ensureAccount(ctx, TeacherSubject, TeacherUsername,
-		"carlos.mendoza@observador.edu.co", TeacherPassword)
-	if err != nil {
+	if _, err := deps.ensureAccount(ctx, TeacherSubject, TeacherUsername,
+		"carlos.mendoza@observador.edu.co", TeacherPassword); err != nil {
 		return sum, err
 	}
 	sum.Accounts = 2
-	sum.Roles += deps.grant(ctx, admin.ID, roles.RoleAdmin)
-	sum.Roles += deps.grant(ctx, teacher.ID, roles.RoleTeacher)
+	sum.Roles += deps.grant(ctx, AdminSubject, roles.RoleAdmin)
+	sum.Roles += deps.grant(ctx, TeacherSubject, roles.RoleTeacher)
 
 	start, end := date(year, 2, 2), date(year, 11, 27)
 	schoolYear, err := deps.Years.Create(ctx, schoolyears.SchoolYear{

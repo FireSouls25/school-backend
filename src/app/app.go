@@ -192,6 +192,21 @@ func (a *App) Prepare(ctx context.Context) error {
 	}
 	if sum.AlreadySeeded {
 		slog.Info("demo data", "state", "already seeded")
+		// Roles live in memory while the Postgres adapter lands with the
+		// auth phase, so every restart must re-grant the demo placeholder
+		// roles even when the data itself is already there. Assign is
+		// idempotent: re-granting what is already held is a no-op.
+		for _, g := range []struct {
+			subject string
+			role    roles.Role
+		}{
+			{devseed.AdminSubject, roles.RoleAdmin},
+			{devseed.TeacherSubject, roles.RoleTeacher},
+		} {
+			if err := a.Services.Roles.Assign(ctx, g.subject, g.role); err != nil {
+				return fmt.Errorf("app: re-grant demo role: %w", err)
+			}
+		}
 		return nil
 	}
 	slog.Warn("demo data seeded (development only): do not use real student data",
@@ -202,9 +217,19 @@ func (a *App) Prepare(ctx context.Context) error {
 
 // Bootstrap creates the configured first admin and grants it the admin
 // role. Without it an empty installation has nobody who can create users.
+// Idempotent: a second boot reuses the existing username and only ensures
+// the role, so restarts against a persisted database never fail on a
+// duplicate username.
 func (a *App) Bootstrap(ctx context.Context) error {
 	b := a.Config.Bootstrap
 	if !b.Enabled() {
+		return nil
+	}
+	if existing, err := a.Stores.Users.ByUsername(ctx, b.Username); err == nil {
+		if err := a.Services.Roles.Assign(ctx, existing.ID, roles.RoleAdmin); err != nil {
+			return fmt.Errorf("app: bootstrap admin role: %w", err)
+		}
+		slog.Info("bootstrap admin already exists", "username", existing.Username)
 		return nil
 	}
 	created, err := a.Services.Users.Create(ctx, b.Username, b.Email, b.Password)
