@@ -222,3 +222,40 @@ func TestIssueBatchValidatesAllBeforePersisting(t *testing.T) {
 		t.Errorf("partial batch persisted: %+v", hist)
 	}
 }
+
+func TestRecentFiltersByDateNewestFirst(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	base := validInput()
+	old := base
+	old.HappenedAt = base.HappenedAt.AddDate(0, 0, -10)
+	must := func(in warnings.Input) warnings.Warning {
+		t.Helper()
+		w, err := svc.Issue(ctx, in)
+		if err != nil {
+			t.Fatalf("Issue: %v", err)
+		}
+		return w
+	}
+	oldW := must(old)
+	newW := must(base)
+
+	since := base.HappenedAt.AddDate(0, 0, -7)
+	got, err := svc.Recent(ctx, since)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != newW.ID {
+		t.Errorf("Recent = %v, want only %s", got, newW.ID)
+	}
+
+	// The boundary is inclusive: a warning exactly at since is recent.
+	at, err := svc.Recent(ctx, oldW.HappenedAt)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(at) != 2 {
+		t.Errorf("len(Recent at boundary) = %d, want 2", len(at))
+	}
+}

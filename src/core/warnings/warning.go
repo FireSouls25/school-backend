@@ -84,4 +84,8 @@ type Store interface {
 	Delete(ctx context.Context, id string) error
 	// ForGroup returns every warning sharing a batch id, oldest first.
 	ForGroup(ctx context.Context, groupID string) ([]Warning, error)
+	// Recent returns every warning happened at or after since, newest
+	// first. It feeds the admin dashboard window without sweeping the
+	// whole table; both adapters filter at the source.
+	Recent(ctx context.Context, since time.Time) ([]Warning, error)
 }

@@ -137,3 +137,29 @@ func (s *WarningsStore) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// Recent implements warnings.Store: every warning happened at or after
+// since, newest first. The WHERE clause keeps the dashboard window cheap;
+// no schema change was needed.
+func (s *WarningsStore) Recent(ctx context.Context, since time.Time) ([]warnings.Warning, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+warningColumns+`
+		FROM warnings
+		WHERE happened_at >= $1
+		ORDER BY happened_at DESC, id DESC`,
+		since)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list recent warnings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]warnings.Warning, 0)
+	for rows.Next() {
+		w, err := scanWarning(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan warning: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}

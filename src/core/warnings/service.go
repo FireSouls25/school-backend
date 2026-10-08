@@ -3,6 +3,7 @@ package warnings
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -89,6 +90,12 @@ func (s *Service) ForGroup(ctx context.Context, groupID string) ([]Warning, erro
 		return nil, ErrInvalidGroup
 	}
 	return s.store.ForGroup(ctx, strings.TrimSpace(groupID))
+}
+
+// Recent returns every warning happened at or after since, newest first.
+// It feeds the admin dashboard window without sweeping the whole table.
+func (s *Service) Recent(ctx context.Context, since time.Time) ([]Warning, error) {
+	return s.store.Recent(ctx, since)
 }
 
 // Remove deletes a warning record.

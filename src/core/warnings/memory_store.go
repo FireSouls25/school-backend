@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 )
 
 // MemoryStore is an in-memory Store for tests and development.
@@ -63,6 +64,26 @@ func (s *MemoryStore) ForGroup(_ context.Context, groupID string) ([]Warning, er
 			return out[i].ID < out[j].ID
 		}
 		return out[i].HappenedAt.Before(out[j].HappenedAt)
+	})
+	return out, nil
+}
+
+// Recent implements Store: every warning happened at or after since,
+// newest first.
+func (s *MemoryStore) Recent(_ context.Context, since time.Time) ([]Warning, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Warning, 0)
+	for _, w := range s.warnings {
+		if !w.HappenedAt.Before(since) {
+			out = append(out, w)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].HappenedAt.Equal(out[j].HappenedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].HappenedAt.After(out[j].HappenedAt)
 	})
 	return out, nil
 }
