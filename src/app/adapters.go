@@ -6,11 +6,16 @@ package app
 
 import (
 	"context"
+	"time"
 
+	"grade/src/core/classes"
+	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
 	"grade/src/core/subjects"
+	"grade/src/core/teachers"
 	"grade/src/core/warnings"
 )
 
@@ -121,6 +126,74 @@ func (a statisticsFaults) StudentFaults(ctx context.Context, studentID string) (
 	out := make([]statistics.FaultView, 0, len(list))
 	for _, f := range list {
 		out = append(out, statistics.FaultView{Severity: f.Severity.String(), Date: f.Date})
+	}
+	return out, nil
+}
+
+// dashboardSource implements statistics.DashboardSource on top of the
+// existing capabilities: staff and enrollment totals plus the global
+// recent llamados. Unknown years surface the schoolyears not-found
+// error, so the dashboard answers 404 like the other year lookups.
+type dashboardSource struct {
+	teachers    *teachers.Service
+	years       *schoolyears.Service
+	classes     *classes.Service
+	enrollments *enrollments.Service
+	warnings    *warnings.Service
+}
+
+// TeacherTotal implements statistics.DashboardSource.
+func (d dashboardSource) TeacherTotal(ctx context.Context) (int, error) {
+	list, err := d.teachers.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(list), nil
+}
+
+// GroupsOfYear implements statistics.DashboardSource.
+func (d dashboardSource) GroupsOfYear(ctx context.Context, year int) ([]string, error) {
+	y, err := d.years.ByYear(ctx, year)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := d.classes.ListByYear(ctx, y.ID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(groups))
+	for _, g := range groups {
+		ids = append(ids, g.ID)
+	}
+	return ids, nil
+}
+
+// EnrolledIDs implements statistics.DashboardSource.
+func (d dashboardSource) EnrolledIDs(ctx context.Context, classGroupID string) ([]string, error) {
+	ens, err := d.enrollments.EnrollmentsForGroup(ctx, classGroupID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(ens))
+	for _, e := range ens {
+		ids = append(ids, e.StudentID)
+	}
+	return ids, nil
+}
+
+// RecentWarnings implements statistics.DashboardSource.
+func (d dashboardSource) RecentWarnings(ctx context.Context, since time.Time) ([]statistics.DashboardWarning, error) {
+	list, err := d.warnings.Recent(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]statistics.DashboardWarning, 0, len(list))
+	for _, w := range list {
+		out = append(out, statistics.DashboardWarning{
+			ID: w.ID, StudentID: w.StudentID, ClassID: w.ClassID,
+			TeacherID: w.TeacherID, Gravity: w.Gravity.String(),
+			Title: w.Title, Date: w.HappenedAt,
+		})
 	}
 	return out, nil
 }

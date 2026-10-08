@@ -64,6 +64,7 @@ type Services struct {
 	Schedules   *schedules.Service
 	Sessions    *sessions.Service
 	Statistics  *statistics.Service
+	Dashboard   *statistics.DashboardService
 	Users       *users.Service
 	Roles       *roles.Service
 }
@@ -128,6 +129,11 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	sessionsSvc := sessions.NewService(s.Sessions)
 	warningsSvc := warnings.NewService(s.Warnings)
 	incidentsSvc := incidents.NewService(s.Incidents)
+	teachersSvc := teachers.NewService(s.Teachers)
+	yearsSvc := schoolyears.NewService(s.Years)
+	classesSvc := classes.NewService(s.Classes)
+	enrollmentsSvc := enrollments.NewService(s.Enrollments)
+	sessAdapter := statisticsSessions{sessionsSvc}
 
 	return &App{
 		Config: cfg,
@@ -138,17 +144,29 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Attendance:  attendance.NewService(s.Attendance),
 			Incidents:   incidentsSvc,
 			Warnings:    warningsSvc,
-			Teachers:    teachers.NewService(s.Teachers),
+			Teachers:    teachersSvc,
 			Subjects:    subjectsSvc,
-			Years:       schoolyears.NewService(s.Years),
-			Classes:     classes.NewService(s.Classes),
-			Enrollments: enrollments.NewService(s.Enrollments),
+			Years:       yearsSvc,
+			Classes:     classesSvc,
+			Enrollments: enrollmentsSvc,
 			Schedules:   schedules.NewService(s.Schedules, subjectChecker{subjectsSvc}),
 			Sessions:    sessionsSvc,
 			Statistics: statistics.NewService(
-				statisticsSessions{sessionsSvc},
+				sessAdapter,
 				statisticsWarnings{warningsSvc},
 				statisticsFaults{incidentsSvc},
+			),
+			Dashboard: statistics.NewDashboardService(
+				sessAdapter,
+				statisticsWarnings{warningsSvc},
+				statisticsFaults{incidentsSvc},
+				dashboardSource{
+					teachers:    teachersSvc,
+					years:       yearsSvc,
+					classes:     classesSvc,
+					enrollments: enrollmentsSvc,
+					warnings:    warningsSvc,
+				},
 			),
 			Users: users.NewService(s.Users),
 			Roles: roles.NewService(s.Roles),
