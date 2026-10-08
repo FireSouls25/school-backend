@@ -51,6 +51,11 @@ Routes declare one required permission, enforced by
 | `POST /v1/incidents` | `record-incidents` | teacher, admin |
 | `GET /v1/students/{id}/incidents` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/dashboard/summary?year=AAAA` | `manage-system` | admin only |
+| `POST /v1/students` | `manage-students` | admin only |
+| `POST /v1/teachers` | `manage-users` | admin only |
+| `GET /v1/teachers` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}` | `manage-users` | admin only |
+| `POST /v1/roles` | `manage-roles` | admin only |
 
 Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.
