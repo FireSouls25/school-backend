@@ -43,6 +43,14 @@ Routes declare one required permission, enforced by
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
 | `GET /v1/statistics/student/{studentID}` | `manage-system` | admin only |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
+| `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
+| `GET /v1/classes/{groupID}/roster` | `view-class-statistics` | teacher, admin |
+| `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
+| `POST /v1/sessions/open` | `record-attendance` | teacher, admin |
+| `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
+| `POST /v1/incidents` | `record-incidents` | teacher, admin |
+| `GET /v1/students/{id}/incidents` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
+| `GET /v1/dashboard/summary?year=AAAA` | `manage-system` | admin only |
 
 Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.
@@ -58,6 +66,71 @@ account `{ID, Username, Email, Active, Roles}`. The optional `role`
 additionally requires `manage-roles`. Teachers get their account (and
 role) from this endpoint when the admin creates their profile; they only
 ever log in. Frontend flow in `docs/users.md`.
+
+## Class groups, rosters and schedules (teacher + admin)
+
+- `GET /v1/classes?year=AAAA` (`view-class-statistics`) lists the
+  salones of a calendar year. `year` is required and must fall between
+  2000 and 2100; unknown years answer `404`. The year number resolves
+  to the id the classes service asks for.
+- `GET /v1/classes/{groupID}/roster` (`view-class-statistics`)
+  returns the group nómina: enrolled students with their current
+  profiles, alphabetically by surnames then names (same criterion as
+  the class report). Enrollments pointing at removed profiles are
+  skipped, so a deleted profile never blocks the roll; unknown groups
+  answer `404`.
+- `GET /v1/teachers/me/schedule?weekday=N`
+  (`view-class-statistics`) returns the caller's slots for one day:
+  `weekday` is required, `0` (Sunday) to `6` (Saturday) as
+  `time.Weekday`. Anything else fails with `400`.
+
+## Sessions, warnings and faults
+
+- `POST /v1/sessions/open` (`record-attendance`) opens an attendance
+  call with its roster frozen as it is at that moment. Body
+  `{"classGroupID","period","date?","subjectID?"}`: `date` is
+  optional RFC3339 (defaults to now, UTC) and `subjectID` optional;
+  label, school year and teacher resolve server-side (the teacher is
+  always the caller). A group with nobody enrolled fails with `400`
+  (`sessions.err_empty_roster`); unknown groups answer `404`. `201`
+  returns the stored session.
+- `POST /v1/warnings/batch` (`record-incidents`) issues one event
+  against several students. Body
+  `{"classID","gravity","title","description","happenedAt?","studentIDs"}`:
+  `gravity` accepts the stable id and the Spanish term
+  (`leve/medio/moderado/grave`); `happenedAt` is optional RFC3339
+  (defaults to now, UTC). Snapshots freeze from the current profiles
+  and the teacher is always the caller. Every warning shares a fresh
+  group id while each student keeps its own history; profiles resolve
+  before anything persists, so an unknown student fails the whole
+  batch with `404` and an empty batch with `400`. `201` returns the
+  stored warnings.
+- `POST /v1/incidents` (`record-incidents`) records one fault. Body
+  `{"studentID","classID","date?","severity","description"}`:
+  `severity` accepts the stable id and the Spanish term
+  (`leve/normal/grave`); `date` is optional RFC3339 (defaults to now,
+  UTC). `201` returns the stored fault.
+- `GET /v1/students/{id}/incidents` returns one student's fault
+  history, newest first: same readers as the warning history
+  (`view-students`, or `view-own-history` on self).
+
+## Admin dashboard
+
+- `GET /v1/dashboard/summary?year=AAAA` (`manage-system`, admin only)
+  returns the landing aggregate for a calendar year (`year` required,
+  same rules as `/v1/classes`): staff/student/group totals, llamados
+  and attendance marks of the last 7 days, the top inasistencia risk
+  ranking (max 8) and the latest llamados (max 6).
+
+Documented limits (pending, never invented):
+
+- `Totals.Teachers` counts every teacher on staff, not only those
+  teaching that year: no year-scoped staff list exists yet.
+- Attendance and top-risk fold at most 25 groups per year
+  (`GroupsTruncated: true` past the cap, first groups in grade/group
+  order). Totals still count every group. The full sweep stays
+  pending until a cheaper cross-group attendance source exists.
+- Anything else stays out of the summary rather than guessed.
 
 ## Denials and frontend navigation
 
