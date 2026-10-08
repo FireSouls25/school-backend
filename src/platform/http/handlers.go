@@ -3,12 +3,21 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"grade/src/core/classes"
+	"grade/src/core/enrollments"
+	"grade/src/core/incidents"
 	"grade/src/core/roles"
+	"grade/src/core/schedules"
+	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
 	"grade/src/core/students"
@@ -26,15 +35,21 @@ const maxBodyBytes = 1 << 20
 // Dependencies wires handlers to core services. Only the composition root
 // builds it.
 type Dependencies struct {
-	Auth       roles.Authorizer
-	Roles      roles.RoleGetter
-	RolesSvc   *roles.Service
-	Students   *students.Service
-	Teachers   *teachers.Service
-	Users      *users.Service
-	Warnings   *warnings.Service
-	Sessions   *sessions.Service
-	Statistics *statistics.Service
+	Auth        roles.Authorizer
+	Roles       roles.RoleGetter
+	RolesSvc    *roles.Service
+	Students    *students.Service
+	Teachers    *teachers.Service
+	Users       *users.Service
+	Warnings    *warnings.Service
+	Sessions    *sessions.Service
+	Statistics  *statistics.Service
+	Dashboard   *statistics.DashboardService
+	Classes     *classes.Service
+	Years       *schoolyears.Service
+	Enrollments *enrollments.Service
+	Schedules   *schedules.Service
+	Incidents   *incidents.Service
 	// AllowedOrigins lists browser origins accepted by CORS.
 	AllowedOrigins []string
 }
@@ -382,5 +397,358 @@ func handleGetTeacher(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, tc)
+	}
+}
+
+// parseYearQuery reads a ?year= calendar year: missing, non-numeric or
+// out-of-range values fail with 400 http.err_bad_request.
+func parseYearQuery(w http.ResponseWriter, r *http.Request) (int, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("year"))
+	year, err := strconv.Atoi(raw)
+	if err != nil || year < schoolyears.MinYear || year > schoolyears.MaxYear {
+		WriteError(w, r, errBadRequest)
+		return 0, false
+	}
+	return year, true
+}
+
+// handleListClasses returns every class-group (salón) of the ?year=
+// calendar year. The year number resolves to the id the classes service
+// asks for; unknown years answer 404 like the other year lookups.
+func handleListClasses(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		year, ok := parseYearQuery(w, r)
+		if !ok {
+			return
+		}
+		y, err := deps.Years.ByYear(r.Context(), year)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		groups, err := deps.Classes.ListByYear(r.Context(), y.ID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if groups == nil {
+			groups = []classes.ClassGroup{}
+		}
+		writeJSON(w, http.StatusOK, groups)
+	}
+}
+
+// sortRoster orders students alphabetically by surnames then names,
+// matching the class report criterion.
+func sortRoster(roster []students.Student) {
+	sort.Slice(roster, func(i, j int) bool {
+		a := strings.ToLower(roster[i].Surnames + " " + roster[i].Names)
+		b := strings.ToLower(roster[j].Surnames + " " + roster[j].Names)
+		if a == b {
+			return roster[i].ID < roster[j].ID
+		}
+		return a < b
+	})
+}
+
+// resolveRoster builds the frozen nómina of a group from its enrollments
+// plus the current student profiles. Enrollments pointing at removed
+// profiles are skipped, so a deleted profile never blocks the roll.
+func resolveRoster(ctx context.Context, deps Dependencies, groupID string) ([]sessions.RosterEntry, error) {
+	ens, err := deps.Enrollments.EnrollmentsForGroup(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	roster := make([]sessions.RosterEntry, 0, len(ens))
+	for _, e := range ens {
+		st, err := deps.Students.ByID(ctx, e.StudentID)
+		if err != nil {
+			if errors.Is(err, students.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		roster = append(roster, sessions.RosterEntry{
+			StudentID:  st.ID,
+			Names:      st.Names,
+			Surnames:   st.Surnames,
+			DocumentID: st.DocumentID,
+		})
+	}
+	return roster, nil
+}
+
+// handleClassRoster returns the group nómina: enrolled students with
+// their current profiles, alphabetically.
+func handleClassRoster(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		groupID := chi.URLParam(r, "groupID")
+		if _, err := deps.Classes.ByID(r.Context(), groupID); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		ens, err := deps.Enrollments.EnrollmentsForGroup(r.Context(), groupID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		roster := make([]students.Student, 0, len(ens))
+		for _, e := range ens {
+			st, err := deps.Students.ByID(r.Context(), e.StudentID)
+			if err != nil {
+				if errors.Is(err, students.ErrNotFound) {
+					continue
+				}
+				WriteError(w, r, err)
+				return
+			}
+			roster = append(roster, st)
+		}
+		sortRoster(roster)
+		writeJSON(w, http.StatusOK, roster)
+	}
+}
+
+// handleMySchedule returns the caller's slots for ?weekday=N (0=Sunday
+// to 6=Saturday, as time.Weekday): the teacher day view.
+func handleMySchedule(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		raw := strings.TrimSpace(r.URL.Query().Get("weekday"))
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < int(time.Sunday) || n > int(time.Saturday) {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		entries, err := deps.Schedules.EntriesForTeacherOnDay(r.Context(), subject, time.Weekday(n))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if entries == nil {
+			entries = []schedules.Entry{}
+		}
+		writeJSON(w, http.StatusOK, entries)
+	}
+}
+
+// openSessionRequest is the body for opening an attendance call. The
+// roster freezes from the group enrollments at opening time; the label,
+// year and teacher resolve server-side, never from the body.
+type openSessionRequest struct {
+	ClassGroupID string `json:"classGroupID"`
+	Period       int    `json:"period"`
+	Date         string `json:"date"`
+	SubjectID    string `json:"subjectID"`
+}
+
+// handleOpenSession opens an attendance call with its roster frozen as it
+// is at that moment. The teacher is always the authenticated caller.
+func handleOpenSession(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body openSessionRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		group, err := deps.Classes.ByID(r.Context(), strings.TrimSpace(body.ClassGroupID))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		sy, err := deps.Years.ByID(r.Context(), group.SchoolYearID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		roster, err := resolveRoster(r.Context(), deps, group.ID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		date := time.Now().UTC()
+		if raw := strings.TrimSpace(body.Date); raw != "" {
+			d, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				WriteError(w, r, errBadRequest)
+				return
+			}
+			date = d
+		}
+		subject, _ := SubjectFrom(r.Context())
+		sess, err := deps.Sessions.OpenSession(r.Context(), sessions.Session{
+			ClassGroupID: group.ID,
+			ClassLabel:   group.Label(),
+			SchoolYear:   sy.Year,
+			TeacherID:    subject,
+			SubjectID:    strings.TrimSpace(body.SubjectID),
+			Date:         date,
+			Period:       body.Period,
+			Roster:       roster,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, sess)
+	}
+}
+
+// snapshotFor freezes a student profile into the snapshot stored with a
+// warning, following the same shape as the demo seed.
+func snapshotFor(st students.Student) warnings.StudentSnapshot {
+	age := -1
+	if a, ok := st.AgeAt(time.Now()); ok {
+		age = a
+	}
+	return warnings.StudentSnapshot{
+		Names: st.Names, Surnames: st.Surnames, DocumentID: st.DocumentID,
+		ClassID: st.ClassID, Birthdate: st.Birthdate, Age: age,
+		CaregiverName: st.Caregiver.Names, CaregiverPhone: st.Caregiver.Phone,
+	}
+}
+
+// warningBatchRequest is the body for issuing one event against several
+// students. Snapshots freeze from the current profiles; the teacher is
+// always the authenticated caller.
+type warningBatchRequest struct {
+	ClassID     string   `json:"classID"`
+	Gravity     string   `json:"gravity"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	HappenedAt  string   `json:"happenedAt"`
+	StudentIDs  []string `json:"studentIDs"`
+}
+
+// handleIssueWarningBatch issues one event against several students: every
+// warning shares a fresh group id while each student keeps its own
+// history. Profiles resolve before anything persists, so an unknown
+// student fails the whole batch with 404.
+func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body warningBatchRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		gravity, err := warnings.Parse(body.Gravity)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		happenedAt := time.Now().UTC()
+		if raw := strings.TrimSpace(body.HappenedAt); raw != "" {
+			h, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				WriteError(w, r, errBadRequest)
+				return
+			}
+			happenedAt = h
+		}
+		items := make([]warnings.BatchItem, 0, len(body.StudentIDs))
+		for _, id := range body.StudentIDs {
+			st, err := deps.Students.ByID(r.Context(), strings.TrimSpace(id))
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			items = append(items, warnings.BatchItem{StudentID: st.ID, Snapshot: snapshotFor(st)})
+		}
+		subject, _ := SubjectFrom(r.Context())
+		out, err := deps.Warnings.IssueBatch(r.Context(), warnings.BatchInput{
+			ClassID:     strings.TrimSpace(body.ClassID),
+			TeacherID:   subject,
+			HappenedAt:  happenedAt,
+			Gravity:     gravity,
+			Title:       strings.TrimSpace(body.Title),
+			Description: strings.TrimSpace(body.Description),
+			Items:       items,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, out)
+	}
+}
+
+// incidentRequest is the body for reporting a fault.
+type incidentRequest struct {
+	StudentID   string `json:"studentID"`
+	ClassID     string `json:"classID"`
+	Date        string `json:"date"`
+	Severity    string `json:"severity"`
+	Description string `json:"description"`
+}
+
+// handleReportIncident records one fault for a student.
+func handleReportIncident(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body incidentRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		severity, err := incidents.Parse(body.Severity)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		date := time.Now().UTC()
+		if raw := strings.TrimSpace(body.Date); raw != "" {
+			d, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				WriteError(w, r, errBadRequest)
+				return
+			}
+			date = d
+		}
+		fault, err := deps.Incidents.Report(
+			r.Context(),
+			strings.TrimSpace(body.StudentID),
+			strings.TrimSpace(body.ClassID),
+			date, severity,
+			strings.TrimSpace(body.Description),
+		)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, fault)
+	}
+}
+
+// handleStudentIncidents returns one student's fault history, newest
+// first: same readers as the warning history.
+func handleStudentIncidents(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		id := chi.URLParam(r, "id")
+		if !allowStudentView(r.Context(), deps.Auth, subject, id) {
+			WriteError(w, r, errForbidden)
+			return
+		}
+		list, err := deps.Incidents.ForStudent(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []incidents.Fault{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// handleDashboardSummary returns the admin landing aggregate for ?year=.
+func handleDashboardSummary(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		year, ok := parseYearQuery(w, r)
+		if !ok {
+			return
+		}
+		summary, err := deps.Dashboard.Summary(r.Context(), year)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, summary)
 	}
 }

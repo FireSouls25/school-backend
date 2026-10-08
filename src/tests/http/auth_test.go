@@ -11,7 +11,12 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"grade/src/core/classes"
+	"grade/src/core/enrollments"
+	"grade/src/core/incidents"
 	"grade/src/core/roles"
+	"grade/src/core/schedules"
+	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
 	"grade/src/core/students"
@@ -36,22 +41,8 @@ var (
 	studentSubject string
 	otherStudent   string
 	sessionRouteID string
+	realGroupID    string
 )
-
-type fakeStats struct{}
-
-func (fakeStats) GroupSessions(context.Context, string) ([]statistics.SessionView, error) {
-	return nil, nil
-}
-func (fakeStats) StudentSessions(context.Context, string) ([]statistics.SessionView, error) {
-	return nil, nil
-}
-func (fakeStats) StudentWarnings(context.Context, string) ([]statistics.WarningView, error) {
-	return nil, nil
-}
-func (fakeStats) StudentFaults(context.Context, string) ([]statistics.FaultView, error) {
-	return nil, nil
-}
 
 func validStudent(id string) students.Student {
 	return students.Student{
@@ -59,6 +50,163 @@ func validStudent(id string) students.Student {
 		DocumentID: "1234567890",
 		Caregiver:  students.Guardian{Names: "María Gómez"},
 	}
+}
+
+// allowAllChecker is a schedules.Checker stub: every pairing teaches.
+// The day view never consults it; only entry creation does.
+type allowAllChecker struct{}
+
+func (allowAllChecker) Teaches(context.Context, string, string) (bool, error) {
+	return true, nil
+}
+
+// testSessions adapts the sessions service to statistics.SessionSource,
+// mirroring the composition root.
+type testSessions struct {
+	svc *sessions.Service
+}
+
+func (t testSessions) GroupSessions(ctx context.Context, gid string) ([]statistics.SessionView, error) {
+	list, err := t.svc.SessionsForGroup(ctx, gid)
+	if err != nil {
+		return nil, err
+	}
+	return t.withMarks(ctx, list)
+}
+
+func (t testSessions) StudentSessions(ctx context.Context, id string) ([]statistics.SessionView, error) {
+	list, err := t.svc.SessionsForStudent(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return t.withMarks(ctx, list)
+}
+
+func (t testSessions) withMarks(ctx context.Context, list []sessions.Session) ([]statistics.SessionView, error) {
+	out := make([]statistics.SessionView, 0, len(list))
+	for _, sess := range list {
+		detail, err := t.svc.SessionDetail(ctx, sess.ID)
+		if err != nil {
+			return nil, err
+		}
+		view := statistics.SessionView{
+			ID:           sess.ID,
+			ClassGroupID: sess.ClassGroupID,
+			ClassLabel:   sess.ClassLabel,
+			SchoolYear:   sess.SchoolYear,
+			Date:         sess.Date,
+			Period:       sess.Period,
+			Marks:        make(map[string]string, len(detail.Marks)),
+		}
+		for _, e := range sess.Roster {
+			view.Roster = append(view.Roster, statistics.RosterEntryView{
+				StudentID: e.StudentID, Names: e.Names, Surnames: e.Surnames,
+			})
+		}
+		for id, mark := range detail.Marks {
+			view.Marks[id] = mark.String()
+		}
+		out = append(out, view)
+	}
+	return out, nil
+}
+
+// testWarnings adapts the warnings service to statistics.WarningSource,
+// mirroring the composition root.
+type testWarnings struct {
+	svc *warnings.Service
+}
+
+func (t testWarnings) StudentWarnings(ctx context.Context, id string) ([]statistics.WarningView, error) {
+	list, err := t.svc.ForStudent(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]statistics.WarningView, 0, len(list))
+	for _, w := range list {
+		out = append(out, statistics.WarningView{Gravity: w.Gravity.String(), Date: w.HappenedAt})
+	}
+	return out, nil
+}
+
+// testFaults adapts the incidents service to statistics.FaultSource,
+// mirroring the composition root.
+type testFaults struct {
+	svc *incidents.Service
+}
+
+func (t testFaults) StudentFaults(ctx context.Context, id string) ([]statistics.FaultView, error) {
+	list, err := t.svc.ForStudent(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]statistics.FaultView, 0, len(list))
+	for _, f := range list {
+		out = append(out, statistics.FaultView{Severity: f.Severity.String(), Date: f.Date})
+	}
+	return out, nil
+}
+
+// testDash adapts the domain services to statistics.DashboardSource,
+// mirroring the composition root.
+type testDash struct {
+	teachers    *teachers.Service
+	years       *schoolyears.Service
+	classes     *classes.Service
+	enrollments *enrollments.Service
+	warnings    *warnings.Service
+}
+
+func (d testDash) TeacherTotal(ctx context.Context) (int, error) {
+	list, err := d.teachers.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(list), nil
+}
+
+func (d testDash) GroupsOfYear(ctx context.Context, year int) ([]string, error) {
+	y, err := d.years.ByYear(ctx, year)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := d.classes.ListByYear(ctx, y.ID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(groups))
+	for _, g := range groups {
+		ids = append(ids, g.ID)
+	}
+	return ids, nil
+}
+
+func (d testDash) EnrolledIDs(ctx context.Context, gid string) ([]string, error) {
+	ens, err := d.enrollments.EnrollmentsForGroup(ctx, gid)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(ens))
+	for _, e := range ens {
+		ids = append(ids, e.StudentID)
+	}
+	return ids, nil
+}
+
+func (d testDash) RecentWarnings(ctx context.Context, since time.Time) ([]statistics.DashboardWarning, error) {
+	list, err := d.warnings.Recent(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]statistics.DashboardWarning, 0, len(list))
+	for _, w := range list {
+		out = append(out, statistics.DashboardWarning{
+			ID: w.ID, StudentID: w.StudentID, ClassID: w.ClassID,
+			TeacherID: w.TeacherID, Gravity: w.Gravity.String(),
+			Title: w.Title, Date: w.HappenedAt,
+		})
+	}
+	return out, nil
 }
 
 func testStack(t *testing.T) http.Handler {
@@ -70,7 +218,20 @@ func testStack(t *testing.T) http.Handler {
 	teachersSvc := teachers.NewService(teachers.NewMemoryStore())
 	warningsSvc := warnings.NewService(warnings.NewMemoryStore())
 	sessionsSvc := sessions.NewService(sessions.NewMemoryStore())
-	statsSvc := statistics.NewService(fakeStats{}, fakeStats{}, fakeStats{})
+	yearsSvc := schoolyears.NewService(schoolyears.NewMemoryStore())
+	classesSvc := classes.NewService(classes.NewMemoryStore())
+	enrollmentsSvc := enrollments.NewService(enrollments.NewMemoryStore())
+	schedulesSvc := schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{})
+	incidentsSvc := incidents.NewService(incidents.NewMemoryStore())
+	sessViews := testSessions{svc: sessionsSvc}
+	statsSvc := statistics.NewService(sessViews, testWarnings{warningsSvc}, testFaults{incidentsSvc})
+	dashSvc := statistics.NewDashboardService(sessViews, testWarnings{warningsSvc}, testFaults{incidentsSvc}, testDash{
+		teachers:    teachersSvc,
+		years:       yearsSvc,
+		classes:     classesSvc,
+		enrollments: enrollmentsSvc,
+		warnings:    warningsSvc,
+	})
 
 	must := func(err error) {
 		t.Helper()
@@ -80,6 +241,18 @@ func testStack(t *testing.T) http.Handler {
 	}
 	must(roleSvc.Assign(ctx, adminSubject, roles.RoleAdmin))
 	must(roleSvc.Assign(ctx, teacherSubject, roles.RoleTeacher))
+
+	year, err := yearsSvc.Create(ctx, schoolyears.SchoolYear{
+		Year: 2026, Periods: 3,
+		StartDate: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC),
+	})
+	must(err)
+	group, err := classesSvc.Create(ctx, classes.ClassGroup{
+		SchoolYearID: year.ID, Grade: 9, GroupNo: 1,
+	})
+	must(err)
+	realGroupID = group.ID
 
 	// Services assign fresh ids: capture them so each student subject is
 	// also its own record id (what view-own-history checks).
@@ -95,12 +268,32 @@ func testStack(t *testing.T) http.Handler {
 	}
 	otherStudent = stB.ID
 	must(roleSvc.Assign(ctx, otherStudent, roles.RoleStudent))
+
+	// Both students belong to the real group, so roster, open-session
+	// and dashboard fixtures fold them.
+	for _, st := range []students.Student{stA, stB} {
+		_, err := enrollmentsSvc.Enroll(ctx, enrollments.Enrollment{
+			StudentID: st.ID, ClassGroupID: realGroupID,
+		})
+		must(err)
+	}
+
+	// One Monday slot for the teacher day view.
+	_, err = schedulesSvc.Create(ctx, schedules.Entry{
+		ClassGroupID: realGroupID,
+		TeacherID:    teacherSubject,
+		SubjectID:    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+		Weekday:      int(time.Monday),
+		Start:        schedules.MustClock("07:00"),
+		End:          schedules.MustClock("09:00"),
+	})
+	must(err)
 	sess, err := sessionsSvc.OpenSession(ctx, sessions.Session{
-		ClassGroupID: groupID,
+		ClassGroupID: realGroupID,
 		ClassLabel:   "9-1",
 		SchoolYear:   2026,
 		TeacherID:    teacherSubject,
-		Date:         time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+		Date:         time.Now().UTC(),
 		Period:       2,
 		Roster: []sessions.RosterEntry{
 			{StudentID: studentSubject, Names: "Ana", Surnames: "Gómez", DocumentID: "1234567890"},
@@ -110,15 +303,21 @@ func testStack(t *testing.T) http.Handler {
 	sessionRouteID = sess.ID
 
 	return httpapi.Router(httpapi.Dependencies{
-		Auth:       roleSvc,
-		Roles:      roleSvc,
-		RolesSvc:   roleSvc,
-		Students:   studentsSvc,
-		Teachers:   teachersSvc,
-		Users:      users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost),
-		Warnings:   warningsSvc,
-		Sessions:   sessionsSvc,
-		Statistics: statsSvc,
+		Auth:        roleSvc,
+		Roles:       roleSvc,
+		RolesSvc:    roleSvc,
+		Students:    studentsSvc,
+		Teachers:    teachersSvc,
+		Users:       users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost),
+		Warnings:    warningsSvc,
+		Sessions:    sessionsSvc,
+		Statistics:  statsSvc,
+		Dashboard:   dashSvc,
+		Classes:     classesSvc,
+		Years:       yearsSvc,
+		Enrollments: enrollmentsSvc,
+		Schedules:   schedulesSvc,
+		Incidents:   incidentsSvc,
 	}, newI18n(t))
 }
 
@@ -505,5 +704,342 @@ func TestAdminCreatesUserAccount(t *testing.T) {
 	}
 	if code := errorCode(t, rec); code != "roles.err_unknown_role" {
 		t.Errorf("code = %q, want roles.err_unknown_role", code)
+	}
+}
+
+func TestListClassesByYear(t *testing.T) {
+	h := testStack(t)
+
+	rec := doRequest(t, h, http.MethodGet, "/v1/classes?year=2026", teacherSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("teacher status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var groups []struct {
+		ID      string `json:"ID"`
+		Grade   int    `json:"Grade"`
+		GroupNo int    `json:"GroupNo"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &groups); err != nil {
+		t.Fatalf("decode groups: %v", err)
+	}
+	if len(groups) != 1 || groups[0].ID != realGroupID || groups[0].Grade != 9 {
+		t.Errorf("groups = %+v, want the 9-1 group", groups)
+	}
+
+	rec = doRequest(t, h, http.MethodGet, "/v1/classes?year=2026", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Errorf("admin status = %d, want 200", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/classes?year=2026", studentSubject, "")
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("student status = %d, want 403", rec.Code)
+	}
+	for _, target := range []string{"/v1/classes", "/v1/classes?year=abc", "/v1/classes?year=1999"} {
+		rec = doRequest(t, h, http.MethodGet, target, teacherSubject, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", target, rec.Code)
+		}
+		if code := errorCode(t, rec); code != "http.err_bad_request" {
+			t.Errorf("GET %s code = %q, want http.err_bad_request", target, code)
+		}
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/classes?year=2030", teacherSubject, "")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown year status = %d, want 404", rec.Code)
+	}
+}
+
+func TestClassRosterAlphabetical(t *testing.T) {
+	h := testStack(t)
+
+	rec := doRequest(t, h, http.MethodGet, "/v1/classes/"+realGroupID+"/roster", teacherSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("teacher status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var roster []struct {
+		ID       string `json:"ID"`
+		Surnames string `json:"Surnames"`
+		Names    string `json:"Names"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &roster); err != nil {
+		t.Fatalf("decode roster: %v", err)
+	}
+	if len(roster) != 2 {
+		t.Fatalf("len(roster) = %d, want 2", len(roster))
+	}
+	for i := 1; i < len(roster); i++ {
+		prev := roster[i-1].Surnames + " " + roster[i-1].Names
+		cur := roster[i].Surnames + " " + roster[i].Names
+		if prev > cur {
+			t.Errorf("roster out of order: %q before %q", prev, cur)
+		}
+	}
+
+	rec = doRequest(t, h, http.MethodGet, "/v1/classes/"+realGroupID+"/roster", studentSubject, "")
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("student status = %d, want 403", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/classes/not-a-uuid/roster", teacherSubject, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad group status = %d, want 400", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/classes/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/roster", teacherSubject, "")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown group status = %d, want 404", rec.Code)
+	}
+}
+
+func TestMyScheduleDayView(t *testing.T) {
+	h := testStack(t)
+
+	rec := doRequest(t, h, http.MethodGet, "/v1/teachers/me/schedule?weekday=1", teacherSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("teacher status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var entries []struct {
+		TeacherID string `json:"TeacherID"`
+		Weekday   int    `json:"Weekday"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("decode schedule: %v", err)
+	}
+	if len(entries) != 1 || entries[0].TeacherID != teacherSubject || entries[0].Weekday != 1 {
+		t.Errorf("entries = %+v, want the Monday slot", entries)
+	}
+
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/me/schedule?weekday=3", teacherSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("empty day status = %d, want 200", rec.Code)
+	}
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Errorf("empty day body = %s, want []", rec.Body.String())
+	}
+	for _, target := range []string{"/v1/teachers/me/schedule", "/v1/teachers/me/schedule?weekday=7", "/v1/teachers/me/schedule?weekday=lunes"} {
+		rec = doRequest(t, h, http.MethodGet, target, teacherSubject, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", target, rec.Code)
+		}
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/me/schedule?weekday=1", studentSubject, "")
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("student status = %d, want 403", rec.Code)
+	}
+}
+
+func TestOpenSessionFreezesRoster(t *testing.T) {
+	h := testStack(t)
+
+	rec := doRequest(t, h, http.MethodPost, "/v1/sessions/open", teacherSubject,
+		`{"classGroupID":"`+realGroupID+`","period":1}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("teacher status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var sess struct {
+		TeacherID  string `json:"TeacherID"`
+		ClassLabel string `json:"ClassLabel"`
+		SchoolYear int    `json:"SchoolYear"`
+		Roster     []struct {
+			StudentID string `json:"StudentID"`
+		} `json:"Roster"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &sess); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	if sess.TeacherID != teacherSubject {
+		t.Errorf("TeacherID = %q, want the caller", sess.TeacherID)
+	}
+	if sess.ClassLabel != "9-1" || sess.SchoolYear != 2026 {
+		t.Errorf("session = %+v, want frozen 9-1/2026", sess)
+	}
+	if len(sess.Roster) != 2 {
+		t.Errorf("len(roster) = %d, want both enrolled students", len(sess.Roster))
+	}
+
+	rec = doRequest(t, h, http.MethodPost, "/v1/sessions/open", teacherSubject,
+		`{"classGroupID":"`+realGroupID+`","period":1,"hacker":true}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("unknown field status = %d, want 400", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/sessions/open", teacherSubject,
+		`{"period":1}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("missing group status = %d, want 400", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/sessions/open", teacherSubject,
+		`{"classGroupID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","period":1}`)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown group status = %d, want 404", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/sessions/open", studentSubject,
+		`{"classGroupID":"`+realGroupID+`","period":1}`)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("student status = %d, want 403", rec.Code)
+	}
+}
+
+func TestWarningBatchGroupsEvent(t *testing.T) {
+	h := testStack(t)
+
+	payload := `{"classID":"9-1","gravity":"leve","title":"Bulla en clase",` +
+		`"description":"Hablaban durante la explicación.",` +
+		`"studentIDs":["` + studentSubject + `","` + otherStudent + `"]}`
+	rec := doRequest(t, h, http.MethodPost, "/v1/warnings/batch", teacherSubject, payload)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("teacher status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var out []struct {
+		ID        string `json:"ID"`
+		StudentID string `json:"StudentID"`
+		TeacherID string `json:"TeacherID"`
+		GroupID   string `json:"GroupID"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode batch: %v", err)
+	}
+	if len(out) != 2 || out[0].GroupID == "" || out[0].GroupID != out[1].GroupID {
+		t.Fatalf("batch = %+v, want two warnings sharing a group", out)
+	}
+	if out[0].TeacherID != teacherSubject {
+		t.Errorf("TeacherID = %q, want the caller", out[0].TeacherID)
+	}
+
+	// Each student keeps its own history including the batch warning.
+	rec = doRequest(t, h, http.MethodGet, "/v1/students/"+studentSubject+"/warnings", teacherSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("history status = %d, want 200", rec.Code)
+	}
+	var hist []struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &hist); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(hist) != 1 {
+		t.Errorf("len(history) = %d, want 1", len(hist))
+	}
+
+	rec = doRequest(t, h, http.MethodPost, "/v1/warnings/batch", teacherSubject,
+		`{"classID":"9-1","gravity":"leve","title":"X","description":"Y","studentIDs":[]}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("empty batch status = %d, want 400", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/warnings/batch", teacherSubject,
+		`{"classID":"9-1","gravity":"inexistente","title":"X","description":"Y","studentIDs":["`+studentSubject+`"]}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad gravity status = %d, want 400", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "warnings.err_unknown_gravity" {
+		t.Errorf("code = %q, want warnings.err_unknown_gravity", code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/warnings/batch", studentSubject, payload)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("student status = %d, want 403", rec.Code)
+	}
+}
+
+func TestIncidentReportAndStudentHistory(t *testing.T) {
+	h := testStack(t)
+
+	payload := `{"studentID":"` + studentSubject + `","classID":"9-1",` +
+		`"severity":"leve","description":"Uso del celular en clase."}`
+	rec := doRequest(t, h, http.MethodPost, "/v1/incidents", teacherSubject, payload)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("teacher report status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var fault struct {
+		StudentID string `json:"StudentID"`
+		Severity  string `json:"Severity"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &fault); err != nil {
+		t.Fatalf("decode fault: %v", err)
+	}
+	if fault.StudentID != studentSubject || fault.Severity != "minor" {
+		t.Errorf("fault = %+v, want the reported minor fault", fault)
+	}
+
+	// Teacher reads anyone; the student reads only their own history.
+	rec = doRequest(t, h, http.MethodGet, "/v1/students/"+studentSubject+"/incidents", teacherSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("teacher read status = %d, want 200", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/students/"+studentSubject+"/incidents", studentSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Errorf("own history status = %d, want 200", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/students/"+otherStudent+"/incidents", studentSubject, "")
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("other history status = %d, want 403", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/students/"+studentSubject+"/incidents", unknownSubject, "")
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("unknown subject status = %d, want 403", rec.Code)
+	}
+
+	rec = doRequest(t, h, http.MethodPost, "/v1/incidents", teacherSubject,
+		`{"studentID":"`+studentSubject+`","classID":"9-1","severity":"tremenda","description":"X"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad severity status = %d, want 400", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "incidents.err_unknown_severity" {
+		t.Errorf("code = %q, want incidents.err_unknown_severity", code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/incidents", studentSubject, payload)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("student report status = %d, want 403", rec.Code)
+	}
+}
+
+func TestDashboardSummaryAdminOnly(t *testing.T) {
+	h := testStack(t)
+
+	rec := doRequest(t, h, http.MethodGet, "/v1/dashboard/summary?year=2026", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var summary struct {
+		Year   int `json:"Year"`
+		Totals struct {
+			Teachers int `json:"Teachers"`
+			Students int `json:"Students"`
+			Groups   int `json:"Groups"`
+		} `json:"Totals"`
+		GroupsTruncated bool `json:"GroupsTruncated"`
+		MarksLast7d     struct {
+			Presences int `json:"Presences"`
+		} `json:"MarksLast7d"`
+		TopRisk        []any `json:"TopRisk"`
+		RecentWarnings []any `json:"RecentWarnings"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &summary); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if summary.Year != 2026 {
+		t.Errorf("Year = %d, want 2026", summary.Year)
+	}
+	if summary.Totals.Groups != 1 || summary.Totals.Students != 2 {
+		t.Errorf("Totals = %+v, want 1 group and 2 students", summary.Totals)
+	}
+	if summary.GroupsTruncated {
+		t.Error("GroupsTruncated = true, want false")
+	}
+	// The fixture call (today, no marks) leaves one presence behind.
+	if summary.MarksLast7d.Presences != 1 {
+		t.Errorf("Presences = %d, want 1", summary.MarksLast7d.Presences)
+	}
+	if summary.TopRisk == nil || summary.RecentWarnings == nil {
+		t.Error("ranking and recents must be empty arrays, never nil")
+	}
+
+	rec = doRequest(t, h, http.MethodGet, "/v1/dashboard/summary?year=2026", teacherSubject, "")
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("teacher status = %d, want 403", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/dashboard/summary", adminSubject, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("missing year status = %d, want 400", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/dashboard/summary?year=2030", adminSubject, "")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown year status = %d, want 404", rec.Code)
 	}
 }

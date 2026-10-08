@@ -54,6 +54,12 @@ func main() {
 		Warnings:       application.Services.Warnings,
 		Sessions:       application.Services.Sessions,
 		Statistics:     application.Services.Statistics,
+		Dashboard:      application.Services.Dashboard,
+		Classes:        application.Services.Classes,
+		Years:          application.Services.Years,
+		Enrollments:    application.Services.Enrollments,
+		Schedules:      application.Services.Schedules,
+		Incidents:      application.Services.Incidents,
 		AllowedOrigins: cfg.AllowedOrigins,
 	}, i18nSvc)); err != nil {
 		slog.Error("server stopped", "error", err)

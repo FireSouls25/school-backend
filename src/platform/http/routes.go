@@ -65,6 +65,14 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 		r.Get("/students/{id}", handleGetStudent(deps))
 		r.Get("/students/{id}/warnings", handleGetStudentWarnings(deps))
+		r.Get("/students/{id}/incidents", handleStudentIncidents(deps))
+
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/classes", handleListClasses(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/classes/{groupID}/roster", handleClassRoster(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+			Get("/dashboard/summary", handleDashboardSummary(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/statistics/class/{groupID}", handleClassReport(deps))
@@ -73,6 +81,12 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
 			Post("/sessions/{sessionID}/marks", handleRecordMark(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
+			Post("/sessions/open", handleOpenSession(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Post("/warnings/batch", handleIssueWarningBatch(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Post("/incidents", handleReportIncident(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
 			Post("/students", handleCreateStudent(deps))
@@ -80,6 +94,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Post("/teachers", handleCreateTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers", handleListTeachers(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/teachers/me/schedule", handleMySchedule(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
