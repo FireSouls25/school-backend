@@ -129,6 +129,30 @@ func (s *WarningsStore) ForGroup(ctx context.Context, groupID string) ([]warning
 	return out, rows.Err()
 }
 
+// Recent implements warnings.Store: the newest warnings in the school.
+func (s *WarningsStore) Recent(ctx context.Context, limit int) ([]warnings.Warning, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+warningColumns+`
+		FROM warnings
+		ORDER BY happened_at DESC, id DESC
+		LIMIT $1`,
+		limit)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: recent warnings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]warnings.Warning, 0)
+	for rows.Next() {
+		w, err := scanWarning(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan warning: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
 // Delete implements warnings.Store.
 func (s *WarningsStore) Delete(ctx context.Context, id string) error {
 	if _, err := s.db.pool.Exec(ctx,

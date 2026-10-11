@@ -99,6 +99,21 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
+// MaxRecent caps how many warnings Recent will ever return.
+const MaxRecent = 200
+
+// Recent returns the newest warnings across all students, newest first.
+// The school-wide history feed behind the admin dashboard.
+func (s *Service) Recent(ctx context.Context, limit int) ([]Warning, error) {
+	if limit <= 0 {
+		return nil, ErrInvalidLimit
+	}
+	if limit > MaxRecent {
+		limit = MaxRecent
+	}
+	return s.store.Recent(ctx, limit)
+}
+
 func normalizeSnapshot(s StudentSnapshot) StudentSnapshot {
 	trim := strings.TrimSpace
 	s.Names = trim(s.Names)

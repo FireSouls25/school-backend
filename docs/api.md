@@ -50,10 +50,26 @@ Routes declare one required permission, enforced by
 | `GET /v1/teachers` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}` | `manage-users` | admin only |
 | `POST /v1/roles` | `manage-roles` | admin only |
+| `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
+| `GET /v1/warnings/recent` | `view-students` | teacher, admin |
 | `GET /v1/audit` | `manage-system` | admin only |
 
 Teachers cannot create accounts or grant roles: only the admin role
 carries `manage-users` and `manage-roles`.
+
+## Issues to a student (llamados de atención)
+
+- `POST /v1/warnings/batch` issues one event against several students:
+  body `{classID, title, gravity, description, studentIDs[], snapshots{}}`,
+  where `gravity` accepts `mild|moderate|severe` (or the Spanish terms) and
+  each snapshot freezes that student's identity. The issuing teacher is
+  always the authenticated subject, never a body field. Every warning of
+  the batch shares one group id, so the event stays recognizable while
+  each student keeps their own history. Responds `201` with the created
+  warnings.
+- `GET /v1/warnings/recent?limit=N` returns the newest warnings across the
+  school (default 20, cap 200). It backs the admin history tab; students
+  keep using `GET /v1/students/{id}/warnings`.
 
 ## Audit trail
 

@@ -84,4 +84,8 @@ type Store interface {
 	Delete(ctx context.Context, id string) error
 	// ForGroup returns every warning sharing a batch id, oldest first.
 	ForGroup(ctx context.Context, groupID string) ([]Warning, error)
+	// Recent returns the newest warnings across all students, newest first,
+	// capped by limit. It answers "what happened lately in the school",
+	// which no per-student query can.
+	Recent(ctx context.Context, limit int) ([]Warning, error)
 }

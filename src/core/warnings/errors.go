@@ -40,4 +40,6 @@ var (
 	ErrEmptyBatch = newError("warnings.err_empty_batch", "warnings: empty batch")
 	// ErrNotFound is returned when the requested warning does not exist.
 	ErrNotFound = newError("warnings.err_not_found", "warnings: not found")
+	// ErrInvalidLimit is returned when the requested page size is not positive.
+	ErrInvalidLimit = newError("warnings.err_invalid_limit", "warnings: invalid limit")
 )

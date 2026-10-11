@@ -48,6 +48,26 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	return nil
 }
 
+// Recent implements Store: newest first, capped by limit.
+func (s *MemoryStore) Recent(_ context.Context, limit int) ([]Warning, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Warning, 0, len(s.warnings))
+	for _, w := range s.warnings {
+		out = append(out, w)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].HappenedAt.Equal(out[j].HappenedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].HappenedAt.After(out[j].HappenedAt)
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 // ForGroup implements Store.
 func (s *MemoryStore) ForGroup(_ context.Context, groupID string) ([]Warning, error) {
 	s.mu.Lock()

@@ -8,6 +8,7 @@
   "audit.err_invalid_resource": "Recurso de auditoría inválido",
   "audit.err_invalid_student": "Identificador de estudiante inválido",
   "audit.err_invalid_limit": "Cantidad solicitada inválida",
+  "warnings.err_invalid_limit": "Cantidad solicitada inválida",
   "role.student": "Estudiante",
   "role.teacher": "Docente",
   "role.admin": "Administrador",

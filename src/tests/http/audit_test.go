@@ -165,6 +165,41 @@ func TestAuditIgnoresTeacherUpdate(t *testing.T) {
 	}
 }
 
+// The school-wide warning feed: newest first, capped, and open to any role
+// allowed to view students.
+func TestRecentWarningsFeed(t *testing.T) {
+	h, _, studentID := auditStack(t)
+
+	for _, title := range []string{"Primero", "Segundo", "Tercero"} {
+		body := `{"ClassID":"9-1","TeacherID":"` + teacherSubject + `",` +
+			`"HappenedAt":"2026-03-0` + string(title[0]-'0') + `T10:00:00Z","Gravity":"mild",` +
+			`"Title":"` + title + `","Description":"Detalle",` +
+			`"Items":[{"StudentID":"` + studentID + `","Snapshot":{"Names":"Ana","Surnames":"Gómez",` +
+			`"DocumentID":"1","ClassID":"9-1"}}]}`
+		rec := doRequest(t, h, http.MethodPost, "/v1/warnings/batch", teacherSubject, body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("batch %q status = %d, want 201: %s", title, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := doRequest(t, h, http.MethodGet, "/v1/warnings/recent?limit=2", teacherSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("recent status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var list []struct {
+		Title string `json:"Title"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("list = %d, want 2 (limit honored)", len(list))
+	}
+	if list[0].Title != "Tercero" {
+		t.Errorf("first = %q, want the newest one", list[0].Title)
+	}
+}
+
 func TestAuditListingIsAdminOnly(t *testing.T) {
 	h, _, studentID := auditStack(t)
 

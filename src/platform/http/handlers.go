@@ -379,6 +379,75 @@ func handleAssignRole(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// warningBatchRequest is the body of POST /v1/warnings/batch: one event
+// against several students, each with the identity snapshot to freeze. The
+// issuing teacher is always the authenticated caller, never a body field.
+type warningBatchRequest struct {
+	ClassID     string                              `json:"classID"`
+	Title       string                              `json:"title"`
+	Gravity     string                              `json:"gravity"`
+	Description string                              `json:"description"`
+	StudentIDs  []string                            `json:"studentIDs"`
+	Snapshots   map[string]warnings.StudentSnapshot `json:"snapshots"`
+}
+
+// handleIssueWarningBatch issues one llamado de atención against several
+// students. Every warning of the batch shares a group id, so the event stays
+// recognizable while each student keeps its own history.
+func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body warningBatchRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		gravity, err := warnings.Parse(body.Gravity)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		items := make([]warnings.BatchItem, 0, len(body.StudentIDs))
+		for _, raw := range body.StudentIDs {
+			studentID := strings.TrimSpace(raw)
+			if studentID == "" {
+				continue
+			}
+			items = append(items, warnings.BatchItem{
+				StudentID: studentID,
+				Snapshot:  body.Snapshots[studentID],
+			})
+		}
+		created, err := deps.Warnings.IssueBatch(r.Context(), warnings.BatchInput{
+			ClassID:     body.ClassID,
+			TeacherID:   subject,
+			HappenedAt:  time.Now().UTC(),
+			Gravity:     gravity,
+			Title:       body.Title,
+			Description: body.Description,
+			Items:       items,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	}
+}
+
+// handleRecentWarnings returns the newest warnings in the school, newest
+// first. It powers the admin history tab; students keep using their own
+// per-student endpoint.
+func handleRecentWarnings(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		list, err := deps.Warnings.Recent(r.Context(), auditLimit(r, 20))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
 // handleListAudit returns the newest audit entries, or the trail of one
 // student when ?studentID= is present. Admin only: the trail exposes who
 // accessed which record.

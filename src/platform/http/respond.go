@@ -37,6 +37,7 @@ var statusByCode = map[string]int{
 	"audit.err_invalid_resource": http.StatusBadRequest,
 	"audit.err_invalid_student":  http.StatusBadRequest,
 	"audit.err_invalid_limit":    http.StatusBadRequest,
+	"warnings.err_invalid_limit": http.StatusBadRequest,
 
 	"users.err_not_found":           http.StatusNotFound,
 	"users.err_invalid_id":          http.StatusBadRequest,
