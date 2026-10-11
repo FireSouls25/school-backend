@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"grade/src/core/audit"
 	"grade/src/core/roles"
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
@@ -36,6 +37,9 @@ type Dependencies struct {
 	Warnings   *warnings.Service
 	Sessions   *sessions.Service
 	Statistics *statistics.Service
+	// Audit records accesses to student data. Optional: when nil the audit
+	// middleware is not installed and the routes that read it fail closed.
+	Audit *audit.Service
 	// AllowedOrigins lists browser origins accepted by CORS.
 	AllowedOrigins []string
 }
@@ -289,6 +293,30 @@ func handleAssignRole(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusCreated, roleGrant{SubjectID: subjectID, Roles: rs})
+	}
+}
+
+// handleListAudit returns the newest audit entries, or the trail of one
+// student when ?studentID= is present. Admin only: the trail exposes who
+// accessed which record.
+func handleListAudit(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		studentID := strings.TrimSpace(r.URL.Query().Get("studentID"))
+		if studentID != "" {
+			entries, err := deps.Audit.ForStudent(r.Context(), studentID)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, entries)
+			return
+		}
+		entries, err := deps.Audit.Recent(r.Context(), auditLimit(r, 50))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, entries)
 	}
 }
 

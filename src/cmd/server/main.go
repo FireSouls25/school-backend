@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"grade/src/core/attendance"
+	"grade/src/core/audit"
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
@@ -50,6 +51,7 @@ func main() {
 		schedulesStore   schedules.Store   = schedules.NewMemoryStore()
 		sessionsStore    sessions.Store    = sessions.NewMemoryStore()
 		usersStore       users.Store       = users.NewMemoryStore()
+		auditStore       audit.Store       = audit.NewMemoryStore()
 	)
 	if cfg.DatabaseURL != "" {
 		db, err := pg.Connect(ctx, cfg.DatabaseURL)
@@ -70,6 +72,7 @@ func main() {
 		schedulesStore = pg.NewSchedulesStore(db)
 		sessionsStore = pg.NewSessionsStore(db)
 		usersStore = pg.NewUsersStore(db)
+		auditStore = pg.NewAuditStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only)")
@@ -112,6 +115,7 @@ func main() {
 		Warnings:       warningsSvc,
 		Sessions:       sessionsSvc,
 		Statistics:     statisticsSvc,
+		Audit:          audit.NewService(auditStore),
 		AllowedOrigins: cfg.AllowedOrigins,
 	}
 	if err := httpapi.Run(addr, httpapi.Router(deps, i18nSvc)); err != nil {

@@ -107,6 +107,20 @@ header is still pending (see `docs/users.md`).
   `SetPassword`, `SetActive`, `Delete`. Every public result is sanitized
   (`User.Sanitized`), so `PasswordHash` never escapes the service.
 
+## Audit (`src/core/audit`)
+
+- Append-only trail of who read or wrote student data, required by
+  Colombian data law (Ley 1581 de 2012). `Entry{SubjectID, Action,
+  Resource, ResourceID, Status, HappenedAt}`: the subject is always the
+  authenticated caller, and the final HTTP status is stored, so denied
+  attempts stay visible.
+- The capability owns no routes and authorizes nothing: the transport
+  classifies the matched route (`platform/http/audit.go`) and records.
+  Writing is best effort by design — a failing trail logs a warning and
+  never turns a working request into an error.
+- `GET /v1/audit` (`manage-system`, admin only) lists the newest entries,
+  optionally filtered by `?studentID=`. Full detail in `docs/audit.md`.
+
 ## Students (`src/core/students`)
 
 - `Student` is the profile aggregate: a stable UUID, names, surnames, an

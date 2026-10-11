@@ -48,9 +48,20 @@ Routes declare one required permission, enforced by
 | `GET /v1/teachers` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}` | `manage-users` | admin only |
 | `POST /v1/roles` | `manage-roles` | admin only |
+| `GET /v1/audit` | `manage-system` | admin only |
 
 Teachers cannot create accounts or grant roles: only the admin role
 carries `manage-users` and `manage-roles`.
+
+## Audit trail
+
+Access to student data is recorded automatically by the transport
+(`GET /v1/students/{id}`, `.../warnings`, `POST /v1/students`,
+`POST /v1/sessions/{id}/marks` and the statistics reads), storing the
+authenticated subject, the action, the resource and the final status —
+denied attempts included. `GET /v1/audit` lists the trail for admins
+(`?studentID=`, `?limit=`). Recording never fails a request. See
+`docs/audit.md`.
 
 Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.

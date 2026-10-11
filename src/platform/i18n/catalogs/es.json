@@ -1,6 +1,13 @@
 {
   "roles.err_unknown_role": "Rol desconocido",
   "roles.err_invalid_subject": "Identificador de usuario inválido",
+  "audit.err_not_found": "Registro de auditoría no encontrado",
+  "audit.err_invalid_id": "Identificador de auditoría inválido",
+  "audit.err_invalid_subject": "Usuario de auditoría inválido",
+  "audit.err_invalid_action": "Acción de auditoría inválida",
+  "audit.err_invalid_resource": "Recurso de auditoría inválido",
+  "audit.err_invalid_student": "Identificador de estudiante inválido",
+  "audit.err_invalid_limit": "Cantidad solicitada inválida",
   "role.student": "Estudiante",
   "role.teacher": "Docente",
   "role.admin": "Administrador",

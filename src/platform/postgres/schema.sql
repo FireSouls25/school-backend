@@ -326,3 +326,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique
 -- Emails are unique when present, case-insensitively.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
     ON users (lower(email)) WHERE email <> '';
+
+-- Audit trail (Ley 1581 de 2012): append-only record of who read or wrote
+-- student data. It owns no foreign keys on purpose: the trail must survive
+-- the deletion of the record or of the account that produced it.
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          UUID        PRIMARY KEY,
+    subject_id  UUID        NOT NULL,
+    action      TEXT        NOT NULL,
+    resource    TEXT        NOT NULL,
+    resource_id TEXT        NOT NULL DEFAULT '',
+    status      INT         NOT NULL DEFAULT 0,
+    happened_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_recent
+    ON audit_log (happened_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_subject
+    ON audit_log (subject_id, happened_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_resource
+    ON audit_log (resource, resource_id, happened_at DESC);

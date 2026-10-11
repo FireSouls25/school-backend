@@ -61,6 +61,12 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(MiddlewareSubject)
+		// Access trail over student data (Ley 1581 de 2012). Installed after
+		// the subject middleware, so every audited request already has an
+		// author; it never blocks the request it observes.
+		if deps.Audit != nil {
+			r.Use(MiddlewareAudit(deps.Audit))
+		}
 		r.Get("/me", handleMe(deps))
 
 		r.Get("/students/{id}", handleGetStudent(deps))
@@ -84,5 +90,12 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/teachers/{id}", handleGetTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
+
+		// La auditoría de datos de estudiantes es solo para administración:
+		// revela quién accedió a qué registro.
+		if deps.Audit != nil {
+			r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+				Get("/audit", handleListAudit(deps))
+		}
 	})
 }
