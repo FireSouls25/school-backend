@@ -112,6 +112,59 @@ func TestAuditIgnoresUnrelatedRoutes(t *testing.T) {
 	}
 }
 
+// A modification of a student profile is audited too, as an update.
+func TestAuditRecordsStudentUpdate(t *testing.T) {
+	h, auditSvc, studentID := auditStack(t)
+
+	body := `{"Names":"Ana","Surnames":"Gómez","ClassID":"9-1","DocumentID":"1234567890",` +
+		`"Birthdate":"2010-05-04T00:00:00Z","Caregiver":{"Names":"María Gómez"}}`
+	rec := doRequest(t, h, http.MethodPut, "/v1/students/"+studentID, adminSubject, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	entries, err := auditSvc.ForStudent(context.Background(), studentID)
+	if err != nil {
+		t.Fatalf("ForStudent: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("want an entry for the update")
+	}
+	last := entries[0]
+	if last.Action != audit.ActionUpdate {
+		t.Errorf("action = %q, want update", last.Action)
+	}
+	if last.ResourceID != studentID {
+		t.Errorf("resource = %q, want %q", last.ResourceID, studentID)
+	}
+}
+
+// Teacher profiles are not student data: editing one stays out of the trail.
+func TestAuditIgnoresTeacherUpdate(t *testing.T) {
+	h, auditSvc, _ := auditStack(t)
+
+	created := doRequest(t, h, http.MethodPost, "/v1/teachers", adminSubject,
+		`{"Names":"Laura","Surnames":"Ríos","DocumentID":"51999111"}`)
+	var tc struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &tc); err != nil || tc.ID == "" {
+		t.Fatalf("setup create: %v %s", err, created.Body.String())
+	}
+	rec := doRequest(t, h, http.MethodPut, "/v1/teachers/"+tc.ID, adminSubject, `{"Phone":"3001234567"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("teacher update status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	entries, err := auditSvc.Recent(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("entries = %+v, want none for a teacher edit", entries)
+	}
+}
+
 func TestAuditListingIsAdminOnly(t *testing.T) {
 	h, _, studentID := auditStack(t)
 

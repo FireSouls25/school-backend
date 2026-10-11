@@ -471,8 +471,112 @@ func TestAssignRoleRejectsMalformedSubject(t *testing.T) {
 	}
 }
 
+// A student profile is replaced in full (PUT): the id comes from the path
+// and the status is lifecycle-managed, never a form field.
+func TestAdminUpdatesStudent(t *testing.T) {
+	h := testStack(t)
+
+	created := doRequest(t, h, http.MethodPost, "/v1/students", adminSubject,
+		`{"Names":"Ana","Surnames":"Gómez","ClassID":"9-1","DocumentID":"1234567890","Caregiver":{"Names":"María Gómez"}}`)
+	var st struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &st); err != nil || st.ID == "" {
+		t.Fatalf("setup create: %v %s", err, created.Body.String())
+	}
+
+	rec := doRequest(t, h, http.MethodPut, "/v1/students/"+st.ID, adminSubject,
+		`{"Names":"Ana María","Surnames":"Gómez","ClassID":"9-2","DocumentID":"1234567890","Phone":"3001112233","Caregiver":{"Names":"María Gómez"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var updated struct {
+		Names   string `json:"Names"`
+		ClassID string `json:"ClassID"`
+		Phone   string `json:"Phone"`
+		Status  string `json:"Status"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode updated: %v", err)
+	}
+	if updated.Names != "Ana María" || updated.ClassID != "9-2" || updated.Phone != "3001112233" {
+		t.Errorf("updated = %+v, want the new values", updated)
+	}
+	if updated.Status != "active" {
+		t.Errorf("status = %q, want active preserved", updated.Status)
+	}
+
+	// Teachers cannot edit students.
+	rec = doRequest(t, h, http.MethodPut, "/v1/students/"+st.ID, teacherSubject,
+		`{"Names":"X","Surnames":"Y","ClassID":"9-1","DocumentID":"1","Caregiver":{"Names":"Z"}}`)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("teacher update status = %d, want 403", rec.Code)
+	}
+
+	// Unknown student: 404, not a silent create.
+	rec = doRequest(t, h, http.MethodPut, "/v1/students/00000000-0000-4000-8000-000000000000", adminSubject,
+		`{"Names":"X","Surnames":"Y","ClassID":"9-1","DocumentID":"1","Caregiver":{"Names":"Z"}}`)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown update status = %d, want 404", rec.Code)
+	}
+}
+
+// Teacher updates are partial: what the body omits keeps its stored value,
+// so an edit can never silently retire a teacher or erase their phone.
+func TestAdminUpdatesTeacherPartially(t *testing.T) {
+	h := testStack(t)
+
+	created := doRequest(t, h, http.MethodPost, "/v1/teachers", adminSubject,
+		`{"Names":"Laura","Surnames":"Ríos","DocumentID":"51999111","Phone":"3001234567","Email":"laura@colegio.edu.co"}`)
+	var tc struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &tc); err != nil || tc.ID == "" {
+		t.Fatalf("setup create: %v %s", err, created.Body.String())
+	}
+
+	rec := doRequest(t, h, http.MethodPut, "/v1/teachers/"+tc.ID, adminSubject, `{"Phone":"3019998877"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var updated struct {
+		Phone  string `json:"Phone"`
+		Email  string `json:"Email"`
+		Active bool   `json:"Active"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode updated: %v", err)
+	}
+	if updated.Phone != "3019998877" {
+		t.Errorf("phone = %q, want the new one", updated.Phone)
+	}
+	if updated.Email != "laura@colegio.edu.co" {
+		t.Errorf("email = %q, want it preserved (omitted field)", updated.Email)
+	}
+	if !updated.Active {
+		t.Error("active = false, want preserved: an omitted field must not retire a teacher")
+	}
+
+	// Retiring is explicit.
+	rec = doRequest(t, h, http.MethodPut, "/v1/teachers/"+tc.ID, adminSubject, `{"Active":false}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("retire status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode retired: %v", err)
+	}
+	if updated.Active {
+		t.Error("active = true, want false after retiring")
+	}
+
+	// Teachers cannot edit teachers.
+	rec = doRequest(t, h, http.MethodPut, "/v1/teachers/"+tc.ID, teacherSubject, `{"Phone":"300"}`)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("teacher update status = %d, want 403", rec.Code)
+	}
+}
+
 // Unmatched path and unsupported method answer with the standard error
-// envelope, not with chi's plain text: clients read `error.code`.
 func TestUnknownRouteAndMethodUseErrorEnvelope(t *testing.T) {
 	h := testStack(t)
 

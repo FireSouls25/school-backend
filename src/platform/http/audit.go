@@ -64,9 +64,15 @@ func classify(r *http.Request) (audit.Action, audit.Resource, string, bool) {
 			return audit.ActionCreate, audit.ResourceStudent, "", true
 		}
 	case "/v1/students/{id}":
-		if r.Method == http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
 			return audit.ActionRead, audit.ResourceStudent, id, true
+		case http.MethodPut:
+			return audit.ActionUpdate, audit.ResourceStudent, id, true
 		}
+	case "/v1/teachers/{id}":
+		// El perfil docente no es dato de estudiante: fuera de la bitácora.
+		return "", "", "", false
 	case "/v1/students/{id}/warnings":
 		if r.Method == http.MethodGet {
 			return audit.ActionRead, audit.ResourceWarning, id, true

@@ -44,7 +44,9 @@ Routes declare one required permission, enforced by
 | `GET /v1/statistics/student/{studentID}` | `manage-system` | admin only |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
 | `POST /v1/students` | `manage-students` | admin only |
+| `PUT /v1/students/{id}` | `manage-students` | admin only |
 | `POST /v1/teachers` | `manage-users` | admin only |
+| `PUT /v1/teachers/{id}` | `manage-users` | admin only |
 | `GET /v1/teachers` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}` | `manage-users` | admin only |
 | `POST /v1/roles` | `manage-roles` | admin only |
@@ -67,6 +69,16 @@ Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.
 Unknown subjects (valid UUID, no roles) are denied everywhere guarded.
 Authorizer failures fail closed: no data, `500` with no details.
+
+## Editing profiles
+
+- `PUT /v1/students/{id}` replaces the profile. The id comes from the
+  path and the status is lifecycle-managed (`Graduate`), never a form
+  field: a client cannot resurrect or retire a student by editing JSON.
+- `PUT /v1/teachers/{id}` applies a **partial** update: every field is
+  optional and what the body omits keeps its stored value. Retiring a
+  teacher (`"Active": false`) must be explicit, so a partial form can
+  never silently disable someone.
 
 ## Denials and frontend navigation
 
