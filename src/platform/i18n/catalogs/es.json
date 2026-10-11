@@ -137,5 +137,6 @@
   "http.err_unauthorized": "Autenticación requerida",
   "http.err_forbidden": "Acceso denegado",
   "http.err_not_found": "Recurso no encontrado",
+  "http.err_method_not_allowed": "Método no permitido",
   "http.err_internal": "Error interno del servidor"
 }

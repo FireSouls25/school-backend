@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -149,8 +150,11 @@ func seedRoles(ctx context.Context, svc *roles.Service, envVar string, role role
 // It solves the chicken-and-egg problem: nobody can grant the first role
 // through the API before an admin exists. Existing accounts are never
 // modified: when the username already exists only the admin role is
-// ensured. Never set these vars with a weak password in production; rotate
-// the password after the first login (users.Service.SetPassword).
+// ensured, and a deactivated account is re-enabled (that is the recovery
+// path — without it an accidental SetActive locks the school out forever,
+// since no login exists yet). The password is never rotated here. Never set
+// these vars with a weak password in production; rotate the password after
+// the first login (users.Service.SetPassword).
 func bootstrapAdmin(ctx context.Context, userSvc *users.Service, roleSvc *roles.Service) {
 	username := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_USERNAME"))
 	password := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
@@ -159,16 +163,31 @@ func bootstrapAdmin(ctx context.Context, userSvc *users.Service, roleSvc *roles.
 	}
 	email := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))
 	u, err := userSvc.Create(ctx, username, email, password)
-	if err != nil {
-		if existing, lookupErr := userSvc.ByUsername(ctx, username); lookupErr == nil {
-			u = existing
-			slog.Info("bootstrap admin already exists; ensuring admin role", "username", u.Username)
-		} else {
-			slog.Error("bootstrap admin creation failed", "error", err)
+	switch {
+	case err == nil:
+		slog.Info("bootstrap admin created", "username", u.Username)
+	case errors.Is(err, users.ErrDuplicateUsername):
+		// Only a duplicate is a benign outcome. Any other failure (weak
+		// password, bad email, store error) must be reported as such and
+		// stop the boot instead of being mistaken for "already exists".
+		existing, lookupErr := userSvc.ByUsername(ctx, username)
+		if lookupErr != nil {
+			slog.Error("bootstrap admin lookup failed", "error", lookupErr)
 			os.Exit(1)
 		}
-	} else {
-		slog.Info("bootstrap admin created", "username", u.Username)
+		u = existing
+		slog.Info("bootstrap admin already exists; ensuring admin role", "username", u.Username)
+	default:
+		slog.Error("bootstrap admin creation failed", "error", err)
+		os.Exit(1)
+	}
+	if !u.Active {
+		u, err = userSvc.SetActive(ctx, u.ID, true)
+		if err != nil {
+			slog.Error("bootstrap admin activation failed", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("bootstrap admin reactivated", "username", u.Username)
 	}
 	if err := roleSvc.Assign(ctx, u.ID, roles.RoleAdmin); err != nil {
 		slog.Error("bootstrap admin role grant failed", "error", err)

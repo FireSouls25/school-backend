@@ -22,6 +22,15 @@ func Router(deps Dependencies, i18nSvc *i18n.Service) http.Handler {
 	r.Use(MiddlewareLocale(i18nSvc))
 	r.Use(MiddlewareCORS(deps.AllowedOrigins))
 	routes(r, deps)
+	// An unmatched path or method must still answer with the error envelope,
+	// never with chi's plain-text body: clients parse `error.code` to tell a
+	// missing route from a real failure (see docs/api.md).
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		WriteError(w, req, errNotFound)
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		WriteError(w, req, errMethodNotAllowed)
+	})
 	return r
 }
 

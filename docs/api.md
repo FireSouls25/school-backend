@@ -43,6 +43,14 @@ Routes declare one required permission, enforced by
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
 | `GET /v1/statistics/student/{studentID}` | `manage-system` | admin only |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
+| `POST /v1/students` | `manage-students` | admin only |
+| `POST /v1/teachers` | `manage-users` | admin only |
+| `GET /v1/teachers` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}` | `manage-users` | admin only |
+| `POST /v1/roles` | `manage-roles` | admin only |
+
+Teachers cannot create accounts or grant roles: only the admin role
+carries `manage-users` and `manage-roles`.
 
 Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.
@@ -71,16 +79,22 @@ or on `/docente` by default.
 
 ## Request/response rules (kept consistent)
 
-- Success: domain objects as-is (`200`), created revisions (`201`).
+- Success: domain objects as-is (`200`), created resources (`201`).
   No envelope on success; errors always use
   `{"error": {"code", "message"}}`.
+- An unmatched path answers `404` with `http.err_not_found` and an
+  unsupported method `405` with `http.err_method_not_allowed`, both in
+  the same envelope: clients parse `error.code` and never receive
+  plain text.
 - Bodies are capped at 1 MiB, strict JSON (`DisallowUnknownFields`,
   single value): unknown fields fail with `400 http.err_bad_request`
   instead of being silently ignored.
 - The acting author is always the authenticated caller (e.g. mark
   `ChangedBy`), never a body field — clients cannot spoof authorship.
 - Ids in paths and bodies must be UUIDs; domain services validate and
-  map to `400` codes, unknown ids to `404`.
+  map to `400` codes, unknown ids to `404`. `POST /v1/roles` validates
+  `subjectID` as a UUID before granting, so a typo never creates a role
+  that nobody can use.
 - `POST /v1/sessions/{id}/marks` accepts `"mark": ""` to clear back to
   present (correction flow) and Spanish aliases (`"atraso"`, …).
 - CORS reflects only origins in `ALLOWED_ORIGINS` (comma-separated);

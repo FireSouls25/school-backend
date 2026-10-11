@@ -123,6 +123,16 @@ keep memory stores consistent).
   after the first login (`SetPassword`). Never ship a weak bootstrap
   password in production.
 
+  Two details worth knowing:
+
+  - **A deactivated bootstrap admin is re-enabled at boot.** Without a
+    login yet, `SetActive` has no recovery path otherwise, so one
+    accidental deactivation would lock the school out forever.
+  - **Only a duplicate username is a benign outcome.** Any other
+    creation failure (weak password, malformed email, store error) is
+    reported as such and stops the boot, instead of being mistaken for
+    "already exists" and leaving a half-configured admin.
+
 ```sh
 DATABASE_URL=postgres://grade:grade@localhost:5433/gradedb?sslmode=disable \
 BOOTSTRAP_ADMIN_USERNAME=admin \

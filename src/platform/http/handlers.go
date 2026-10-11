@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"grade/src/core/roles"
 	"grade/src/core/sessions"
@@ -259,7 +260,9 @@ type roleGrant struct {
 }
 
 // handleAssignRole grants a role to a subject. Role parsing validates the
-// value; unknown roles fail with roles.err_unknown_role.
+// value; unknown roles fail with roles.err_unknown_role. The subject must be
+// a well-formed UUID: ids in bodies are validated here, as everywhere else
+// (docs/api.md), so a typo can never create a role nobody can ever use.
 func handleAssignRole(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body roleAssignment
@@ -272,6 +275,10 @@ func handleAssignRole(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		subjectID := strings.TrimSpace(body.SubjectID)
+		if _, err := uuid.Parse(subjectID); err != nil {
+			WriteError(w, r, roles.ErrInvalidSubjectID)
+			return
+		}
 		if err := deps.RolesSvc.Assign(r.Context(), subjectID, role); err != nil {
 			WriteError(w, r, err)
 			return

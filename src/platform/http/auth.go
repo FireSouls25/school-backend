@@ -29,6 +29,10 @@ var (
 	errUnauthorized = codedError{"http.err_unauthorized"}
 	// errForbidden renders 403 when the subject lacks the permission.
 	errForbidden = codedError{"http.err_forbidden"}
+	// errNotFound renders 404 for an unmatched path, in the standard envelope.
+	errNotFound = codedError{"http.err_not_found"}
+	// errMethodNotAllowed renders 405 when the path exists with another verb.
+	errMethodNotAllowed = codedError{"http.err_method_not_allowed"}
 )
 
 // MiddlewareSubject resolves the caller from the SubjectHeader (UUID) and

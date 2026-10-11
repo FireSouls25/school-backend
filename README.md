@@ -44,6 +44,25 @@ empty means same-origin only. Auth is still a placeholder header
 already stores real accounts with bcrypt passwords (see `docs/users.md`
 and `BOOTSTRAP_ADMIN_*` in `src/cmd/server/main.go`).
 
+## First account and test roles
+
+`BOOTSTRAP_ADMIN_*` creates the first account and grants it the admin
+role at boot; it is the only way in, since nobody can grant the first
+role through the API. Roles live in memory, so `SEED_ADMINS` and
+`SEED_TEACHERS` (comma-separated subject UUIDs) still exist to re-grant
+them on every restart:
+
+```sh
+BOOTSTRAP_ADMIN_USERNAME=admin \
+BOOTSTRAP_ADMIN_EMAIL=admin@observador.edu.co \
+BOOTSTRAP_ADMIN_PASSWORD='admin123*' \
+SEED_TEACHERS=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb \
+python3 scripts/dev.py run
+```
+
+Never set `SEED_*` with real subjects in production: anyone holding a
+listed id becomes admin.
+
 ## Structure
 
 ```

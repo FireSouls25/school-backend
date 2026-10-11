@@ -99,7 +99,13 @@ header is still pending (see `docs/users.md`).
   `ErrInvalidCredentials` (no account enumeration). Full detail in
   `docs/users.md`.
 
-### Ports (unchanged)
+### Ports
+
+- `Store`: `Create`, `ByID`, `ByUsername`, `ByEmail`, `Update`
+  (never touches the hash), `SetPasswordHash`, `Delete`.
+- `Service`: `Create`, `Authenticate`, `ByID`, `ByUsername`,
+  `SetPassword`, `SetActive`, `Delete`. Every public result is sanitized
+  (`User.Sanitized`), so `PasswordHash` never escapes the service.
 
 ## Students (`src/core/students`)
 
@@ -307,6 +313,8 @@ consequences:
 ## Roadmap (future `src/core/` capabilities)
 
 - `auth` - login/logout/refresh tokens on top of `users`, per-user language pref
-- `classes` - grades 1-11, groups (9-1, 9-2, ...), years, periods
 - `notifications` - WhatsApp delivery to guardians
-- `statistics` - per-class and per-student aggregations
+
+`classes` and `statistics` already exist (see the sections above); what
+they still lack is HTTP surface (list/schedule reads and the
+modification endpoints), not the domain.

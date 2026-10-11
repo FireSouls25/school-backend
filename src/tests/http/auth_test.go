@@ -436,3 +436,62 @@ func TestAdminListsAndReadsTeachers(t *testing.T) {
 		t.Errorf("unknown teacher status = %d, want 404", rec.Code)
 	}
 }
+
+// A subject id in a body is a UUID like any other id: a typo must fail with
+// a stable 400 instead of silently creating a role nobody can ever use.
+func TestAssignRoleRejectsMalformedSubject(t *testing.T) {
+	h := testStack(t)
+
+	tests := []struct {
+		name    string
+		subject string
+	}{
+		{name: "not a uuid", subject: "no-soy-un-uuid"},
+		{name: "empty", subject: ""},
+		{name: "uuid prefix", subject: "12345678-1234-4234-8234"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := doRequest(t, h, http.MethodPost, "/v1/roles",
+				adminSubject, `{"subjectID":"`+tt.subject+`","role":"teacher"}`)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+			if code := errorCode(t, rec); code != "roles.err_invalid_subject" {
+				t.Errorf("code = %q, want roles.err_invalid_subject", code)
+			}
+		})
+	}
+
+	// A well-formed uuid is still accepted: the guard rejects typos, not ids.
+	rec := doRequest(t, h, http.MethodPost, "/v1/roles",
+		adminSubject, `{"subjectID":"12345678-1234-4234-8234-123456789012","role":"teacher"}`)
+	if rec.Code != http.StatusCreated {
+		t.Errorf("valid uuid status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Unmatched path and unsupported method answer with the standard error
+// envelope, not with chi's plain text: clients read `error.code`.
+func TestUnknownRouteAndMethodUseErrorEnvelope(t *testing.T) {
+	h := testStack(t)
+
+	rec := doRequest(t, h, http.MethodGet, "/v1/no-existe", adminSubject, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown path status = %d, want 404", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got == "" || !strings.Contains(got, "application/json") {
+		t.Errorf("content-type = %q, want JSON", got)
+	}
+	if code := errorCode(t, rec); code != "http.err_not_found" {
+		t.Errorf("code = %q, want http.err_not_found", code)
+	}
+
+	rec = doRequest(t, h, http.MethodDelete, "/v1/students/"+studentSubject, adminSubject, "")
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("wrong method status = %d, want 405", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "http.err_method_not_allowed" {
+		t.Errorf("code = %q, want http.err_method_not_allowed", code)
+	}
+}
