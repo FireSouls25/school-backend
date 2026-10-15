@@ -19,6 +19,26 @@ curl -H "X-Subject-ID: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" localhost:8080/v1/m
 # {"subject":"aaaaaaaa-...","roles":["admin"],"home":"/admin"}
 ```
 
+### `db` stays unhealthy: `database files are incompatible with server`
+
+That means the `grado_pgdata` volume holds a data directory from a
+**different Postgres major version** (or from another project reusing the
+volume). Compose pins `postgres:17`, and Postgres cannot read another
+major's files, so `db` crash-loops and `api` waits on `service_healthy`.
+This bit us once: another checkout also named `backend` shared the
+default project name, so both stacks reused one `pgdata` volume — hence
+the explicit `name: grado` at the top of `compose.yaml`. If it happens
+again, back the volume up and start over (dev data re-seeds via
+`SEED_DEMO`):
+
+```sh
+docker logs grado-db-1 | tail -n 5   # confirm the version-mismatch FATAL
+docker volume create pgdata_bak
+docker run --rm -v grado_pgdata:/from -v pgdata_bak:/to alpine cp -a /from/. /to/
+docker compose down -v               # drops grado_pgdata (backup kept in pgdata_bak)
+docker compose up -d
+```
+
 Demo logins (development only, the SPA dev build uses the same pair):
 
 | User | Password | Role |

@@ -4,6 +4,13 @@
 # APP_ENV=production and a real BOOTSTRAP_ADMIN_PASSWORD, and use your
 # own managed database.
 
+# Grade project stack. The explicit project name keeps our containers,
+# network and volumes (grado-*) apart from other checkouts whose folder
+# is also called `backend` (e.g. uxn-webpage/backend): sharing the default
+# project name made both stacks reuse one `pgdata` volume, and a Postgres
+# 16 data dir under a Postgres 17 server crash-loops `db` as unhealthy.
+name: grado
+
 services:
   db:
     image: postgres:17
