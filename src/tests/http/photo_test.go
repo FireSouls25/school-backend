@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -112,4 +113,54 @@ func TestStudentPhotoFlow(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("after clear status = %d, want 404", rec.Code)
 	}
+}
+
+func TestUpdateStudentFlow(t *testing.T) {
+	h, studentID := photoStack(t)
+
+	// Teachers read profiles but cannot replace them.
+	rec := doRequest(t, h, http.MethodPut, "/v1/students/"+studentID+"/photo", teacherSubject, `{}`)
+	_ = rec
+	get, err := jsonDecode(t, h, http.MethodGet, "/v1/students/"+studentID, adminSubject)
+	if err != nil {
+		t.Fatalf("get profile: %v", err)
+	}
+	get["Phone"] = "3001112233"
+	body, _ := json.Marshal(get)
+	rec = doRequest(t, h, http.MethodPut, "/v1/students/"+studentID, teacherSubject, string(body))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("teacher update status = %d, want 403", rec.Code)
+	}
+
+	// Full replace: phone changes, lifecycle status is server-managed.
+	rec = doRequest(t, h, http.MethodPut, "/v1/students/"+studentID, adminSubject, string(body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var updated map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode updated: %v", err)
+	}
+	if updated["Phone"] != "3001112233" {
+		t.Errorf("Phone = %v, want the new number", updated["Phone"])
+	}
+
+	// Unknown ids 404.
+	rec = doRequest(t, h, http.MethodPut, "/v1/students/00000000-0000-4000-8000-000000000000", adminSubject, string(body))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown update status = %d, want 404", rec.Code)
+	}
+}
+
+func jsonDecode(t *testing.T, h http.Handler, method, target, subject string) (map[string]any, error) {
+	t.Helper()
+	rec := doRequest(t, h, method, target, subject, "")
+	if rec.Code != http.StatusOK {
+		return nil, errors.New("status")
+	}
+	var out map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

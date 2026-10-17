@@ -233,6 +233,28 @@ func handleGetPhoto(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// handleUpdateStudent replaces a student profile. The id comes from
+// the path and the lifecycle status is managed server-side, so both
+// are ignored in the body and taken from the stored record instead.
+func handleUpdateStudent(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var body students.Student
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		body.ID = id
+		updated, err := deps.Students.Update(r.Context(), body)
+		if err != nil {
+			recordAudit(deps, r, audit.ActionUpdate, audit.ResourceStudent, id, id, statusForErr(err))
+			WriteError(w, r, err)
+			return
+		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceStudent, updated.ID, updated.ID, http.StatusOK)
+		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
 // handleGetStudent returns one student profile.
 func handleGetStudent(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
