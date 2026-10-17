@@ -44,6 +44,7 @@ Routes declare one required permission, enforced by
 | `GET /v1/statistics/student/{studentID}` | `manage-system` | admin only |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
 | `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
+| `POST /v1/classes` | `manage-users` | admin only |
 | `GET /v1/classes/{groupID}/roster` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
 | `POST /v1/sessions/open` | `record-attendance` | teacher, admin |

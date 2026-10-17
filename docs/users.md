@@ -50,7 +50,7 @@ Create(ctx, User) (User, error)              // enforces unique username / email
 ByID(ctx, id string) (User, error)           // ErrNotFound when missing
 ByUsername(ctx, username string) (User, error) // case-insensitive, ErrNotFound
 ByEmail(ctx, email string) (User, error)       // case-insensitive, ErrNotFound
-Update(ctx, User) (User, error)              // username/email/active only, never the hash
+Update(ctx, User) (User, error)              // username/email/active/teacher link, never the hash
 SetPasswordHash(ctx, id, hash string) error  // ErrNotFound when missing
 Delete(ctx, id string) error                 // no-op when absent
 ```
@@ -67,6 +67,8 @@ ByID(ctx, id string) (User, error)
 ByUsername(ctx, username string) (User, error) // admin tooling; login uses Authenticate
 SetPassword(ctx, id, newPassword string) error
 SetActive(ctx, id string, active bool) (User, error)
+LinkTeacher(ctx, userID, teacherID string) (User, error) // binds login to profile
+UnlinkTeacher(ctx, userID string) (User, error)         // back to a pure account
 Delete(ctx, id string) error
 ```
 
@@ -93,6 +95,10 @@ i18n `Coded` contract, e.g. `users.ErrNotFound` → catalog key
   otherwise by username. Unknown identifier, wrong password and inactive
   account all return `ErrInvalidCredentials` (HTTP 401) without revealing
   which field failed.
+- **Teacher link**: `TeacherID` binds a login to a teacher profile so
+  `GET /v1/teachers/me/schedule` resolves the caller (dangling ids
+  resolve to no schedule, never an error). Set at seed time for the
+  demo teacher; link management over HTTP arrives with the login flow.
 
 ## Database schema
 
