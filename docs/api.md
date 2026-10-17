@@ -53,6 +53,7 @@ Routes declare one required permission, enforced by
 | `GET /v1/students/{id}/incidents` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/dashboard/summary?year=AAAA` | `manage-system` | admin only |
 | `POST /v1/students` | `manage-students` | admin only |
+| `PUT /v1/students/{id}` | `manage-students` | admin only |
 | `POST /v1/teachers` | `manage-users` | admin only |
 | `GET /v1/teachers` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}` | `manage-users` | admin only |
