@@ -64,6 +64,11 @@ Routes declare one required permission, enforced by
 | `POST /v1/assignments` | `manage-users` | admin only |
 | `POST /v1/assignments/{id}/end` | `manage-users` | admin only |
 | `DELETE /v1/assignments/{id}` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}/assignments` | `manage-users` | admin only |
+| `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
+| `POST /v1/schedule` | `manage-users` | admin only |
+| `PUT /v1/schedule/{id}` | `manage-users` | admin only |
+| `DELETE /v1/schedule/{id}` | `manage-users` | admin only |
 | `POST /v1/roles` | `manage-roles` | admin only |
 
 Self-scoped reads (`view-own-history`) additionally require

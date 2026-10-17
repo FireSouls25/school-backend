@@ -118,6 +118,14 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Delete("/assignments/{id}", handleRemoveAssignment(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}/assignments", handleTeacherAssignments(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/schedule", handleListSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/schedule", handleCreateSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/schedule/{id}", handleUpdateSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Delete("/schedule/{id}", handleDeleteSchedule(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).

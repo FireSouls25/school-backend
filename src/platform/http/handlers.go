@@ -597,6 +597,149 @@ func handleTeacherAssignments(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// scheduleRequest is the body for creating or replacing a schedule entry.
+// Start/End are "HH:MM" clocks; duration and school hours are enforced
+// by the service (07:00-14:00, minimum one hour).
+type scheduleRequest struct {
+	ClassGroupID string `json:"classGroupID"`
+	TeacherID    string `json:"teacherID"`
+	SubjectID    string `json:"subjectID"`
+	Weekday      int    `json:"weekday"`
+	Start        string `json:"start"`
+	End          string `json:"end"`
+}
+
+// parseScheduleBody decodes and validates a schedule entry body. The ID
+// comes from the path on replace and is empty on create (assigned).
+func parseScheduleBody(w http.ResponseWriter, r *http.Request, id string) (schedules.Entry, bool) {
+	var body scheduleRequest
+	if !decodeJSON(w, r, &body) {
+		return schedules.Entry{}, false
+	}
+	start, err := schedules.ParseClock(body.Start)
+	if err != nil {
+		WriteError(w, r, errBadRequest)
+		return schedules.Entry{}, false
+	}
+	end, err := schedules.ParseClock(body.End)
+	if err != nil {
+		WriteError(w, r, errBadRequest)
+		return schedules.Entry{}, false
+	}
+	return schedules.Entry{
+		ID: id, ClassGroupID: body.ClassGroupID, TeacherID: body.TeacherID,
+		SubjectID: body.SubjectID, Weekday: body.Weekday, Start: start, End: end,
+	}, true
+}
+
+// handleListSchedule returns schedule entries filtered by teacher and/or
+// class-group, optionally narrowed to one weekday. At least one of
+// ?teacherID= / ?classGroupID= is required: no unfiltered full dump.
+func handleListSchedule(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		teacherID := strings.TrimSpace(q.Get("teacherID"))
+		classGroupID := strings.TrimSpace(q.Get("classGroupID"))
+		if teacherID == "" && classGroupID == "" {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		var weekday *int
+		if raw := strings.TrimSpace(q.Get("weekday")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 0 || n > 6 {
+				WriteError(w, r, errBadRequest)
+				return
+			}
+			weekday = &n
+		}
+		var list []schedules.Entry
+		if teacherID != "" {
+			entries, err := deps.Schedules.EntriesForTeacher(r.Context(), teacherID)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			list = append(list, entries...)
+		}
+		if classGroupID != "" {
+			entries, err := deps.Schedules.EntriesForGroup(r.Context(), classGroupID)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			if teacherID != "" {
+				for _, e := range entries {
+					if e.TeacherID == teacherID {
+						list = append(list, e)
+					}
+				}
+			} else {
+				list = append(list, entries...)
+			}
+		}
+		if weekday != nil {
+			filtered := list[:0]
+			for _, e := range list {
+				if e.Weekday == *weekday {
+					filtered = append(filtered, e)
+				}
+			}
+			list = filtered
+		}
+		if list == nil {
+			list = []schedules.Entry{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// handleCreateSchedule places one weekly slot. Overlaps (teacher or
+// class-group), out-of-hours and untaught pairings fail with stable
+// 400 codes the console renders inline.
+func handleCreateSchedule(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entry, ok := parseScheduleBody(w, r, "")
+		if !ok {
+			return
+		}
+		created, err := deps.Schedules.Create(r.Context(), entry)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	}
+}
+
+// handleUpdateSchedule replaces one weekly slot, re-checking everything.
+// The ID comes from the path.
+func handleUpdateSchedule(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entry, ok := parseScheduleBody(w, r, chi.URLParam(r, "id"))
+		if !ok {
+			return
+		}
+		updated, err := deps.Schedules.Update(r.Context(), entry)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
+// handleDeleteSchedule removes one weekly slot.
+func handleDeleteSchedule(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := deps.Schedules.Delete(r.Context(), chi.URLParam(r, "id")); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // parseYearQuery reads a ?year= calendar year: missing, non-numeric or
 // out-of-range values fail with 400 http.err_bad_request.
 func parseYearQuery(w http.ResponseWriter, r *http.Request) (int, bool) {
