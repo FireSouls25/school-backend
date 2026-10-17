@@ -37,7 +37,7 @@ func (s *Service) Record(ctx context.Context, e Entry) (Entry, error) {
 		return Entry{}, ErrInvalidSubject
 	}
 	switch e.Action {
-	case ActionRead, ActionCreate, ActionUpdate, ActionMark:
+	case ActionRead, ActionCreate, ActionUpdate, ActionDelete, ActionMark:
 	default:
 		return Entry{}, ErrInvalidAction
 	}

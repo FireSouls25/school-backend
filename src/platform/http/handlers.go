@@ -476,9 +476,11 @@ func handleCreateSubject(deps Dependencies) http.HandlerFunc {
 			Grades: body.Grades, Color: body.Color,
 		})
 		if err != nil {
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceSubject, "", "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionCreate, audit.ResourceSubject, subj.ID, "", http.StatusCreated)
 		writeJSON(w, http.StatusCreated, subj)
 	}
 }
@@ -497,9 +499,11 @@ func handleUpdateSubject(deps Dependencies) http.HandlerFunc {
 			Color: body.Color, Active: body.Active,
 		})
 		if err != nil {
+			recordAudit(deps, r, audit.ActionUpdate, audit.ResourceSubject, chi.URLParam(r, "id"), "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceSubject, subj.ID, "", http.StatusOK)
 		writeJSON(w, http.StatusOK, subj)
 	}
 }
@@ -509,10 +513,13 @@ func handleUpdateSubject(deps Dependencies) http.HandlerFunc {
 // retire with Active=false instead.
 func handleDeleteSubject(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := deps.Subjects.DeleteSubject(r.Context(), chi.URLParam(r, "id")); err != nil {
+		id := chi.URLParam(r, "id")
+		if err := deps.Subjects.DeleteSubject(r.Context(), id); err != nil {
+			recordAudit(deps, r, audit.ActionDelete, audit.ResourceSubject, id, "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionDelete, audit.ResourceSubject, id, "", http.StatusNoContent)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -555,9 +562,11 @@ func handleAssignSubject(deps Dependencies) http.HandlerFunc {
 		}
 		a, err := deps.Subjects.Assign(r.Context(), body.TeacherID, body.SubjectID, startedAt)
 		if err != nil {
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceAssignment, "", "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionCreate, audit.ResourceAssignment, a.ID, "", http.StatusCreated)
 		writeJSON(w, http.StatusCreated, a)
 	}
 }
@@ -582,9 +591,11 @@ func handleEndAssignment(deps Dependencies) http.HandlerFunc {
 		}
 		a, err := deps.Subjects.EndAssignment(r.Context(), chi.URLParam(r, "id"), endedAt)
 		if err != nil {
+			recordAudit(deps, r, audit.ActionUpdate, audit.ResourceAssignment, chi.URLParam(r, "id"), "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceAssignment, a.ID, "", http.StatusOK)
 		writeJSON(w, http.StatusOK, a)
 	}
 }
@@ -593,10 +604,13 @@ func handleEndAssignment(deps Dependencies) http.HandlerFunc {
 // Ending (not removing) is the way to close a finished period.
 func handleRemoveAssignment(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := deps.Subjects.RemoveAssignment(r.Context(), chi.URLParam(r, "id")); err != nil {
+		id := chi.URLParam(r, "id")
+		if err := deps.Subjects.RemoveAssignment(r.Context(), id); err != nil {
+			recordAudit(deps, r, audit.ActionDelete, audit.ResourceAssignment, id, "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionDelete, audit.ResourceAssignment, id, "", http.StatusNoContent)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

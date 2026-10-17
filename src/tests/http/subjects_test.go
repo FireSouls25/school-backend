@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"grade/src/core/audit"
 	"grade/src/core/roles"
 	"grade/src/core/subjects"
 	httpapi "grade/src/platform/http"
@@ -28,6 +29,7 @@ func subjectStack(t *testing.T) http.Handler {
 		Roles:    roleSvc,
 		RolesSvc: roleSvc,
 		Subjects: subjects.NewService(subjects.NewMemoryStore()),
+		Audit:    audit.NewService(audit.NewMemoryStore()),
 	}, newI18n(t))
 }
 
@@ -189,5 +191,25 @@ func TestSubjectsCatalogFlow(t *testing.T) {
 	}
 	if list := decodeSubjects(t, rec.Body.Bytes()); len(list) != 1 {
 		t.Fatalf("teacher timeline len = %d, want 1", len(list))
+	}
+
+	// Every catalog write trailed itself: newest first.
+	rec = doRequest(t, h, http.MethodGet, "/v1/audit?limit=20", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("audit status = %d, want 200", rec.Code)
+	}
+	var trail []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &trail); err != nil {
+		t.Fatalf("decode trail: %v", err)
+	}
+	if len(trail) != 12 {
+		t.Fatalf("trail len = %d, want 12 catalog writes (8 ok + 4 denied)", len(trail))
+	}
+	first, last := trail[0], trail[11]
+	if first["Action"] != "create" || first["Resource"] != "assignment" || first["Status"] != float64(201) {
+		t.Errorf("trail[0] = %v, want the reassign create", first)
+	}
+	if last["Action"] != "create" || last["Resource"] != "subject" || last["Status"] != float64(400) {
+		t.Errorf("trail[11] = %v, want the first denied create", last)
 	}
 }
