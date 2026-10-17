@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"grade/src/core/audit"
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
@@ -46,6 +48,7 @@ type Dependencies struct {
 	Sessions    *sessions.Service
 	Statistics  *statistics.Service
 	Dashboard   *statistics.DashboardService
+	Audit       *audit.Service
 	Subjects    *subjects.Service
 	Classes     *classes.Service
 	Years       *schoolyears.Service
@@ -54,6 +57,23 @@ type Dependencies struct {
 	Incidents   *incidents.Service
 	// AllowedOrigins lists browser origins accepted by CORS.
 	AllowedOrigins []string
+}
+
+// recordAudit trails one mutating action with its real outcome, so
+// denied attempts stay visible too. Recording never fails the action:
+// a nil service (tests with partial dependencies) or a record error
+// only drops the row, loudly in the server log.
+func recordAudit(deps Dependencies, r *http.Request, action audit.Action, resource audit.Resource, resourceID, studentID string, status int) {
+	if deps.Audit == nil {
+		return
+	}
+	subject, _ := SubjectFrom(r.Context())
+	if _, err := deps.Audit.Record(r.Context(), audit.Entry{
+		SubjectID: subject, Action: action, Resource: resource,
+		ResourceID: resourceID, StudentID: studentID, Status: status,
+	}); err != nil {
+		slog.Warn("audit record dropped", "resource", string(resource), "error", err)
+	}
 }
 
 // meResponse describes the caller for frontend navigation (roles, home).
@@ -788,9 +808,11 @@ func handleCreateSchedule(deps Dependencies) http.HandlerFunc {
 		}
 		created, err := deps.Schedules.Create(r.Context(), entry)
 		if err != nil {
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceSchedule, "", "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionCreate, audit.ResourceSchedule, created.ID, "", http.StatusCreated)
 		writeJSON(w, http.StatusCreated, created)
 	}
 }
@@ -805,9 +827,11 @@ func handleUpdateSchedule(deps Dependencies) http.HandlerFunc {
 		}
 		updated, err := deps.Schedules.Update(r.Context(), entry)
 		if err != nil {
+			recordAudit(deps, r, audit.ActionUpdate, audit.ResourceSchedule, entry.ID, "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceSchedule, updated.ID, "", http.StatusOK)
 		writeJSON(w, http.StatusOK, updated)
 	}
 }
@@ -815,11 +839,44 @@ func handleUpdateSchedule(deps Dependencies) http.HandlerFunc {
 // handleDeleteSchedule removes one weekly slot.
 func handleDeleteSchedule(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := deps.Schedules.Delete(r.Context(), chi.URLParam(r, "id")); err != nil {
+		id := chi.URLParam(r, "id")
+		if err := deps.Schedules.Delete(r.Context(), id); err != nil {
+			recordAudit(deps, r, audit.ActionUpdate, audit.ResourceSchedule, id, "", statusForErr(err))
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceSchedule, id, "", http.StatusNoContent)
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleListAudit returns trail rows newest first: the Bitácora feed and
+// the per-student file. Admin-only; the console renders 403 as
+// "Acceso restringido" instead of an error.
+func handleListAudit(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		limit := 50
+		if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 1 {
+				WriteError(w, r, errBadRequest)
+				return
+			}
+			limit = n
+		}
+		list, err := deps.Audit.List(r.Context(), audit.Filter{
+			Limit:     limit,
+			StudentID: strings.TrimSpace(q.Get("studentID")),
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []audit.Entry{}
+		}
+		writeJSON(w, http.StatusOK, list)
 	}
 }
 
@@ -933,7 +990,10 @@ func handleClassRoster(deps Dependencies) http.HandlerFunc {
 }
 
 // handleMySchedule returns the caller's slots for ?weekday=N (0=Sunday
-// to 6=Saturday, as time.Weekday): the teacher day view.
+// to 6=Saturday, as time.Weekday): the teacher day view. The caller is a
+// login, not a profile: when the account links to a teacher, the link
+// resolves; otherwise the subject itself is tried (callers whose subject
+// already is a teacher id keep working).
 func handleMySchedule(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw := strings.TrimSpace(r.URL.Query().Get("weekday"))
@@ -943,7 +1003,11 @@ func handleMySchedule(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		subject, _ := SubjectFrom(r.Context())
-		entries, err := deps.Schedules.EntriesForTeacherOnDay(r.Context(), subject, time.Weekday(n))
+		teacherID := subject
+		if u, err := deps.Users.ByID(r.Context(), subject); err == nil && u.TeacherID != "" {
+			teacherID = u.TeacherID
+		}
+		entries, err := deps.Schedules.EntriesForTeacherOnDay(r.Context(), teacherID, time.Weekday(n))
 		if err != nil {
 			WriteError(w, r, err)
 			return

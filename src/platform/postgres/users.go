@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"grade/src/core/users"
 )
@@ -23,24 +24,37 @@ func NewUsersStore(db *DB) *UsersStore { return &UsersStore{db: db} }
 var _ users.Store = (*UsersStore)(nil)
 
 // userColumns is the full column list used by every user SELECT.
-const userColumns = `id, username, email, password_hash, active, created_at, updated_at`
+const userColumns = `id, username, email, password_hash, active, teacher_id, created_at, updated_at`
 
 // scanUser maps the current row (in userColumns order) onto a User.
 func scanUser(scan func(dest ...any) error) (users.User, error) {
 	var u users.User
+	var teacherID *string
 	var created, updated time.Time
-	err := scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Active, &created, &updated)
+	err := scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Active, &teacherID, &created, &updated)
 	if err != nil {
 		return users.User{}, err
+	}
+	if teacherID != nil {
+		u.TeacherID = *teacherID
 	}
 	u.CreatedAt = created
 	u.UpdatedAt = updated
 	return u, nil
 }
 
+// teacherIDArg maps the empty link to a NULL UUID. pgtype is required:
+// plain nil encodes as empty string, rejected by UUID columns.
+func teacherIDArg(u users.User) any {
+	if u.TeacherID == "" {
+		return pgtype.UUID{Valid: false}
+	}
+	return u.TeacherID
+}
+
 // userArgs flattens u into the INSERT argument order.
 func userArgs(u users.User) []any {
-	return []any{u.ID, u.Username, u.Email, u.PasswordHash, u.Active, u.CreatedAt, u.UpdatedAt}
+	return []any{u.ID, u.Username, u.Email, u.PasswordHash, u.Active, teacherIDArg(u), u.CreatedAt, u.UpdatedAt}
 }
 
 // translateUserWrite maps unique violations on the username/email indexes
@@ -58,8 +72,8 @@ func translateUserWrite(err error, what string) error {
 // Create implements users.Store.
 func (s *UsersStore) Create(ctx context.Context, u users.User) (users.User, error) {
 	row := s.db.pool.QueryRow(ctx, `
-		INSERT INTO users (id, username, email, password_hash, active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO users (id, username, email, password_hash, active, teacher_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+userColumns,
 		userArgs(u)...)
 	out, err := scanUser(row.Scan)
@@ -116,10 +130,10 @@ func (s *UsersStore) ByEmail(ctx context.Context, email string) (users.User, err
 func (s *UsersStore) Update(ctx context.Context, u users.User) (users.User, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		UPDATE users
-		SET username = $2, email = $3, active = $4, updated_at = now()
+		SET username = $2, email = $3, active = $4, teacher_id = $5, updated_at = now()
 		WHERE id = $1
 		RETURNING `+userColumns,
-		u.ID, u.Username, u.Email, u.Active)
+		u.ID, u.Username, u.Email, u.Active, teacherIDArg(u))
 	out, err := scanUser(row.Scan)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return users.User{}, users.ErrNotFound

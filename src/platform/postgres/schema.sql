@@ -331,3 +331,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique
 -- Emails are unique when present, case-insensitively.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
     ON users (lower(email)) WHERE email <> '';
+
+-- Account phase: link a login to its teacher profile, so "my schedule"
+-- resolves without a second login. Nullable; deleting the profile
+-- unlinks instead of deleting the account. Placed last so the teachers
+-- table always exists for the reference.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS teacher_id UUID NULL REFERENCES teachers (id) ON DELETE SET NULL;
+
+-- Audit trail: who did what to which record, when, with what outcome.
+-- Append-only by convention (no updates or deletes anywhere in the
+-- codebase); student_id is null for non-student actions such as schedule
+-- and catalog writes.
+CREATE TABLE IF NOT EXISTS audit_entries (
+    id          UUID PRIMARY KEY,
+    subject_id  UUID        NOT NULL,
+    action      TEXT        NOT NULL,
+    resource    TEXT        NOT NULL,
+    resource_id UUID        NULL,
+    student_id  UUID        NULL,
+    status      INTEGER     NOT NULL,
+    happened_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_happened_at ON audit_entries (happened_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_student_id ON audit_entries (student_id) WHERE student_id IS NOT NULL;
+-- Failed writes have no resource to point at: their id travels empty.
+ALTER TABLE audit_entries ALTER COLUMN resource_id DROP NOT NULL;

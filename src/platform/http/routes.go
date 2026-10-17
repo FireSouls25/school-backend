@@ -130,6 +130,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Put("/schedule/{id}", handleUpdateSchedule(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Delete("/schedule/{id}", handleDeleteSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+			Get("/audit", handleListAudit(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).

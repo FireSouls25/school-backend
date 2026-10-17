@@ -305,3 +305,31 @@ func mustYearID(ctx context.Context, store schoolyears.Store) string {
 	}
 	return years[0].ID
 }
+
+func TestSeedLinksTeacherAccountToProfile(t *testing.T) {
+	ctx := context.Background()
+	d := newMemoryDeps()
+	if _, err := devseed.Run(ctx, d.deps); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	account, err := d.userStore.ByUsername(ctx, devseed.TeacherUsername)
+	if err != nil {
+		t.Fatalf("ByUsername: %v", err)
+	}
+	if account.TeacherID == "" {
+		t.Fatal("demo teacher account has no teacher link")
+	}
+	profiles, err := d.teacherStore.List(ctx)
+	if err != nil {
+		t.Fatalf("List teachers: %v", err)
+	}
+	found := false
+	for _, p := range profiles {
+		if p.ID == account.TeacherID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("TeacherID %q matches no seeded profile", account.TeacherID)
+	}
+}

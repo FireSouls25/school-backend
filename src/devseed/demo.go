@@ -239,6 +239,13 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 		}
 	}
 
+	// The demo teacher logs in as carlos.mendoza but teaches as the Carlos
+	// profile: link both records so "my schedule" resolves. Idempotent.
+	teacherAccount.TeacherID = teacherProfiles[0].ID
+	if _, err := deps.Users.Update(ctx, teacherAccount); err != nil {
+		return sum, fmt.Errorf("devseed: link teacher account: %w", err)
+	}
+
 	roster := []struct {
 		group     string
 		grade     int

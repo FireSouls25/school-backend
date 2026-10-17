@@ -71,6 +71,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/schedule` | `manage-users` | admin only |
 | `PUT /v1/schedule/{id}` | `manage-users` | admin only |
 | `DELETE /v1/schedule/{id}` | `manage-users` | admin only |
+| `GET /v1/audit?limit=&studentID=` | `manage-system` | admin only |
 | `POST /v1/roles` | `manage-roles` | admin only |
 
 Self-scoped reads (`view-own-history`) additionally require

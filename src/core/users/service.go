@@ -221,6 +221,47 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, strings.TrimSpace(id))
 }
 
+// LinkTeacher binds a login to a teacher profile, so schedule and name
+// lookups resolve the caller to their teaching self. Re-linking replaces
+// the previous link; the teachers capability owns the profile itself.
+func (s *Service) LinkTeacher(ctx context.Context, userID, teacherID string) (User, error) {
+	if err := validateID(userID); err != nil {
+		return User{}, err
+	}
+	if _, err := uuid.Parse(strings.TrimSpace(teacherID)); err != nil {
+		return User{}, ErrInvalidTeacher
+	}
+	u, err := s.store.ByID(ctx, strings.TrimSpace(userID))
+	if err != nil {
+		return User{}, err
+	}
+	u.TeacherID = strings.TrimSpace(teacherID)
+	u.UpdatedAt = time.Now()
+	u, err = s.store.Update(ctx, u)
+	if err != nil {
+		return User{}, err
+	}
+	return u.Sanitized(), nil
+}
+
+// UnlinkTeacher removes the teacher binding, back to a pure account.
+func (s *Service) UnlinkTeacher(ctx context.Context, userID string) (User, error) {
+	if err := validateID(userID); err != nil {
+		return User{}, err
+	}
+	u, err := s.store.ByID(ctx, strings.TrimSpace(userID))
+	if err != nil {
+		return User{}, err
+	}
+	u.TeacherID = ""
+	u.UpdatedAt = time.Now()
+	u, err = s.store.Update(ctx, u)
+	if err != nil {
+		return User{}, err
+	}
+	return u.Sanitized(), nil
+}
+
 // normalizeUsername trims and lowercases the username so validation and
 // storage see a canonical form.
 func normalizeUsername(s string) string {

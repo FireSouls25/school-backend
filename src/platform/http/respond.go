@@ -37,6 +37,12 @@ var statusByCode = map[string]int{
 	"users.err_duplicate_username":  http.StatusBadRequest,
 	"users.err_duplicate_email":     http.StatusBadRequest,
 	"users.err_invalid_credentials": http.StatusUnauthorized,
+	"users.err_invalid_teacher":     http.StatusBadRequest,
+
+	"audit.err_invalid_subject":  http.StatusBadRequest,
+	"audit.err_invalid_action":   http.StatusBadRequest,
+	"audit.err_invalid_resource": http.StatusBadRequest,
+	"audit.err_invalid_status":   http.StatusBadRequest,
 
 	"students.err_not_found":            http.StatusNotFound,
 	"students.err_invalid_id":           http.StatusBadRequest,
@@ -169,6 +175,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// statusFor maps a coded error to its HTTP status (500 fallback). The
+// trail recorder reuses it so denied attempts keep their real outcome.
+func statusFor(code string) int {
+	if status := statusByCode[code]; status != 0 {
+		return status
+	}
+	return http.StatusInternalServerError
+}
+
+// statusForErr resolves err to its HTTP status without writing anything.
+func statusForErr(err error) int {
+	code := "http.err_internal"
+	if key, ok := i18n.MessageKey(err); ok {
+		code = key
+	}
+	return statusFor(code)
+}
+
 // WriteError writes a localized error envelope for err. Domain errors should
 // implement the i18n Coded contract so their message key is stable.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
@@ -183,9 +207,6 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		message = tr.Translate(code, nil)
 	}
 
-	status := statusByCode[code]
-	if status == 0 {
-		status = http.StatusInternalServerError
-	}
+	status := statusFor(code)
 	writeJSON(w, status, ErrorResponse{Error: ErrorBody{Code: code, Message: message}})
 }

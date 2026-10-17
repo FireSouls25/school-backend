@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"grade/src/core/attendance"
+	"grade/src/core/audit"
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
@@ -37,6 +38,7 @@ type Stores struct {
 	Attendance  attendance.Store
 	Incidents   incidents.Store
 	Warnings    warnings.Store
+	Audit       audit.Store
 	Teachers    teachers.Store
 	Subjects    subjects.Store
 	Years       schoolyears.Store
@@ -56,6 +58,7 @@ type Services struct {
 	Attendance  *attendance.Service
 	Incidents   *incidents.Service
 	Warnings    *warnings.Service
+	Audit       *audit.Service
 	Teachers    *teachers.Service
 	Subjects    *subjects.Service
 	Years       *schoolyears.Service
@@ -90,6 +93,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Attendance:  attendance.NewMemoryStore(),
 		Incidents:   incidents.NewMemoryStore(),
 		Warnings:    warnings.NewMemoryStore(),
+		Audit:       audit.NewMemoryStore(),
 		Teachers:    teachers.NewMemoryStore(),
 		Subjects:    subjects.NewMemoryStore(),
 		Years:       schoolyears.NewMemoryStore(),
@@ -112,6 +116,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Attendance = pg.NewAttendanceStore(db)
 		s.Incidents = pg.NewIncidentsStore(db)
 		s.Warnings = pg.NewWarningsStore(db)
+		s.Audit = pg.NewAuditStore(db)
 		s.Teachers = pg.NewTeachersStore(db)
 		s.Subjects = pg.NewSubjectsStore(db)
 		s.Years = pg.NewSchoolYearsStore(db)
@@ -126,6 +131,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 
 	subjectsSvc := subjects.NewService(s.Subjects)
+	auditSvc := audit.NewService(s.Audit)
 	schedulesSvc := schedules.NewService(s.Schedules, subjectChecker{subjectsSvc})
 	// The catalog delete-guard counts schedule entries through the same
 	// service the future schedule routes will use: one source of truth.
@@ -148,6 +154,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Attendance:  attendance.NewService(s.Attendance),
 			Incidents:   incidentsSvc,
 			Warnings:    warningsSvc,
+			Audit:       auditSvc,
 			Teachers:    teachersSvc,
 			Subjects:    subjectsSvc,
 			Years:       yearsSvc,

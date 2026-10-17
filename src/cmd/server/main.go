@@ -60,6 +60,7 @@ func main() {
 		Enrollments:    application.Services.Enrollments,
 		Schedules:      application.Services.Schedules,
 		Incidents:      application.Services.Incidents,
+		Audit:          application.Services.Audit,
 		Subjects:       application.Services.Subjects,
 		AllowedOrigins: cfg.AllowedOrigins,
 	}, i18nSvc)); err != nil {

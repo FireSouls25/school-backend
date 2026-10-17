@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"grade/src/core/attendance"
+	"grade/src/core/audit"
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
@@ -27,6 +28,7 @@ import (
 // testDB truncates them (CASCADE) so each test starts from an empty,
 // freshly-migrated database even though all tests share one server.
 var testTables = []string{
+	"audit_entries",
 	"session_revisions",
 	"session_rosters",
 	"sessions",
@@ -382,6 +384,30 @@ func TestUsersStoreRoundTrip(t *testing.T) {
 	if upd.Active || upd.PasswordHash != want.PasswordHash {
 		t.Errorf("Update = %+v, want inactive with untouched hash", upd)
 	}
+	// The teacher link round-trips through Update, including back to empty.
+	// The profile really exists: the FK rejects dangling links.
+	if _, err := pg.NewTeachersStore(db).Create(ctx, teachers.Teacher{
+		ID: "11111111-1111-4111-8111-111111111111", Names: "Luis", Surnames: "Pardo",
+		DocumentID: "80111222",
+	}); err != nil {
+		t.Fatalf("Create teacher: %v", err)
+	}
+	upd.TeacherID = "11111111-1111-4111-8111-111111111111"
+	linked, err := store.Update(ctx, upd)
+	if err != nil {
+		t.Fatalf("Update link: %v", err)
+	}
+	if linked.TeacherID != upd.TeacherID {
+		t.Errorf("TeacherID = %q, want link", linked.TeacherID)
+	}
+	linked.TeacherID = ""
+	unlinked, err := store.Update(ctx, linked)
+	if err != nil {
+		t.Fatalf("Update unlink: %v", err)
+	}
+	if unlinked.TeacherID != "" {
+		t.Errorf("TeacherID = %q, want empty", unlinked.TeacherID)
+	}
 	if err := store.SetPasswordHash(ctx, want.ID, "newhash"); err != nil {
 		t.Fatalf("SetPasswordHash: %v", err)
 	}
@@ -398,6 +424,69 @@ func TestUsersStoreRoundTrip(t *testing.T) {
 	}
 	if _, err := store.ByID(ctx, want.ID); !errors.Is(err, users.ErrNotFound) {
 		t.Errorf("ByID after delete error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAuditRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	store := pg.NewAuditStore(db)
+	first, err := store.Record(ctx, audit.Entry{
+		ID:        "dddddddd-1111-4111-8111-dddddddddddd",
+		SubjectID: "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa", Action: audit.ActionCreate,
+		Resource: audit.ResourceSchedule, ResourceID: "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
+		Status: 201, HappenedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if first.ID == "" || first.Action != audit.ActionCreate {
+		t.Fatalf("Record = %+v, want stored entry", first)
+	}
+
+	list, err := store.List(ctx, audit.Filter{Limit: 10})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != first.ID || list[0].Resource != audit.ResourceSchedule {
+		t.Errorf("List = %+v, want the schedule row", list)
+	}
+
+	student := "cccccccc-3333-4333-8333-cccccccccccc"
+	if _, err := store.Record(ctx, audit.Entry{
+		ID:        "eeeeeeee-2222-4222-8222-eeeeeeeeeeee",
+		SubjectID: first.SubjectID, Action: audit.ActionRead, Resource: audit.ResourceStudent,
+		ResourceID: student, StudentID: student, Status: 200, HappenedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Record student row: %v", err)
+	}
+	only, err := store.List(ctx, audit.Filter{Limit: 10, StudentID: student})
+	if err != nil {
+		t.Fatalf("filtered List: %v", err)
+	}
+	if len(only) != 1 || only[0].StudentID != student {
+		t.Errorf("filtered = %+v, want the student row", only)
+	}
+
+	// Failed writes travel with an empty resource id and still persist.
+	denied, err := store.Record(ctx, audit.Entry{
+		ID:        "ffffffff-4444-4444-8444-ffffffffffff",
+		SubjectID: first.SubjectID, Action: audit.ActionCreate, Resource: audit.ResourceSchedule,
+		Status: 400, HappenedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Record denied: %v", err)
+	}
+	if denied.ResourceID != "" {
+		t.Errorf("ResourceID = %q, want empty", denied.ResourceID)
+	}
+	back, err := store.List(ctx, audit.Filter{Limit: 10})
+	if err != nil {
+		t.Fatalf("List after denied: %v", err)
+	}
+	if len(back) != 3 || back[0].Status != 400 {
+		t.Errorf("newest = %+v, want the denied row first", back)
 	}
 }
 
