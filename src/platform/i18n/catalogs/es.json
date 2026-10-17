@@ -28,6 +28,7 @@
   "students.err_invalid_name": "Nombre del estudiante inválido",
   "students.err_invalid_class": "Curso inválido",
   "students.err_photo_too_large": "La foto excede el tamaño máximo permitido",
+  "students.err_photo_not_found": "Este estudiante aún no tiene foto",
   "students.err_invalid_document": "Documento de identidad inválido",
   "students.err_invalid_birth": "Fecha de nacimiento inválida",
   "students.err_invalid_blood_type": "Tipo de sangre inválido",

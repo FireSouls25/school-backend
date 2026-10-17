@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -137,6 +138,99 @@ func allowStudentView(ctx context.Context, auth roles.Authorizer, subject, stude
 	}
 	ok, err := auth.Can(ctx, subject, roles.PermissionViewOwnHistory)
 	return err == nil && ok
+}
+
+// photoRequest carries a base64 image (plain or data-URL form) for
+// upload. Empty data clears the stored photo.
+type photoRequest struct {
+	Data string `json:"data"`
+}
+
+// photoResponse returns the stored photo as base64 with its detected
+// content type, ready for a data URL.
+type photoResponse struct {
+	Data        string `json:"data"`
+	ContentType string `json:"contentType"`
+}
+
+// errPhotoNotFound renders 404 when the student has no photo yet.
+var errPhotoNotFound = codedError{"students.err_photo_not_found"}
+
+// maxPhotoBodyBytes caps photo uploads above the 2 MiB domain limit:
+// base64 inflates by 4/3, so the JSON envelope needs headroom.
+const maxPhotoBodyBytes = 4 << 20
+
+// decodePhotoBody is decodeJSON with a photo-sized body cap.
+func decodePhotoBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxPhotoBodyBytes)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		WriteError(w, r, errBadRequest)
+		return false
+	}
+	if dec.More() {
+		WriteError(w, r, errBadRequest)
+		return false
+	}
+	return true
+}
+
+// photoBytes strips an optional data-URL prefix and decodes base64.
+func photoBytes(raw string) ([]byte, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	if i := strings.Index(raw, ","); i >= 0 && strings.Contains(raw[:i], "base64") {
+		raw = raw[i+1:]
+	}
+	return base64.StdEncoding.DecodeString(raw)
+}
+
+// handlePutPhoto stores (or clears, when empty) a student photo.
+func handlePutPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body photoRequest
+		if !decodePhotoBody(w, r, &body) {
+			return
+		}
+		data, err := photoBytes(body.Data)
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		if err := deps.Students.PutPhoto(r.Context(), chi.URLParam(r, "id"), students.Photo{Data: data}); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleGetPhoto returns the stored photo, if any.
+func handleGetPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		id := chi.URLParam(r, "id")
+		if !allowStudentView(r.Context(), deps.Auth, subject, id) {
+			WriteError(w, r, errForbidden)
+			return
+		}
+		photo, err := deps.Students.Photo(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if len(photo.Data) == 0 {
+			WriteError(w, r, errPhotoNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, photoResponse{
+			Data:        base64.StdEncoding.EncodeToString(photo.Data),
+			ContentType: http.DetectContentType(photo.Data),
+		})
+	}
 }
 
 // handleGetStudent returns one student profile.

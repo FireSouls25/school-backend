@@ -56,6 +56,7 @@ var statusByCode = map[string]int{
 	"students.err_invalid_name":         http.StatusBadRequest,
 	"students.err_invalid_class":        http.StatusBadRequest,
 	"students.err_photo_too_large":      http.StatusRequestEntityTooLarge,
+	"students.err_photo_not_found":      http.StatusNotFound,
 	"students.err_invalid_document":     http.StatusBadRequest,
 	"students.err_invalid_birth":        http.StatusBadRequest,
 	"students.err_invalid_blood_type":   http.StatusBadRequest,
