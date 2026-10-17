@@ -23,7 +23,31 @@ func NewSubjectsStore(db *DB) *SubjectsStore { return &SubjectsStore{db: db} }
 var _ subjects.Store = (*SubjectsStore)(nil)
 
 // subjectColumns is the full column list used by every subject SELECT.
-const subjectColumns = `id, name, code, description, active`
+const subjectColumns = `id, name, code, description, grades, color, active`
+
+// gradesToPG converts domain grades to the INTEGER[] driver type.
+func gradesToPG(grades []int) []int32 {
+	out := make([]int32, 0, len(grades))
+	for _, g := range grades {
+		out = append(out, int32(g))
+	}
+	return out
+}
+
+// scanSubject maps the current row (in subjectColumns order) onto a Subject.
+func scanSubject(scan func(dest ...any) error) (subjects.Subject, error) {
+	var subj subjects.Subject
+	var grades []int32
+	err := scan(&subj.ID, &subj.Name, &subj.Code, &subj.Description, &grades, &subj.Color, &subj.Active)
+	if err != nil {
+		return subjects.Subject{}, err
+	}
+	subj.Grades = make([]int, 0, len(grades))
+	for _, g := range grades {
+		subj.Grades = append(subj.Grades, int(g))
+	}
+	return subj, nil
+}
 
 // assignmentColumns is the full column list used by every assignment SELECT.
 const assignmentColumns = `id, teacher_id, subject_id, started_at, ended_at`
@@ -46,12 +70,12 @@ func scanAssignment(scan func(dest ...any) error) (subjects.Assignment, error) {
 // CreateSubject implements subjects.Store.
 func (s *SubjectsStore) CreateSubject(ctx context.Context, subj subjects.Subject) (subjects.Subject, error) {
 	row := s.db.pool.QueryRow(ctx, `
-		INSERT INTO subjects (id, name, code, description, active)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO subjects (id, name, code, description, grades, color, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+subjectColumns,
-		subj.ID, subj.Name, subj.Code, subj.Description, subj.Active)
-	var out subjects.Subject
-	if err := row.Scan(&out.ID, &out.Name, &out.Code, &out.Description, &out.Active); err != nil {
+		subj.ID, subj.Name, subj.Code, subj.Description, gradesToPG(subj.Grades), subj.Color, subj.Active)
+	out, err := scanSubject(row.Scan)
+	if err != nil {
 		if isUniqueViolationOn(err, "subjects") {
 			return subjects.Subject{}, subjects.ErrDuplicateSubject
 		}
@@ -64,8 +88,7 @@ func (s *SubjectsStore) CreateSubject(ctx context.Context, subj subjects.Subject
 func (s *SubjectsStore) SubjectByID(ctx context.Context, id string) (subjects.Subject, error) {
 	row := s.db.pool.QueryRow(ctx,
 		`SELECT `+subjectColumns+` FROM subjects WHERE id = $1`, id)
-	var out subjects.Subject
-	err := row.Scan(&out.ID, &out.Name, &out.Code, &out.Description, &out.Active)
+	out, err := scanSubject(row.Scan)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return subjects.Subject{}, subjects.ErrNotFound
 	}
@@ -88,8 +111,8 @@ func (s *SubjectsStore) ListSubjects(ctx context.Context) ([]subjects.Subject, e
 
 	out := make([]subjects.Subject, 0)
 	for rows.Next() {
-		var subj subjects.Subject
-		if err := rows.Scan(&subj.ID, &subj.Name, &subj.Code, &subj.Description, &subj.Active); err != nil {
+		subj, err := scanSubject(rows.Scan)
+		if err != nil {
 			return nil, fmt.Errorf("postgres: scan subject: %w", err)
 		}
 		out = append(out, subj)
@@ -101,12 +124,11 @@ func (s *SubjectsStore) ListSubjects(ctx context.Context) ([]subjects.Subject, e
 func (s *SubjectsStore) UpdateSubject(ctx context.Context, subj subjects.Subject) (subjects.Subject, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		UPDATE subjects
-		SET name = $2, code = $3, description = $4, active = $5, updated_at = now()
+		SET name = $2, code = $3, description = $4, grades = $5, color = $6, active = $7, updated_at = now()
 		WHERE id = $1
 		RETURNING `+subjectColumns,
-		subj.ID, subj.Name, subj.Code, subj.Description, subj.Active)
-	var out subjects.Subject
-	err := row.Scan(&out.ID, &out.Name, &out.Code, &out.Description, &out.Active)
+		subj.ID, subj.Name, subj.Code, subj.Description, gradesToPG(subj.Grades), subj.Color, subj.Active)
+	out, err := scanSubject(row.Scan)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return subjects.Subject{}, subjects.ErrNotFound
 	}

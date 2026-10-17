@@ -91,6 +91,12 @@ func (s *SchedulesStore) EntriesForGroup(ctx context.Context, classGroupID strin
 		`WHERE class_group_id = $1 ORDER BY weekday, start_min, id`, classGroupID)
 }
 
+// EntriesForSubject implements schedules.Store.
+func (s *SchedulesStore) EntriesForSubject(ctx context.Context, subjectID string) ([]schedules.Entry, error) {
+	return s.entriesWhere(ctx,
+		`WHERE subject_id = $1 ORDER BY weekday, start_min, id`, subjectID)
+}
+
 func (s *SchedulesStore) entriesWhere(ctx context.Context, clause, arg string) ([]schedules.Entry, error) {
 	rows, err := s.db.pool.Query(ctx,
 		`SELECT `+scheduleColumns+` FROM schedule_entries `+clause, arg)

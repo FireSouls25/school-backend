@@ -401,6 +401,49 @@ func TestUsersStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSubjectGradesColorRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	store := pg.NewSubjectsStore(db)
+	created, err := store.CreateSubject(ctx, subjects.Subject{
+		ID:   "abababab-abab-4aba-abab-abababababab",
+		Name: "Música", Code: "MUS", Grades: []int{1, 2, 3}, Color: "#22C55E", Active: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateSubject: %v", err)
+	}
+	if len(created.Grades) != 3 || created.Color != "#22C55E" {
+		t.Fatalf("CreateSubject = %+v, want grades+color", created)
+	}
+
+	got, err := store.SubjectByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("SubjectByID: %v", err)
+	}
+	if !reflect.DeepEqual(got.Grades, []int{1, 2, 3}) || got.Color != "#22C55E" {
+		t.Errorf("SubjectByID = %+v, want grades+color round-trip", got)
+	}
+
+	got.Grades = []int{4, 5}
+	got.Color = "#8B5CF6"
+	upd, err := store.UpdateSubject(ctx, got)
+	if err != nil {
+		t.Fatalf("UpdateSubject: %v", err)
+	}
+	if !reflect.DeepEqual(upd.Grades, []int{4, 5}) || upd.Color != "#8B5CF6" {
+		t.Errorf("UpdateSubject = %+v, want updated grades+color", upd)
+	}
+
+	list, err := store.ListSubjects(ctx)
+	if err != nil {
+		t.Fatalf("ListSubjects: %v", err)
+	}
+	if len(list) != 1 || !reflect.DeepEqual(list[0].Grades, []int{4, 5}) {
+		t.Errorf("ListSubjects = %+v, want one with updated grades", list)
+	}
+}
+
 func TestSubjectsTimelineRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	db := testDB(t)

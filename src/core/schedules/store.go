@@ -27,6 +27,9 @@ type Store interface {
 	// EntriesForGroup returns every entry of a class-group: its weekly
 	// schedule ordered by weekday, then start time.
 	EntriesForGroup(ctx context.Context, classGroupID string) ([]Entry, error)
+	// EntriesForSubject returns every entry teaching a subject, ordered by
+	// weekday, then start time. It backs the catalog delete-guard.
+	EntriesForSubject(ctx context.Context, subjectID string) ([]Entry, error)
 	// Update replaces the entry with the given id.
 	// Returns ErrNotFound when missing.
 	Update(ctx context.Context, e Entry) (Entry, error)

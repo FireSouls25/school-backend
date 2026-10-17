@@ -21,6 +21,7 @@ import (
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
 	"grade/src/core/students"
+	"grade/src/core/subjects"
 	"grade/src/core/teachers"
 	"grade/src/core/users"
 	"grade/src/core/warnings"
@@ -45,6 +46,7 @@ type Dependencies struct {
 	Sessions    *sessions.Service
 	Statistics  *statistics.Service
 	Dashboard   *statistics.DashboardService
+	Subjects    *subjects.Service
 	Classes     *classes.Service
 	Years       *schoolyears.Service
 	Enrollments *enrollments.Service
@@ -397,6 +399,185 @@ func handleGetTeacher(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, tc)
+	}
+}
+
+// subjectRequest is the catalog body for creating or replacing a subject.
+// Grades are the school years (1-11) it is taught in; Color is #RRGGBB.
+// The service assigns the ID on create and forces Active on; on replace
+// Active travels in the body so retiring is an update, not a delete.
+type subjectRequest struct {
+	Name        string `json:"name"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
+	Grades      []int  `json:"grades"`
+	Color       string `json:"color"`
+	Active      bool   `json:"active"`
+}
+
+// handleListSubjects returns the catalog alphabetically. Teachers read it
+// to name the subjects on their agenda; only admins write it.
+func handleListSubjects(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		list, err := deps.Subjects.ListSubjects(r.Context())
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []subjects.Subject{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// handleGetSubject returns one catalog entry.
+func handleGetSubject(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subj, err := deps.Subjects.SubjectByID(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, subj)
+	}
+}
+
+// handleCreateSubject persists a catalog entry. The service assigns the
+// ID and forces Active; any incoming ID is ignored.
+func handleCreateSubject(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body subjectRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		subj, err := deps.Subjects.CreateSubject(r.Context(), subjects.Subject{
+			Name: body.Name, Code: body.Code, Description: body.Description,
+			Grades: body.Grades, Color: body.Color,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, subj)
+	}
+}
+
+// handleUpdateSubject replaces a catalog entry. The ID comes from the
+// path; retiring (Active=false) is an update here, never a delete.
+func handleUpdateSubject(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body subjectRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		subj, err := deps.Subjects.UpdateSubject(r.Context(), subjects.Subject{
+			ID: chi.URLParam(r, "id"), Name: body.Name, Code: body.Code,
+			Description: body.Description, Grades: body.Grades,
+			Color: body.Color, Active: body.Active,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, subj)
+	}
+}
+
+// handleDeleteSubject removes a catalog entry. Blocked while assignment
+// history or schedule entries reference it (400 with a stable code);
+// retire with Active=false instead.
+func handleDeleteSubject(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := deps.Subjects.DeleteSubject(r.Context(), chi.URLParam(r, "id")); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleSubjectAssignments returns who taught a subject and when:
+// the timeline on the materia detail screen.
+func handleSubjectAssignments(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		list, err := deps.Subjects.AssignmentsForSubject(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []subjects.Assignment{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// assignmentRequest starts a timeline entry: teacherID teaches subjectID
+// from startedAt (YYYY-MM-DD) on.
+type assignmentRequest struct {
+	TeacherID string `json:"teacherID"`
+	SubjectID string `json:"subjectID"`
+	StartedAt string `json:"startedAt"`
+}
+
+// handleAssignSubject starts a teacher/subject timeline entry.
+func handleAssignSubject(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body assignmentRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		startedAt, err := time.Parse("2006-01-02", strings.TrimSpace(body.StartedAt))
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		a, err := deps.Subjects.Assign(r.Context(), body.TeacherID, body.SubjectID, startedAt)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, a)
+	}
+}
+
+// endAssignmentRequest closes an open timeline entry at endedAt
+// (YYYY-MM-DD). History is kept; ending is not deleting.
+type endAssignmentRequest struct {
+	EndedAt string `json:"endedAt"`
+}
+
+// handleEndAssignment closes an open teacher/subject timeline entry.
+func handleEndAssignment(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body endAssignmentRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		endedAt, err := time.Parse("2006-01-02", strings.TrimSpace(body.EndedAt))
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		a, err := deps.Subjects.EndAssignment(r.Context(), chi.URLParam(r, "id"), endedAt)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+// handleRemoveAssignment deletes a timeline entry, for corrections.
+// Ending (not removing) is the way to close a finished period.
+func handleRemoveAssignment(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := deps.Subjects.RemoveAssignment(r.Context(), chi.URLParam(r, "id")); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

@@ -174,14 +174,20 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 	}
 
 	subjectCatalog := map[string]subjects.Subject{}
-	for _, name := range []string{"Matemáticas", "Español", "Ciencias Naturales", "Sociales", "Inglés"} {
-		created, err := deps.Subjects.CreateSubject(ctx, subjects.Subject{
-			Name: name, Code: subjectCode(name), Active: true,
-		})
+	seedSubjects := []subjects.Subject{
+		{Name: "Matemáticas", Code: subjectCode("Matemáticas"), Grades: []int{6, 7, 8, 9, 10, 11}, Color: "#3B82F6"},
+		{Name: "Español", Code: subjectCode("Español"), Grades: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, Color: "#EF4444"},
+		{Name: "Ciencias Naturales", Code: subjectCode("Ciencias Naturales"), Grades: []int{1, 2, 3, 4, 5, 6, 7, 8, 9}, Color: "#22C55E"},
+		{Name: "Sociales", Code: subjectCode("Sociales"), Grades: []int{6, 7, 8, 9, 10, 11}, Color: "#F59E0B"},
+		{Name: "Inglés", Code: subjectCode("Inglés"), Grades: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, Color: "#8B5CF6"},
+	}
+	for _, seed := range seedSubjects {
+		seed.Active = true
+		created, err := deps.Subjects.CreateSubject(ctx, seed)
 		if err != nil {
-			return sum, fmt.Errorf("devseed: subject %s: %w", name, err)
+			return sum, fmt.Errorf("devseed: subject %s: %w", seed.Name, err)
 		}
-		subjectCatalog[name] = created
+		subjectCatalog[seed.Name] = created
 		sum.Subjects++
 	}
 

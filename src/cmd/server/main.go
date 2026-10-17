@@ -60,6 +60,7 @@ func main() {
 		Enrollments:    application.Services.Enrollments,
 		Schedules:      application.Services.Schedules,
 		Incidents:      application.Services.Incidents,
+		Subjects:       application.Services.Subjects,
 		AllowedOrigins: cfg.AllowedOrigins,
 	}, i18nSvc)); err != nil {
 		slog.Error("server stopped", "error", err)

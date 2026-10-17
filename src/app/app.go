@@ -126,6 +126,10 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 
 	subjectsSvc := subjects.NewService(s.Subjects)
+	schedulesSvc := schedules.NewService(s.Schedules, subjectChecker{subjectsSvc})
+	// The catalog delete-guard counts schedule entries through the same
+	// service the future schedule routes will use: one source of truth.
+	subjectsSvc.SetScheduleUsage(scheduleCounter{schedulesSvc})
 	sessionsSvc := sessions.NewService(s.Sessions)
 	warningsSvc := warnings.NewService(s.Warnings)
 	incidentsSvc := incidents.NewService(s.Incidents)
@@ -149,7 +153,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Years:       yearsSvc,
 			Classes:     classesSvc,
 			Enrollments: enrollmentsSvc,
-			Schedules:   schedules.NewService(s.Schedules, subjectChecker{subjectsSvc}),
+			Schedules:   schedulesSvc,
 			Sessions:    sessionsSvc,
 			Statistics: statistics.NewService(
 				sessAdapter,

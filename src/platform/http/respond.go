@@ -97,6 +97,9 @@ var statusByCode = map[string]int{
 	"subjects.err_already_assigned":     http.StatusBadRequest,
 	"subjects.err_already_ended":        http.StatusBadRequest,
 	"subjects.err_has_assignments":      http.StatusBadRequest,
+	"subjects.err_has_schedule":         http.StatusBadRequest,
+	"subjects.err_invalid_grades":       http.StatusBadRequest,
+	"subjects.err_invalid_color":        http.StatusBadRequest,
 
 	"schoolyears.err_not_found":       http.StatusNotFound,
 	"schoolyears.err_invalid_id":      http.StatusBadRequest,
@@ -134,6 +137,7 @@ var statusByCode = map[string]int{
 	"schedules.err_invalid_time":         http.StatusBadRequest,
 	"schedules.err_teacher_conflict":     http.StatusBadRequest,
 	"schedules.err_class_conflict":       http.StatusBadRequest,
+	"schedules.err_outside_school_hours": http.StatusBadRequest,
 	"schedules.err_not_teaching_subject": http.StatusBadRequest,
 
 	"sessions.err_not_found":           http.StatusNotFound,

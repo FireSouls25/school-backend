@@ -11,6 +11,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
@@ -23,6 +24,22 @@ import (
 // capability.
 type subjectChecker struct {
 	subjects *subjects.Service
+}
+
+// scheduleCounter implements subjects.ScheduleUsage on top of the
+// schedules capability: the catalog delete-guard counts entries through
+// the service, never the store directly.
+type scheduleCounter struct {
+	schedules *schedules.Service
+}
+
+// EntriesForSubject implements subjects.ScheduleUsage.
+func (c scheduleCounter) EntriesForSubject(ctx context.Context, subjectID string) (int, error) {
+	entries, err := c.schedules.EntriesForSubject(ctx, subjectID)
+	if err != nil {
+		return 0, err
+	}
+	return len(entries), nil
 }
 
 // Teaches implements schedules.Checker.

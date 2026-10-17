@@ -247,6 +247,63 @@ func TestDeleteSubjectBlockedWithHistory(t *testing.T) {
 	}
 }
 
+func TestSubjectGradesAndColor(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	s, err := svc.CreateSubject(ctx, subjects.Subject{
+		Name: "Física", Grades: []int{11, 6, 6, 9}, Color: "#3B82F6",
+	})
+	if err != nil {
+		t.Fatalf("CreateSubject: %v", err)
+	}
+	if len(s.Grades) != 3 || s.Grades[0] != 6 || s.Grades[1] != 9 || s.Grades[2] != 11 {
+		t.Errorf("grades not normalized: %v", s.Grades)
+	}
+
+	for _, grades := range [][]int{{0}, {12}, {5, 12}, {-1, 3}} {
+		if _, err := svc.CreateSubject(ctx, subjects.Subject{Name: "X", Grades: grades}); !errors.Is(err, subjects.ErrInvalidGrades) {
+			t.Errorf("grades %v error = %v, want ErrInvalidGrades", grades, err)
+		}
+	}
+	for _, color := range []string{"red", "#FFF", "#GGGGGG", "3B82F6", "#3B82F61"} {
+		if _, err := svc.CreateSubject(ctx, subjects.Subject{Name: "Y", Color: color}); !errors.Is(err, subjects.ErrInvalidColor) {
+			t.Errorf("color %q error = %v, want ErrInvalidColor", color, err)
+		}
+	}
+
+	// Empty grades and color stay valid: the catalog allows unspecified.
+	if _, err := svc.CreateSubject(ctx, subjects.Subject{Name: "Arte"}); err != nil {
+		t.Errorf("empty grades/color error = %v, want nil", err)
+	}
+}
+
+// fakeScheduleUsage is a subjects.ScheduleUsage with a fixed entry count.
+type fakeScheduleUsage struct {
+	count int
+	err   error
+}
+
+func (f fakeScheduleUsage) EntriesForSubject(_ context.Context, _ string) (int, error) {
+	return f.count, f.err
+}
+
+func TestDeleteSubjectBlockedWithSchedule(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+	math := mustSubject(t, svc, "Matemáticas")
+
+	svc.SetScheduleUsage(fakeScheduleUsage{count: 2})
+	if err := svc.DeleteSubject(ctx, math.ID); !errors.Is(err, subjects.ErrHasSchedule) {
+		t.Errorf("delete with schedule error = %v, want ErrHasSchedule", err)
+	}
+
+	svc.SetScheduleUsage(fakeScheduleUsage{count: 0})
+	if err := svc.DeleteSubject(ctx, math.ID); err != nil {
+		t.Errorf("DeleteSubject without usage: %v", err)
+	}
+}
+
 func TestAssignmentsForSubject(t *testing.T) {
 	ctx := context.Background()
 	svc := newService()

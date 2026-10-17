@@ -45,4 +45,7 @@ var (
 	// ErrNotTeachingSubject is returned when the teacher does not currently
 	// teach the subject.
 	ErrNotTeachingSubject = newError("schedules.err_not_teaching_subject", "schedules: teacher does not teach subject")
+	// ErrOutsideSchoolHours is returned when a slot starts before 07:00,
+	// ends after 14:00, or lasts less than one hour.
+	ErrOutsideSchoolHours = newError("schedules.err_outside_school_hours", "schedules: outside school hours")
 )

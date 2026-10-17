@@ -2,15 +2,38 @@ package subjects
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+// minGrade and maxGrade bound the school years a subject may be taught in.
+const (
+	minGrade = 1
+	maxGrade = 11
+)
+
+// ScheduleUsage reports how many schedule entries reference a subject, so
+// deletes stay safe once the schedule phase wires entries to the catalog.
+// The composition root provides it; nil means no entries can reference
+// subjects yet (schedule phase not exposed).
+type ScheduleUsage interface {
+	EntriesForSubject(ctx context.Context, subjectID string) (int, error)
+}
+
 // Service applies catalog and timeline policy through a Store.
 type Service struct {
-	store Store
+	store    Store
+	schedule ScheduleUsage
+}
+
+// SetScheduleUsage wires the schedule-entry check used by DeleteSubject.
+// Call once at composition time; unset means no entries can reference
+// subjects yet (schedule phase not exposed).
+func (s *Service) SetScheduleUsage(u ScheduleUsage) {
+	s.schedule = u
 }
 
 // NewService wires a Service onto the provided Store.
@@ -60,7 +83,8 @@ func (s *Service) UpdateSubject(ctx context.Context, subj Subject) (Subject, err
 }
 
 // DeleteSubject removes a subject. It is blocked while the subject keeps
-// assignment history; retire it with Active=false instead.
+// assignment history or schedule entries; retire it with Active=false
+// instead.
 func (s *Service) DeleteSubject(ctx context.Context, id string) error {
 	if err := validateID(id); err != nil {
 		return err
@@ -71,6 +95,15 @@ func (s *Service) DeleteSubject(ctx context.Context, id string) error {
 	}
 	if len(assigns) > 0 {
 		return ErrHasAssignments
+	}
+	if s.schedule != nil {
+		used, err := s.schedule.EntriesForSubject(ctx, strings.TrimSpace(id))
+		if err != nil {
+			return err
+		}
+		if used > 0 {
+			return ErrHasSchedule
+		}
 	}
 	return s.store.DeleteSubject(ctx, id)
 }
@@ -179,7 +212,23 @@ func normalizeSubject(s Subject) Subject {
 	s.Name = strings.TrimSpace(s.Name)
 	s.Code = strings.ToUpper(strings.TrimSpace(s.Code))
 	s.Description = strings.TrimSpace(s.Description)
+	s.Color = strings.TrimSpace(s.Color)
+	s.Grades = normalizeGrades(s.Grades)
 	return s
+}
+
+// normalizeGrades sorts ascending and drops duplicates and blanks.
+func normalizeGrades(grades []int) []int {
+	seen := make(map[int]bool, len(grades))
+	out := make([]int, 0, len(grades))
+	for _, g := range grades {
+		if !seen[g] {
+			seen[g] = true
+			out = append(out, g)
+		}
+	}
+	sort.Ints(out)
+	return out
 }
 
 func validateSubject(s Subject) error {
@@ -192,7 +241,28 @@ func validateSubject(s Subject) error {
 	if s.Name == "" {
 		return ErrInvalidName
 	}
+	for _, g := range s.Grades {
+		if g < minGrade || g > maxGrade {
+			return ErrInvalidGrades
+		}
+	}
+	if s.Color != "" && !validColor(s.Color) {
+		return ErrInvalidColor
+	}
 	return nil
+}
+
+// validColor accepts #RRGGBB only: the console renders it verbatim.
+func validColor(c string) bool {
+	if len(c) != 7 || c[0] != '#' {
+		return false
+	}
+	for _, r := range c[1:] {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 // ensureUniqueName rejects names already used by another subject,

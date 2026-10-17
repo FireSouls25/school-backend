@@ -98,6 +98,24 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/teachers/me/schedule", handleMySchedule(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/subjects", handleListSubjects(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/subjects/{id}", handleGetSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/subjects", handleCreateSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/subjects/{id}", handleUpdateSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Delete("/subjects/{id}", handleDeleteSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/subjects/{id}/assignments", handleSubjectAssignments(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/assignments", handleAssignSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/assignments/{id}/end", handleEndAssignment(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Delete("/assignments/{id}", handleRemoveAssignment(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).

@@ -178,6 +178,10 @@ CREATE TABLE IF NOT EXISTS subjects (
 -- Subject names are unique, case-insensitively.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_subjects_lower_name ON subjects (lower(name));
 
+-- Catalog phase: which years a subject is taught in, and its console color.
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS grades INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS color TEXT NOT NULL DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS subject_assignments (
     id          UUID PRIMARY KEY,
     teacher_id  UUID        NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
@@ -262,6 +266,7 @@ CREATE TABLE IF NOT EXISTS schedule_entries (
 
 CREATE INDEX IF NOT EXISTS idx_schedule_teacher_id ON schedule_entries (teacher_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_group_id ON schedule_entries (class_group_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_subject_id ON schedule_entries (subject_id);
 
 CREATE TABLE IF NOT EXISTS sessions (
     id             UUID PRIMARY KEY,

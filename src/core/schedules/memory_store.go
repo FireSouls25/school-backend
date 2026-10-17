@@ -65,6 +65,20 @@ func (s *MemoryStore) EntriesForGroup(_ context.Context, classGroupID string) ([
 	return out, nil
 }
 
+// EntriesForSubject implements Store.
+func (s *MemoryStore) EntriesForSubject(_ context.Context, subjectID string) ([]Entry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Entry, 0)
+	for _, e := range s.entries {
+		if e.SubjectID == subjectID {
+			out = append(out, e)
+		}
+	}
+	sortEntries(out)
+	return out, nil
+}
+
 // Update implements Store.
 func (s *MemoryStore) Update(_ context.Context, e Entry) (Entry, error) {
 	s.mu.Lock()
