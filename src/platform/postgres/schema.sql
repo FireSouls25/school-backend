@@ -338,6 +338,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
 -- table always exists for the reference.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS teacher_id UUID NULL REFERENCES teachers (id) ON DELETE SET NULL;
 
+-- Role grants survive restarts (the memory store they replace does not).
+CREATE TABLE IF NOT EXISTS role_grants (
+    subject_id UUID NOT NULL,
+    role       TEXT NOT NULL,
+    PRIMARY KEY (subject_id, role)
+);
+
 -- Audit trail: who did what to which record, when, with what outcome.
 -- Append-only by convention (no updates or deletes anywhere in the
 -- codebase); student_id is null for non-student actions such as schedule

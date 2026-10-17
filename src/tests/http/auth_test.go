@@ -303,21 +303,22 @@ func testStack(t *testing.T) http.Handler {
 	sessionRouteID = sess.ID
 
 	return httpapi.Router(httpapi.Dependencies{
-		Auth:        roleSvc,
-		Roles:       roleSvc,
-		RolesSvc:    roleSvc,
-		Students:    studentsSvc,
-		Teachers:    teachersSvc,
-		Users:       users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost),
-		Warnings:    warningsSvc,
-		Sessions:    sessionsSvc,
-		Statistics:  statsSvc,
-		Dashboard:   dashSvc,
-		Classes:     classesSvc,
-		Years:       yearsSvc,
-		Enrollments: enrollmentsSvc,
-		Schedules:   schedulesSvc,
-		Incidents:   incidentsSvc,
+		Auth:             roleSvc,
+		Roles:            roleSvc,
+		RolesSvc:         roleSvc,
+		AllowDevIdentity: true,
+		Students:         studentsSvc,
+		Teachers:         teachersSvc,
+		Users:            users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost),
+		Warnings:         warningsSvc,
+		Sessions:         sessionsSvc,
+		Statistics:       statsSvc,
+		Dashboard:        dashSvc,
+		Classes:          classesSvc,
+		Years:            yearsSvc,
+		Enrollments:      enrollmentsSvc,
+		Schedules:        schedulesSvc,
+		Incidents:        incidentsSvc,
 	}, newI18n(t))
 }
 

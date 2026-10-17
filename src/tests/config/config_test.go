@@ -88,6 +88,7 @@ func TestProductionDisablesDemoData(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("DATABASE_URL", "postgres://localhost/gradedb")
 	t.Setenv("SEED_DEMO", "true")
+	t.Setenv("AUTH_SECRET", "prod-secret-for-suite-only")
 
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -112,7 +113,7 @@ func TestValidateRejectsUnsafeProduction(t *testing.T) {
 	}{
 		{
 			name: "no database in production",
-			cfg:  config.Config{Env: config.EnvProduction, SeedDemo: false},
+			cfg:  config.Config{Env: config.EnvProduction, SeedDemo: false, AuthSecret: "s"},
 			want: "DATABASE_URL is required",
 		},
 		{
@@ -121,8 +122,17 @@ func TestValidateRejectsUnsafeProduction(t *testing.T) {
 				Env:         config.EnvProduction,
 				DatabaseURL: "postgres://localhost/gradedb",
 				SeedDemo:    true,
+				AuthSecret:  "s",
 			},
 			want: "SEED_DEMO cannot be enabled",
+		},
+		{
+			name: "missing auth secret in production",
+			cfg: config.Config{
+				Env:         config.EnvProduction,
+				DatabaseURL: "postgres://localhost/gradedb",
+			},
+			want: "AUTH_SECRET is required",
 		},
 		{
 			name: "known development password",

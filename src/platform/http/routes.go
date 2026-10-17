@@ -59,8 +59,12 @@ func MiddlewareCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 func routes(r *chi.Mux, deps Dependencies) {
 	r.Get("/healthz", handleHealthz)
 
+	r.Post("/v1/login", handleLogin(deps, newLoginLimiter(loginLimitPerMinute, loginWindow)))
+
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(MiddlewareSubject)
+		r.Use(func(next http.Handler) http.Handler {
+			return MiddlewareSubjectWith(next, deps.Tokens, deps.AllowDevIdentity)
+		})
 		r.Get("/me", handleMe(deps))
 
 		r.Get("/students/{id}", handleGetStudent(deps))

@@ -47,8 +47,8 @@ type Stores struct {
 	Schedules   schedules.Store
 	Sessions    sessions.Store
 	Users       users.Store
-	// Roles is still in-memory: the Postgres adapter lands with the auth
-	// phase, which also makes grants survive restarts.
+	// Roles is still in-memory when DATABASE_URL is empty; the Postgres
+	// adapter below takes over otherwise, so grants survive restarts.
 	Roles roles.Store
 }
 
@@ -125,6 +125,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Schedules = pg.NewSchedulesStore(db)
 		s.Sessions = pg.NewSessionsStore(db)
 		s.Users = pg.NewUsersStore(db)
+		s.Roles = pg.NewRolesStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only, data lost on restart)")

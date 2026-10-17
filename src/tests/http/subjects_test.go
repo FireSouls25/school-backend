@@ -25,11 +25,12 @@ func subjectStack(t *testing.T) http.Handler {
 	must(roleSvc.Assign(ctx, adminSubject, roles.RoleAdmin))
 	must(roleSvc.Assign(ctx, teacherSubject, roles.RoleTeacher))
 	return httpapi.Router(httpapi.Dependencies{
-		Auth:     roleSvc,
-		Roles:    roleSvc,
-		RolesSvc: roleSvc,
-		Subjects: subjects.NewService(subjects.NewMemoryStore()),
-		Audit:    audit.NewService(audit.NewMemoryStore()),
+		Auth:             roleSvc,
+		Roles:            roleSvc,
+		RolesSvc:         roleSvc,
+		AllowDevIdentity: true,
+		Subjects:         subjects.NewService(subjects.NewMemoryStore()),
+		Audit:            audit.NewService(audit.NewMemoryStore()),
 	}, newI18n(t))
 }
 

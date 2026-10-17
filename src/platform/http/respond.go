@@ -38,6 +38,13 @@ var statusByCode = map[string]int{
 	"users.err_duplicate_email":     http.StatusBadRequest,
 	"users.err_invalid_credentials": http.StatusUnauthorized,
 	"users.err_invalid_teacher":     http.StatusBadRequest,
+	"http.err_rate_limited":         http.StatusTooManyRequests,
+
+	"auth.err_invalid_token":   http.StatusUnauthorized,
+	"auth.err_expired_token":   http.StatusUnauthorized,
+	"auth.err_invalid_subject": http.StatusBadRequest,
+	"auth.err_invalid_secret":  http.StatusInternalServerError,
+	"auth.err_invalid_ttl":     http.StatusInternalServerError,
 
 	"audit.err_invalid_subject":  http.StatusBadRequest,
 	"audit.err_invalid_action":   http.StatusBadRequest,

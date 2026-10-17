@@ -25,11 +25,12 @@ func auditStack(t *testing.T) http.Handler {
 	must(roleSvc.Assign(ctx, adminSubject, roles.RoleAdmin))
 	must(roleSvc.Assign(ctx, teacherSubject, roles.RoleTeacher))
 	return httpapi.Router(httpapi.Dependencies{
-		Auth:      roleSvc,
-		Roles:     roleSvc,
-		RolesSvc:  roleSvc,
-		Audit:     audit.NewService(audit.NewMemoryStore()),
-		Schedules: schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{}),
+		Auth:             roleSvc,
+		Roles:            roleSvc,
+		RolesSvc:         roleSvc,
+		AllowDevIdentity: true,
+		Audit:            audit.NewService(audit.NewMemoryStore()),
+		Schedules:        schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{}),
 	}, newI18n(t))
 }
 

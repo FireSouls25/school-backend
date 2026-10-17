@@ -34,12 +34,13 @@ func classesStack(t *testing.T) http.Handler {
 	})
 	must(err)
 	return httpapi.Router(httpapi.Dependencies{
-		Auth:     roleSvc,
-		Roles:    roleSvc,
-		RolesSvc: roleSvc,
-		Classes:  classes.NewService(classes.NewMemoryStore()),
-		Years:    yearsSvc,
-		Audit:    audit.NewService(audit.NewMemoryStore()),
+		Auth:             roleSvc,
+		Roles:            roleSvc,
+		RolesSvc:         roleSvc,
+		AllowDevIdentity: true,
+		Classes:          classes.NewService(classes.NewMemoryStore()),
+		Years:            yearsSvc,
+		Audit:            audit.NewService(audit.NewMemoryStore()),
 	}, newI18n(t))
 }
 

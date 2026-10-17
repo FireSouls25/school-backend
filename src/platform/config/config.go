@@ -12,7 +12,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
+
+// DefaultAuthTTL is the login token lifetime when AUTH_TTL is unset.
+const DefaultAuthTTL = 12 * time.Hour
 
 // AppEnv selects the deployment shape and the safety rules that apply.
 type AppEnv string
@@ -60,6 +64,12 @@ type Config struct {
 	SeedDemo bool
 	// Bootstrap is the optional first admin account.
 	Bootstrap BootstrapAdmin
+	// AuthSecret signs login tokens. Required in production; in
+	// development an empty value means a random per-boot secret (logins
+	// die with the process, never with a shipped default).
+	AuthSecret string
+	// AuthTTL is the login token lifetime. Zero means the default.
+	AuthTTL time.Duration
 }
 
 // devPasswords are the passwords shipped in the demo data and docs. They
@@ -133,6 +143,14 @@ func FromEnv() (Config, error) {
 		return Config{}, fmt.Errorf(
 			"config: BOOTSTRAP_ADMIN_PASSWORD set without BOOTSTRAP_ADMIN_USERNAME")
 	}
+	cfg.AuthSecret = os.Getenv("AUTH_SECRET")
+	if raw := strings.TrimSpace(os.Getenv("AUTH_TTL")); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil || ttl <= 0 {
+			return Config{}, fmt.Errorf("config: AUTH_TTL: %q is not a positive duration", raw)
+		}
+		cfg.AuthTTL = ttl
+	}
 	return cfg, nil
 }
 
@@ -151,6 +169,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf(
 			"config: BOOTSTRAP_ADMIN_PASSWORD is a known development password; " +
 				"pick a unique one before deploying")
+	}
+	if strings.TrimSpace(c.AuthSecret) == "" {
+		return fmt.Errorf("config: AUTH_SECRET is required when APP_ENV=production")
 	}
 	return nil
 }

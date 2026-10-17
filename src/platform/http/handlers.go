@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"grade/src/core/audit"
+	"grade/src/core/auth"
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
@@ -38,23 +39,29 @@ const maxBodyBytes = 1 << 20
 // Dependencies wires handlers to core services. Only the composition root
 // builds it.
 type Dependencies struct {
-	Auth        roles.Authorizer
-	Roles       roles.RoleGetter
-	RolesSvc    *roles.Service
-	Students    *students.Service
-	Teachers    *teachers.Service
-	Users       *users.Service
-	Warnings    *warnings.Service
-	Sessions    *sessions.Service
-	Statistics  *statistics.Service
-	Dashboard   *statistics.DashboardService
-	Audit       *audit.Service
-	Subjects    *subjects.Service
-	Classes     *classes.Service
-	Years       *schoolyears.Service
-	Enrollments *enrollments.Service
-	Schedules   *schedules.Service
-	Incidents   *incidents.Service
+	Auth       roles.Authorizer
+	Roles      roles.RoleGetter
+	RolesSvc   *roles.Service
+	Students   *students.Service
+	Teachers   *teachers.Service
+	Users      *users.Service
+	Warnings   *warnings.Service
+	Sessions   *sessions.Service
+	Statistics *statistics.Service
+	Dashboard  *statistics.DashboardService
+	Audit      *audit.Service
+	// Tokens mints and verifies login tokens. Nil means no bearer
+	// support (tests without auth setup); the dev header still applies.
+	Tokens *auth.Service
+	// AllowDevIdentity keeps the X-Subject-ID fallback. True in
+	// development and tests, false in production.
+	AllowDevIdentity bool
+	Subjects         *subjects.Service
+	Classes          *classes.Service
+	Years            *schoolyears.Service
+	Enrollments      *enrollments.Service
+	Schedules        *schedules.Service
+	Incidents        *incidents.Service
 	// AllowedOrigins lists browser origins accepted by CORS.
 	AllowedOrigins []string
 }

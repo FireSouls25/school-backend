@@ -13,6 +13,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
@@ -313,6 +314,45 @@ func TestTeachersStoreRoundTrip(t *testing.T) {
 
 	if _, err := store.ByID(ctx, "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"); !errors.Is(err, teachers.ErrNotFound) {
 		t.Errorf("ByID unknown error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRolesRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := testDB(t)
+
+	store := pg.NewRolesStore(db)
+	subject := "dddddddd-1111-4111-8111-dddddddddddd"
+	if err := store.AssignRole(ctx, subject, roles.RoleAdmin); err != nil {
+		t.Fatalf("AssignRole: %v", err)
+	}
+	// Re-granting is a no-op (Prepare re-grants every boot).
+	if err := store.AssignRole(ctx, subject, roles.RoleAdmin); err != nil {
+		t.Fatalf("re-assign: %v", err)
+	}
+	if err := store.AssignRole(ctx, subject, roles.RoleTeacher); err != nil {
+		t.Fatalf("AssignRole teacher: %v", err)
+	}
+	got, err := store.RolesFor(ctx, subject)
+	if err != nil {
+		t.Fatalf("RolesFor: %v", err)
+	}
+	if len(got) != 2 || got[0] != roles.RoleAdmin || got[1] != roles.RoleTeacher {
+		t.Errorf("RolesFor = %v, want sorted [admin teacher]", got)
+	}
+	if err := store.RemoveRole(ctx, subject, roles.RoleAdmin); err != nil {
+		t.Fatalf("RemoveRole: %v", err)
+	}
+	if err := store.RemoveRole(ctx, subject, roles.RoleAdmin); err != nil {
+		t.Fatalf("re-remove: %v", err)
+	}
+	got, err = store.RolesFor(ctx, subject)
+	if err != nil || len(got) != 1 || got[0] != roles.RoleTeacher {
+		t.Errorf("after remove = %v, %v; want [teacher]", got, err)
+	}
+	empty, err := store.RolesFor(ctx, "eeeeeeee-2222-4222-8222-eeeeeeeeeeee")
+	if err != nil || len(empty) != 0 {
+		t.Errorf("unknown = %v, %v; want empty", empty, err)
 	}
 }
 

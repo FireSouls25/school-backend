@@ -49,11 +49,12 @@ func recentsStack(t *testing.T) http.Handler {
 	must(err)
 
 	return httpapi.Router(httpapi.Dependencies{
-		Auth:      roleSvc,
-		Roles:     roleSvc,
-		RolesSvc:  roleSvc,
-		Warnings:  warningsSvc,
-		Incidents: incidentsSvc,
+		Auth:             roleSvc,
+		Roles:            roleSvc,
+		RolesSvc:         roleSvc,
+		AllowDevIdentity: true,
+		Warnings:         warningsSvc,
+		Incidents:        incidentsSvc,
 	}, newI18n(t))
 }
 

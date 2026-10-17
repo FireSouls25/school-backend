@@ -29,11 +29,12 @@ func myScheduleStack(t *testing.T) (http.Handler, *users.Service, *schedules.Ser
 	}
 	must(roleSvc.Assign(ctx, adminSubject, roles.RoleAdmin))
 	return httpapi.Router(httpapi.Dependencies{
-		Auth:      roleSvc,
-		Roles:     roleSvc,
-		RolesSvc:  roleSvc,
-		Users:     usersSvc,
-		Schedules: schedulesSvc,
+		Auth:             roleSvc,
+		Roles:            roleSvc,
+		RolesSvc:         roleSvc,
+		AllowDevIdentity: true,
+		Users:            usersSvc,
+		Schedules:        schedulesSvc,
 	}, newI18n(t)), usersSvc, schedulesSvc, roleSvc
 }
 
