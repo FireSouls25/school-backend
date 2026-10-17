@@ -23,6 +23,8 @@ type Store interface {
 	Add(ctx context.Context, f Fault) (Fault, error)
 	// ForStudent returns every fault of studentID, newest first.
 	ForStudent(ctx context.Context, studentID string) ([]Fault, error)
+	// Recent returns every fault dated at or after since, newest first.
+	Recent(ctx context.Context, since time.Time) ([]Fault, error)
 	// Delete removes the fault with the given id. Removing an unknown
 	// fault is a no-op.
 	Delete(ctx context.Context, id string) error

@@ -65,6 +65,8 @@ Routes declare one required permission, enforced by
 | `POST /v1/assignments/{id}/end` | `manage-users` | admin only |
 | `DELETE /v1/assignments/{id}` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/assignments` | `manage-users` | admin only |
+| `GET /v1/warnings/recent?limit=N` | `manage-system` | admin only |
+| `GET /v1/incidents/recent?limit=N` | `manage-system` | admin only |
 | `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
 | `POST /v1/schedule` | `manage-users` | admin only |
 | `PUT /v1/schedule/{id}` | `manage-users` | admin only |

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 )
 
 // MemoryStore is an in-memory Store for tests and development.
@@ -37,6 +38,25 @@ func (s *MemoryStore) ForStudent(_ context.Context, studentID string) ([]Fault, 
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Date.After(out[j].Date) })
+	return out, nil
+}
+
+// Recent implements Store: every fault dated at or after since, newest first.
+func (s *MemoryStore) Recent(_ context.Context, since time.Time) ([]Fault, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Fault, 0)
+	for _, f := range s.faults {
+		if !f.Date.Before(since) {
+			out = append(out, f)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Date.Equal(out[j].Date) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].Date.After(out[j].Date)
+	})
 	return out, nil
 }
 

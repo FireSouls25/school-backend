@@ -42,6 +42,12 @@ func (s *Service) ForStudent(ctx context.Context, studentID string) ([]Fault, er
 	return s.store.ForStudent(ctx, studentID)
 }
 
+// Recent returns every fault dated at or after since, newest first.
+// It feeds the admin history window without sweeping the whole table.
+func (s *Service) Recent(ctx context.Context, since time.Time) ([]Fault, error) {
+	return s.store.Recent(ctx, since)
+}
+
 // Remove deletes a fault record.
 func (s *Service) Remove(ctx context.Context, id string) error {
 	if strings.TrimSpace(id) == "" {

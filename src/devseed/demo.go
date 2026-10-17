@@ -132,20 +132,29 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 
 	// Accounts first: everything else references them (roles, sessions).
 	// ensureAccount may reuse a colliding username owned by another id
-	// (e.g. the bootstrap admin created before the demo seed runs), so the
-	// roles below attach to the fixed placeholder subject ids the SPA
-	// actually sends, never to whichever account row won the username.
-	if _, err := deps.ensureAccount(ctx, AdminSubject, AdminUsername,
-		"admin@observador.edu.co", AdminPassword); err != nil {
+	// (e.g. the bootstrap admin created before the demo seed runs). The
+	// placeholder subject ids below are what the SPA actually sends, so
+	// they always get the roles; the reused account gets them too, so a
+	// pre-existing "admin" keeps working after seeding.
+	adminAccount, err := deps.ensureAccount(ctx, AdminSubject, AdminUsername,
+		"admin@observador.edu.co", AdminPassword)
+	if err != nil {
 		return sum, err
 	}
-	if _, err := deps.ensureAccount(ctx, TeacherSubject, TeacherUsername,
-		"carlos.mendoza@observador.edu.co", TeacherPassword); err != nil {
+	teacherAccount, err := deps.ensureAccount(ctx, TeacherSubject, TeacherUsername,
+		"carlos.mendoza@observador.edu.co", TeacherPassword)
+	if err != nil {
 		return sum, err
 	}
 	sum.Accounts = 2
 	sum.Roles += deps.grant(ctx, AdminSubject, roles.RoleAdmin)
 	sum.Roles += deps.grant(ctx, TeacherSubject, roles.RoleTeacher)
+	if adminAccount.ID != AdminSubject {
+		sum.Roles += deps.grant(ctx, adminAccount.ID, roles.RoleAdmin)
+	}
+	if teacherAccount.ID != TeacherSubject {
+		sum.Roles += deps.grant(ctx, teacherAccount.ID, roles.RoleTeacher)
+	}
 
 	start, end := date(year, 2, 2), date(year, 11, 27)
 	schoolYear, err := deps.Years.Create(ctx, schoolyears.SchoolYear{

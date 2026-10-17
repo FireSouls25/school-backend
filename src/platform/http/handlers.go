@@ -581,6 +581,89 @@ func handleRemoveAssignment(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// recentWindowDays bounds the lookback of the "recent" feeds: newest
+// first, truncated to ?limit= (default 20, max 100). School-scale data
+// makes a bounded window plus truncation cheaper than open-ended paging.
+const recentWindowDays = 90
+
+// parseRecentLimit reads ?limit=: missing means 20, over 100 clamps to
+// 100, anything else is a 400.
+func parseRecentLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if raw == "" {
+		return 20, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		WriteError(w, r, errBadRequest)
+		return 0, false
+	}
+	if n > 100 {
+		n = 100
+	}
+	return n, true
+}
+
+// handleWarningsRecent returns the latest llamados, newest first.
+func handleWarningsRecent(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit, ok := parseRecentLimit(w, r)
+		if !ok {
+			return
+		}
+		list, err := deps.Warnings.Recent(r.Context(), time.Now().AddDate(0, 0, -recentWindowDays))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []warnings.Warning{}
+		}
+		if len(list) > limit {
+			list = list[:limit]
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// recentIncident is the admin history row: faults carry no title, so the
+// description head stands in (the detail view shows the full text).
+type recentIncident struct {
+	ID         string             `json:"ID"`
+	Title      string             `json:"Title"`
+	HappenedAt time.Time          `json:"HappenedAt"`
+	Severity   incidents.Severity `json:"Severity"`
+}
+
+// handleIncidentsRecent returns the latest faltas, newest first.
+func handleIncidentsRecent(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit, ok := parseRecentLimit(w, r)
+		if !ok {
+			return
+		}
+		list, err := deps.Incidents.Recent(r.Context(), time.Now().AddDate(0, 0, -recentWindowDays))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		out := make([]recentIncident, 0, len(list))
+		for _, f := range list {
+			title := strings.TrimSpace(f.Description)
+			if runes := []rune(title); len(runes) > 80 {
+				title = string(runes[:80]) + "…"
+			}
+			out = append(out, recentIncident{
+				ID: f.ID, Title: title, HappenedAt: f.Date, Severity: f.Severity,
+			})
+			if len(out) == limit {
+				break
+			}
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
 // handleTeacherAssignments returns a teacher's full assignment timeline
 // (open and closed): what the teacher ficha shows as "sus materias".
 func handleTeacherAssignments(deps Dependencies) http.HandlerFunc {

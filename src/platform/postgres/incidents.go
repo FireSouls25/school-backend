@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"grade/src/core/incidents"
 )
@@ -36,12 +37,21 @@ func (s *IncidentsStore) Add(ctx context.Context, f incidents.Fault) (incidents.
 
 // ForStudent implements incidents.Store.
 func (s *IncidentsStore) ForStudent(ctx context.Context, studentID string) ([]incidents.Fault, error) {
-	rows, err := s.db.pool.Query(ctx, `
-		SELECT id, student_id, class_id, date, severity, description
-		FROM incident_faults
-		WHERE student_id = $1
-		ORDER BY date DESC, id DESC`,
-		studentID)
+	return s.faultsWhere(ctx,
+		`WHERE student_id = $1 ORDER BY date DESC, id DESC`, studentID)
+}
+
+// Recent implements incidents.Store: every fault dated at or after
+// since, newest first.
+func (s *IncidentsStore) Recent(ctx context.Context, since time.Time) ([]incidents.Fault, error) {
+	return s.faultsWhere(ctx,
+		`WHERE date >= $1 ORDER BY date DESC, id DESC`, since.Format("2006-01-02"))
+}
+
+func (s *IncidentsStore) faultsWhere(ctx context.Context, clause, arg string) ([]incidents.Fault, error) {
+	rows, err := s.db.pool.Query(ctx,
+		`SELECT id, student_id, class_id, date, severity, description
+		FROM incident_faults `+clause, arg)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list faults: %w", err)
 	}
