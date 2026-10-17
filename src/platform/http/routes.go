@@ -69,6 +69,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/classes", handleListClasses(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/classes", handleCreateClass(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/classes/{groupID}/roster", handleClassRoster(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).

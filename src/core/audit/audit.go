@@ -36,6 +36,7 @@ const (
 	ResourceSchedule   Resource = "schedule"
 	ResourceSubject    Resource = "subject"
 	ResourceAssignment Resource = "assignment"
+	ResourceGroup      Resource = "group"
 )
 
 // Entry is one trail row. StudentID is empty when the action concerns

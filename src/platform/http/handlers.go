@@ -906,6 +906,41 @@ func parseYearQuery(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return year, true
 }
 
+// createClassRequest carries grade + group number + calendar year. The
+// school-year id resolves server-side, never from the body.
+type createClassRequest struct {
+	Year    int `json:"year"`
+	Grade   int `json:"grade"`
+	GroupNo int `json:"groupNo"`
+}
+
+// handleCreateClass persists a class-group (salón). Duplicates within the
+// year fail with a stable 400; unknown years answer 404.
+func handleCreateClass(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body createClassRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		y, err := deps.Years.ByYear(r.Context(), body.Year)
+		if err != nil {
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceGroup, "", "", statusForErr(err))
+			WriteError(w, r, err)
+			return
+		}
+		created, err := deps.Classes.Create(r.Context(), classes.ClassGroup{
+			SchoolYearID: y.ID, Grade: body.Grade, GroupNo: body.GroupNo,
+		})
+		if err != nil {
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceGroup, "", "", statusForErr(err))
+			WriteError(w, r, err)
+			return
+		}
+		recordAudit(deps, r, audit.ActionCreate, audit.ResourceGroup, created.ID, "", http.StatusCreated)
+		writeJSON(w, http.StatusCreated, created)
+	}
+}
+
 // handleListClasses returns every class-group (salón) of the ?year=
 // calendar year. The year number resolves to the id the classes service
 // asks for; unknown years answer 404 like the other year lookups.
