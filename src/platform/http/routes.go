@@ -116,6 +116,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Post("/assignments/{id}/end", handleEndAssignment(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Delete("/assignments/{id}", handleRemoveAssignment(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Get("/teachers/{id}/assignments", handleTeacherAssignments(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).

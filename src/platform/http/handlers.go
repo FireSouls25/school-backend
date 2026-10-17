@@ -581,6 +581,22 @@ func handleRemoveAssignment(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// handleTeacherAssignments returns a teacher's full assignment timeline
+// (open and closed): what the teacher ficha shows as "sus materias".
+func handleTeacherAssignments(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		list, err := deps.Subjects.AssignmentsForTeacher(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []subjects.Assignment{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
 // parseYearQuery reads a ?year= calendar year: missing, non-numeric or
 // out-of-range values fail with 400 http.err_bad_request.
 func parseYearQuery(w http.ResponseWriter, r *http.Request) (int, bool) {
