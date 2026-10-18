@@ -68,6 +68,9 @@ Routes declare one required permission, enforced by
 | `DELETE /v1/assignments/{id}` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/assignments` | `manage-users` | admin only |
 | `GET /v1/warnings/recent?limit=N` | `manage-system` | admin only |
+| `POST /v1/teachers/attendance` | `manage-teachers` | admin only |
+| `GET /v1/teachers/attendance?date=YYYY-MM-DD` | `manage-teachers` | admin only |
+| `GET /v1/teachers/{id}/attendance?from=&to=` | `manage-teachers` | admin only |
 | `GET /v1/incidents/recent?limit=N` | `manage-system` | admin only |
 | `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
 | `POST /v1/schedule` | `manage-users` | admin only |
@@ -109,6 +112,17 @@ ever log in. Frontend flow in `docs/users.md`.
   `time.Weekday`. Anything else fails with `400`.
 
 ## Sessions, warnings and faults
+
+- `POST /v1/teachers/attendance` (`manage-teachers`, admin only)
+  records the daily roll of teachers. Body
+  `{"day","marks":[{"teacherID","status?","note?"}]}`: `day` is
+  `YYYY-MM-DD` or RFC3339 (today or past, never future); an empty
+  `status` means present and Spanish terms parse
+  (`presente/ausente/atraso`). Unknown teachers fail the whole day
+  with `404`; recording again corrects the day (upsert) and each mark
+  is audited. `GET /v1/teachers/attendance?date=` returns the day with
+  display names; `GET /v1/teachers/{id}/attendance?from=&to=` returns
+  one teacher's history newest first with summary counts.
 
 - `POST /v1/sessions/open` (`record-attendance`) opens an attendance
   call with its roster frozen as it is at that moment. Body

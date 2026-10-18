@@ -37,6 +37,8 @@ const (
 	ResourceSubject    Resource = "subject"
 	ResourceAssignment Resource = "assignment"
 	ResourceGroup      Resource = "group"
+	// ResourceTeacherAttendance marks the daily roll of teachers.
+	ResourceTeacherAttendance Resource = "teacher-attendance"
 )
 
 // Entry is one trail row. StudentID is empty when the action concerns

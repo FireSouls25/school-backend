@@ -90,6 +90,7 @@ func main() {
 		Tokens:           tokens,
 		AllowDevIdentity: !cfg.Env.IsProduction(),
 		Subjects:         application.Services.Subjects,
+		TAttendance:      application.Services.TAttendance,
 		AllowedOrigins:   cfg.AllowedOrigins,
 	}, i18nSvc)); err != nil {
 		slog.Error("server stopped", "error", err)

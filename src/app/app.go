@@ -23,6 +23,7 @@ import (
 	"grade/src/core/statistics"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
+	"grade/src/core/tattendance"
 	"grade/src/core/teachers"
 	"grade/src/core/users"
 	"grade/src/core/warnings"
@@ -46,6 +47,7 @@ type Stores struct {
 	Enrollments enrollments.Store
 	Schedules   schedules.Store
 	Sessions    sessions.Store
+	TAttendance tattendance.Store
 	Users       users.Store
 	// Roles is still in-memory when DATABASE_URL is empty; the Postgres
 	// adapter below takes over otherwise, so grants survive restarts.
@@ -66,6 +68,7 @@ type Services struct {
 	Enrollments *enrollments.Service
 	Schedules   *schedules.Service
 	Sessions    *sessions.Service
+	TAttendance *tattendance.Service
 	Statistics  *statistics.Service
 	Dashboard   *statistics.DashboardService
 	Users       *users.Service
@@ -101,6 +104,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Enrollments: enrollments.NewMemoryStore(),
 		Schedules:   schedules.NewMemoryStore(),
 		Sessions:    sessions.NewMemoryStore(),
+		TAttendance: tattendance.NewMemoryStore(),
 		Users:       users.NewMemoryStore(),
 		Roles:       roles.NewMemoryStore(),
 	}
@@ -124,6 +128,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Enrollments = pg.NewEnrollmentsStore(db)
 		s.Schedules = pg.NewSchedulesStore(db)
 		s.Sessions = pg.NewSessionsStore(db)
+		s.TAttendance = pg.NewTAttendanceStore(db)
 		s.Users = pg.NewUsersStore(db)
 		s.Roles = pg.NewRolesStore(db)
 		slog.Info("using postgres persistence")
@@ -138,6 +143,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	// service the future schedule routes will use: one source of truth.
 	subjectsSvc.SetScheduleUsage(scheduleCounter{schedulesSvc})
 	sessionsSvc := sessions.NewService(s.Sessions)
+	tattendanceSvc := tattendance.NewService(s.TAttendance)
 	warningsSvc := warnings.NewService(s.Warnings)
 	incidentsSvc := incidents.NewService(s.Incidents)
 	teachersSvc := teachers.NewService(s.Teachers)
@@ -163,6 +169,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Enrollments: enrollmentsSvc,
 			Schedules:   schedulesSvc,
 			Sessions:    sessionsSvc,
+			TAttendance: tattendanceSvc,
 			Statistics: statistics.NewService(
 				sessAdapter,
 				statisticsWarnings{warningsSvc},

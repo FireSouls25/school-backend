@@ -26,6 +26,7 @@ import (
 	"grade/src/core/statistics"
 	"grade/src/core/students"
 	"grade/src/core/subjects"
+	"grade/src/core/tattendance"
 	"grade/src/core/teachers"
 	"grade/src/core/users"
 	"grade/src/core/warnings"
@@ -58,6 +59,7 @@ type Dependencies struct {
 	// development and tests, false in production.
 	AllowDevIdentity bool
 	Subjects         *subjects.Service
+	TAttendance      *tattendance.Service
 	Classes          *classes.Service
 	Years            *schoolyears.Service
 	Enrollments      *enrollments.Service
@@ -252,6 +254,169 @@ func handleUpdateStudent(deps Dependencies) http.HandlerFunc {
 		}
 		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceStudent, updated.ID, updated.ID, http.StatusOK)
 		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
+// teacherDayMark is one teacher's roll entry inside a day request.
+type teacherDayMark struct {
+	TeacherID string `json:"teacherID"`
+	Status    string `json:"status"`
+	Note      string `json:"note"`
+}
+
+// teacherDayRequest is the body for recording the daily teacher roll.
+// An empty status means present.
+type teacherDayRequest struct {
+	Day   string           `json:"day"`
+	Marks []teacherDayMark `json:"marks"`
+}
+
+// teacherDayRow is one teacher's mark with its display name.
+type teacherDayRow struct {
+	TeacherID   string `json:"TeacherID"`
+	TeacherName string `json:"TeacherName"`
+	Day         string `json:"Day"`
+	Status      string `json:"Status"`
+	Note        string `json:"Note"`
+}
+
+func parseDayParam(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Now().UTC(), nil
+	}
+	if d, err := time.Parse("2006-01-02", raw); err == nil {
+		return d, nil
+	}
+	d, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, errBadRequest
+	}
+	return d, nil
+}
+
+// handleRecordTeacherDay replaces the daily roll of teachers: recording
+// again corrects the day. Unknown teachers fail the whole day with 404.
+func handleRecordTeacherDay(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body teacherDayRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		day, err := parseDayParam(body.Day)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		marks := make([]tattendance.DayMark, 0, len(body.Marks))
+		for _, m := range body.Marks {
+			id := strings.TrimSpace(m.TeacherID)
+			if _, err := deps.Teachers.ByID(r.Context(), id); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			status := tattendance.StatusPresent
+			if strings.TrimSpace(m.Status) != "" {
+				if status, err = tattendance.Parse(m.Status); err != nil {
+					WriteError(w, r, err)
+					return
+				}
+			}
+			marks = append(marks, tattendance.DayMark{
+				TeacherID: id,
+				Status:    status,
+				Note:      strings.TrimSpace(m.Note),
+			})
+		}
+		out, err := deps.TAttendance.RecordDay(r.Context(), tattendance.DayInput{
+			Day:        day,
+			Marks:      marks,
+			RecordedBy: subject,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		for _, m := range out {
+			recordAudit(deps, r, audit.ActionMark, audit.ResourceTeacherAttendance, m.TeacherID, "", http.StatusOK)
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+func teacherDisplayName(ctx context.Context, deps Dependencies, id string) string {
+	if deps.Teachers == nil {
+		return ""
+	}
+	if t, err := deps.Teachers.ByID(ctx, id); err == nil {
+		return strings.TrimSpace(t.Names + " " + t.Surnames)
+	}
+	return ""
+}
+
+// handleTeacherDay returns every mark of one day with display names.
+func handleTeacherDay(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		day, err := parseDayParam(r.URL.Query().Get("date"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		marks, err := deps.TAttendance.Day(r.Context(), day)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		out := make([]teacherDayRow, 0, len(marks))
+		for _, m := range marks {
+			out = append(out, teacherDayRow{
+				TeacherID:   m.TeacherID,
+				TeacherName: teacherDisplayName(r.Context(), deps, m.TeacherID),
+				Day:         m.Day.Format("2006-01-02"),
+				Status:      string(m.Status),
+				Note:        m.Note,
+			})
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// handleTeacherHistory returns one teacher's roll inside a date range
+// with its summary counts, newest first.
+func handleTeacherHistory(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if _, err := deps.Teachers.ByID(r.Context(), id); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		q := r.URL.Query()
+		var from, to time.Time
+		var err error
+		if raw := strings.TrimSpace(q.Get("from")); raw != "" {
+			if from, err = parseDayParam(raw); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		if raw := strings.TrimSpace(q.Get("to")); raw != "" {
+			if to, err = parseDayParam(raw); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		marks, sum, err := deps.TAttendance.History(r.Context(), id, from, to)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"TeacherID":   id,
+			"TeacherName": teacherDisplayName(r.Context(), deps, id),
+			"Marks":       marks,
+			"Summary":     sum,
+		})
 	}
 }
 

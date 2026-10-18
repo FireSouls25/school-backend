@@ -19,6 +19,9 @@ const (
 	PermissionViewClassStats Permission = "view-class-statistics"
 	// PermissionManageStudents lets an admin manage student records.
 	PermissionManageStudents Permission = "manage-students"
+	// PermissionManageTeachers lets an admin manage teacher records and
+	// take their daily roll.
+	PermissionManageTeachers Permission = "manage-teachers"
 	// PermissionManageUsers lets an admin manage system users.
 	PermissionManageUsers Permission = "manage-users"
 	// PermissionManageRoles lets an admin assign roles.
@@ -35,6 +38,7 @@ var permissionCatalog = []Permission{
 	PermissionRecordAttendance,
 	PermissionViewClassStats,
 	PermissionManageStudents,
+	PermissionManageTeachers,
 	PermissionManageUsers,
 	PermissionManageRoles,
 	PermissionManageSystem,

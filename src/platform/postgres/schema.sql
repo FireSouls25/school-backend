@@ -139,6 +139,19 @@ CREATE TABLE IF NOT EXISTS warnings (
 
 CREATE INDEX IF NOT EXISTS idx_warnings_student_id ON warnings (student_id);
 
+-- Daily roll of teachers: one explicit mark per teacher per day.
+CREATE TABLE IF NOT EXISTS teacher_attendance (
+    teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
+    day         DATE NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late')),
+    note        TEXT NOT NULL DEFAULT '',
+    recorded_by TEXT NOT NULL DEFAULT '',
+    recorded_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (teacher_id, day)
+);
+
+CREATE INDEX IF NOT EXISTS idx_teacher_attendance_day ON teacher_attendance (day);
+
 -- Correlate warnings issued in one batch against several students.
 ALTER TABLE warnings ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_warnings_group_id ON warnings (group_id);
