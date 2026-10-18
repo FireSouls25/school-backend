@@ -309,6 +309,9 @@ func TestSessionsHistoryFlow(t *testing.T) {
 	if _, err := st.sessionsSvc.RecordMark(ctx, sess.ID, "44444444-4444-4444-8444-444444444444", sessions.MarkLate, st.profID, "Bus"); err != nil {
 		t.Fatalf("record mark: %v", err)
 	}
+	if _, err := st.sessionsSvc.RecordMark(ctx, sess.ID, "55555555-5555-4555-8555-555555555555", sessions.MarkEvasion, st.profID, ""); err != nil {
+		t.Fatalf("record evasion: %v", err)
+	}
 
 	// Salon is required: no unfiltered dumps.
 	rec := doRequest(t, h, http.MethodGet, "/v1/sessions/history", adminSubject, "")
@@ -323,8 +326,8 @@ func TestSessionsHistoryFlow(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &cards); err != nil {
 		t.Fatalf("decode cards: %v", err)
 	}
-	if len(cards) != 1 || cards[0]["Late"] != float64(1) || cards[0]["ClassLabel"] != "9-1" {
-		t.Fatalf("cards = %v, want the single late roll", cards)
+	if len(cards) != 1 || cards[0]["Late"] != float64(1) || cards[0]["Evasion"] != float64(1) || cards[0]["Present"] != float64(0) || cards[0]["ClassLabel"] != "9-1" {
+		t.Fatalf("cards = %v, want the late+evasion roll", cards)
 	}
 	if cards[0]["Teacher"] == "" {
 		t.Fatalf("cards = %v, want the teacher resolved", cards)
@@ -342,8 +345,8 @@ func TestSessionsHistoryFlow(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}
-	if len(detail.Revisions) != 1 || detail.Revisions[0]["To"] != "late" {
-		t.Fatalf("detail = %+v, want the late revision", detail)
+	if len(detail.Revisions) != 2 || detail.Revisions[0]["To"] != "late" || detail.Revisions[1]["To"] != "evasion" {
+		t.Fatalf("detail = %+v, want late then evasion oldest first", detail)
 	}
 	if detail.Revisions[0]["Student"] != "Ana Gómez" || detail.Revisions[0]["Note"] != "Bus" {
 		t.Fatalf("detail = %+v, want resolved student and note", detail)
