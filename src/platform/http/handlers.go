@@ -1160,13 +1160,40 @@ func handleListSchedule(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// ensureAssignment guarantees an open teacher-subject pairing before a
+// schedule write: assigning happens automatically when a class is placed
+// on the schedule, never by hand. Assigning twice is a no-op thanks to
+// the open-pair check (Assign itself would fail duplicate).
+func ensureAssignment(ctx context.Context, deps Dependencies, teacherID, subjectID string) error {
+	// Stacks without a catalog (checker bypass) skip: production always
+	// wires Subjects.
+	if deps.Subjects == nil {
+		return nil
+	}
+	timeline, err := deps.Subjects.AssignmentsForTeacher(ctx, teacherID)
+	if err != nil {
+		return err
+	}
+	for _, a := range timeline {
+		if a.SubjectID == subjectID && a.IsOpen() {
+			return nil
+		}
+	}
+	_, err = deps.Subjects.Assign(ctx, teacherID, subjectID, time.Now().UTC())
+	return err
+}
+
 // handleCreateSchedule places one weekly slot. Overlaps (teacher or
-// class-group), out-of-hours and untaught pairings fail with stable
-// 400 codes the console renders inline.
+// class-group) and out-of-hours fail with stable 400 codes the console
+// renders inline; the teacher-subject pairing is assigned automatically.
 func handleCreateSchedule(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entry, ok := parseScheduleBody(w, r, "")
 		if !ok {
+			return
+		}
+		if err := ensureAssignment(r.Context(), deps, entry.TeacherID, entry.SubjectID); err != nil {
+			WriteError(w, r, err)
 			return
 		}
 		created, err := deps.Schedules.Create(r.Context(), entry)
@@ -1186,6 +1213,10 @@ func handleUpdateSchedule(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entry, ok := parseScheduleBody(w, r, chi.URLParam(r, "id"))
 		if !ok {
+			return
+		}
+		if err := ensureAssignment(r.Context(), deps, entry.TeacherID, entry.SubjectID); err != nil {
+			WriteError(w, r, err)
 			return
 		}
 		updated, err := deps.Schedules.Update(r.Context(), entry)

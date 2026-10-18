@@ -1,11 +1,16 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 
 	"grade/src/core/roles"
+	"grade/src/core/schedules"
+	"grade/src/core/subjects"
+	"grade/src/core/teachers"
+	httpapi "grade/src/platform/http"
 )
 
 func scheduleStack(t *testing.T) http.Handler {
@@ -110,5 +115,49 @@ func TestScheduleFlow(t *testing.T) {
 	rec = doRequest(t, h, http.MethodDelete, "/v1/schedule/"+entryID, adminSubject, "")
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want 204", rec.Code)
+	}
+}
+
+func TestScheduleAutoAssignsPairing(t *testing.T) {
+	ctx := context.Background()
+	roleSvc := roles.NewService(roles.NewMemoryStore())
+	subjectsSvc := subjects.NewService(subjects.NewMemoryStore())
+	schedulesSvc := schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{})
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+	}
+	must(roleSvc.Assign(ctx, adminSubject, roles.RoleAdmin))
+	subj, err := subjectsSvc.CreateSubject(ctx, subjects.Subject{Name: "Física"})
+	must(err)
+	h := httpapi.Router(httpapi.Dependencies{
+		Auth:             roleSvc,
+		Roles:            roleSvc,
+		RolesSvc:         roleSvc,
+		AllowDevIdentity: true,
+		Schedules:        schedulesSvc,
+		Subjects:         subjectsSvc,
+		Teachers:         teachers.NewService(teachers.NewMemoryStore()),
+	}, newI18n(t))
+
+	// No pairing exists, yet placing the class succeeds: the pairing is
+	// assigned automatically instead of failing untaught.
+	rec := doRequest(t, h, http.MethodPost, "/v1/schedule", adminSubject,
+		`{"classGroupID":"`+realGroupID+`","teacherID":"`+teacherSubject+`","subjectID":"`+subj.ID+`","weekday":2,"start":"09:00","end":"10:00"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/"+teacherSubject+"/assignments", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("timeline status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var timeline []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &timeline); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	if len(timeline) != 1 || timeline[0]["SubjectID"] != subj.ID {
+		t.Fatalf("timeline = %v, want the single auto-assigned pairing", timeline)
 	}
 }

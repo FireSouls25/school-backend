@@ -110,6 +110,9 @@ ever log in. Frontend flow in `docs/users.md`.
   (`view-class-statistics`) returns the caller's slots for one day:
   `weekday` is required, `0` (Sunday) to `6` (Saturday) as
   `time.Weekday`. Anything else fails with `400`.
+- `POST /v1/schedule` and `PUT /v1/schedule/{id}` assign the
+  teacher-subject pairing automatically when no open pairing exists
+  (started today); overlaps and out-of-hours still fail.
 
 ## Sessions, warnings and faults
 
