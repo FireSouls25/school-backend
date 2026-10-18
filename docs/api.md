@@ -127,8 +127,8 @@ ever log in. Frontend flow in `docs/users.md`.
 - `GET /v1/sessions/history?classGroupID=&from=&to=`
   (`view-class-statistics`) returns the roll calls of one salon in a
   range, newest first (capped at 50): date, group, period, subject
-  and teacher resolved, with present/absent/late counts folded from
-  the revision trail.
+  and teacher resolved, with present/absent/evasion/late counts folded
+  from the revision trail.
 - `GET /v1/sessions/{id}` (`view-class-statistics`) returns one roll
   call with its current marks and full revision trail (student,
   before/after, author, timestamp, note).
