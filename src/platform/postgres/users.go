@@ -164,3 +164,27 @@ func (s *UsersStore) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// ForTeacher implements users.Store.
+func (s *UsersStore) ForTeacher(ctx context.Context, teacherID string) ([]users.User, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+userColumns+`
+		FROM users
+		WHERE teacher_id = $1
+		ORDER BY username`,
+		teacherID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: users for teacher: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]users.User, 0)
+	for rows.Next() {
+		u, err := scanUser(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan user for teacher: %w", err)
+		}
+		out = append(out, u.Sanitized())
+	}
+	return out, rows.Err()
+}

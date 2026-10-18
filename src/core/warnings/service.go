@@ -98,6 +98,15 @@ func (s *Service) Recent(ctx context.Context, since time.Time) ([]Warning, error
 	return s.store.Recent(ctx, since)
 }
 
+// ForAuthor returns every warning issued by the given login subject,
+// newest first.
+func (s *Service) ForAuthor(ctx context.Context, authorID string) ([]Warning, error) {
+	if strings.TrimSpace(authorID) == "" {
+		return nil, ErrInvalidTeacher
+	}
+	return s.store.ForAuthor(ctx, strings.TrimSpace(authorID))
+}
+
 // Remove deletes a warning record.
 func (s *Service) Remove(ctx context.Context, id string) error {
 	if strings.TrimSpace(id) == "" {

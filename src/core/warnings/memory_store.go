@@ -87,3 +87,23 @@ func (s *MemoryStore) Recent(_ context.Context, since time.Time) ([]Warning, err
 	})
 	return out, nil
 }
+
+// ForAuthor returns every warning issued by the given login subject,
+// newest first. It backs the "made by this teacher" history.
+func (s *MemoryStore) ForAuthor(_ context.Context, authorID string) ([]Warning, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Warning, 0)
+	for _, w := range s.warnings {
+		if w.TeacherID == authorID {
+			out = append(out, w)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].HappenedAt.Equal(out[j].HappenedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].HappenedAt.After(out[j].HappenedAt)
+	})
+	return out, nil
+}

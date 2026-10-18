@@ -31,4 +31,7 @@ type Store interface {
 	// Delete removes the user with the given id. Removing an unknown
 	// user is a no-op.
 	Delete(ctx context.Context, id string) error
+	// ForTeacher returns every login linked to the given teacher profile.
+	// It backs the "made by this teacher" history on the teacher file.
+	ForTeacher(ctx context.Context, teacherID string) ([]User, error)
 }

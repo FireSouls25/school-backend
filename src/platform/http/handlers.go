@@ -578,6 +578,120 @@ func handlePutTeacherPhoto(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// teacherSessionRow is one roll call taken by the teacher, slimmed for
+// the teacher file: date, group and absence counts.
+type teacherSessionRow struct {
+	ID         string `json:"ID"`
+	Date       string `json:"Date"`
+	ClassLabel string `json:"ClassLabel"`
+	Period     int    `json:"Period"`
+	Subject    string `json:"Subject"`
+	Students   int    `json:"Students"`
+	Absences   int    `json:"Absences"`
+}
+
+// handleTeacherSessions returns the roll calls taken by one teacher,
+// newest first, capped for the file view.
+func handleTeacherSessions(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if _, err := deps.Teachers.ByID(r.Context(), id); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		list, err := deps.Sessions.SessionsForTeacher(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if len(list) > 20 {
+			list = list[:20]
+		}
+		out := make([]teacherSessionRow, 0, len(list))
+		for _, sess := range list {
+			row := teacherSessionRow{
+				ID:         sess.ID,
+				Date:       sess.Date.Format("2006-01-02"),
+				ClassLabel: sess.ClassLabel,
+				Period:     sess.Period,
+				Students:   len(sess.Roster),
+			}
+			if sess.SubjectID != "" && deps.Subjects != nil {
+				if subj, err := deps.Subjects.SubjectByID(r.Context(), sess.SubjectID); err == nil {
+					row.Subject = subj.Name
+				}
+			}
+			revs, err := deps.Sessions.RevisionsForSession(r.Context(), sess.ID)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			marks := make(map[string]sessions.Mark)
+			for _, rev := range revs {
+				marks[rev.StudentID] = rev.To
+			}
+			for _, m := range marks {
+				if m == sessions.MarkAbsence {
+					row.Absences++
+				}
+			}
+			out = append(out, row)
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// handleTeacherWarningsMade returns the llamados issued from the logins
+// linked to one teacher, newest first with display names.
+func handleTeacherWarningsMade(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if _, err := deps.Teachers.ByID(r.Context(), id); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		var authors []string
+		if deps.Users != nil {
+			if linked, err := deps.Users.ForTeacher(r.Context(), id); err == nil {
+				for _, u := range linked {
+					authors = append(authors, u.ID)
+				}
+			}
+		}
+		// A teacher record id doubles as author when the login reuses it.
+		authors = append(authors, id)
+		seen := make(map[string]warnings.Warning)
+		for _, author := range authors {
+			list, err := deps.Warnings.ForAuthor(r.Context(), author)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			for _, warn := range list {
+				seen[warn.ID] = warn
+			}
+		}
+		merged := make([]warnings.Warning, 0, len(seen))
+		for _, warn := range seen {
+			merged = append(merged, warn)
+		}
+		sort.Slice(merged, func(i, j int) bool {
+			if merged[i].HappenedAt.Equal(merged[j].HappenedAt) {
+				return merged[i].ID < merged[j].ID
+			}
+			return merged[i].HappenedAt.After(merged[j].HappenedAt)
+		})
+		if len(merged) > 50 {
+			merged = merged[:50]
+		}
+		out := make([]recentWarning, 0, len(merged))
+		for _, warn := range merged {
+			out = append(out, enrichWarning(r.Context(), deps, warn))
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
 // handleGetTeacherPhoto returns the stored teacher photo, if any.
 func handleGetTeacherPhoto(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

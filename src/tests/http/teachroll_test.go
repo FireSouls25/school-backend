@@ -10,18 +10,34 @@ import (
 
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
+	"grade/src/core/sessions"
 	"grade/src/core/tattendance"
 	"grade/src/core/teachers"
+	"grade/src/core/users"
+	"grade/src/core/warnings"
 	httpapi "grade/src/platform/http"
 )
 
-func teachRollStack(t *testing.T) (http.Handler, string, string) {
+type teachRollSetup struct {
+	h           http.Handler
+	profID      string
+	otherID     string
+	sessionsSvc *sessions.Service
+	warningsSvc *warnings.Service
+	usersSvc    *users.Service
+	taSvc       *tattendance.Service
+}
+
+func teachRollStack(t *testing.T) teachRollSetup {
 	t.Helper()
 	ctx := context.Background()
 	roleSvc := roles.NewService(roles.NewMemoryStore())
 	teachersSvc := teachers.NewService(teachers.NewMemoryStore())
 	schedulesSvc := schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{})
 	taSvc := tattendance.NewService(tattendance.NewMemoryStore())
+	sessionsSvc := sessions.NewService(sessions.NewMemoryStore())
+	warningsSvc := warnings.NewService(warnings.NewMemoryStore())
+	usersSvc := users.NewServiceWithCost(users.NewMemoryStore(), 4)
 	must := func(err error) {
 		t.Helper()
 		if err != nil {
@@ -56,12 +72,24 @@ func teachRollStack(t *testing.T) (http.Handler, string, string) {
 		Teachers:         teachersSvc,
 		Schedules:        schedulesSvc,
 		TAttendance:      taSvc,
+		Sessions:         sessionsSvc,
+		Warnings:         warningsSvc,
+		Users:            usersSvc,
 	}, newI18n(t))
-	return h, prof.ID, other.ID
+	return teachRollSetup{
+		h:           h,
+		profID:      prof.ID,
+		otherID:     other.ID,
+		sessionsSvc: sessionsSvc,
+		warningsSvc: warningsSvc,
+		usersSvc:    usersSvc,
+		taSvc:       taSvc,
+	}
 }
 
 func TestTeacherRollFlow(t *testing.T) {
-	h, profID, otherID := teachRollStack(t)
+	st := teachRollStack(t)
+	h, profID, otherID := st.h, st.profID, st.otherID
 	// Most recent Monday: always today or past, never a future day.
 	now := time.Now().UTC()
 	delta := (int(now.Weekday()) + 6) % 7
@@ -145,7 +173,8 @@ func TestTeacherRollFlow(t *testing.T) {
 }
 
 func TestTeacherPhotoFlow(t *testing.T) {
-	h, profID, _ := teachRollStack(t)
+	st := teachRollStack(t)
+	h, profID := st.h, st.profID
 
 	// Empty photo is an honest 404, teachers cannot upload.
 	rec := doRequest(t, h, http.MethodGet, "/v1/teachers/"+profID+"/photo", adminSubject, "")
@@ -171,5 +200,87 @@ func TestTeacherPhotoFlow(t *testing.T) {
 	}
 	if out["data"] != "aGk=" {
 		t.Fatalf("photo = %v, want the uploaded bytes", out)
+	}
+}
+
+func TestTeacherActivityFlow(t *testing.T) {
+	st := teachRollStack(t)
+	h, profID := st.h, st.profID
+	ctx := context.Background()
+
+	// A roll call taken by the teacher, one absence recorded.
+	sess, err := st.sessionsSvc.OpenSession(ctx, sessions.Session{
+		ClassGroupID: "33333333-3333-4333-8333-333333333333",
+		ClassLabel:   "9-1",
+		SchoolYear:   2026,
+		TeacherID:    profID,
+		Date:         time.Now().UTC(),
+		Period:       1,
+		Roster: []sessions.RosterEntry{
+			{StudentID: "44444444-4444-4444-8444-444444444444", Names: "Ana", Surnames: "Gómez"},
+			{StudentID: "55555555-5555-4555-8555-555555555555", Names: "Luis", Surnames: "Pardo"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("open session: %v", err)
+	}
+	if _, err := st.sessionsSvc.RecordMark(ctx, sess.ID, "55555555-5555-4555-8555-555555555555", sessions.MarkAbsence, profID, ""); err != nil {
+		t.Fatalf("record mark: %v", err)
+	}
+
+	// One llamado issued from the teacher's linked login.
+	login, err := st.usersSvc.Create(ctx, "profe", "", "profe123*")
+	if err != nil {
+		t.Fatalf("create login: %v", err)
+	}
+	if _, err := st.usersSvc.LinkTeacher(ctx, login.ID, profID); err != nil {
+		t.Fatalf("link login: %v", err)
+	}
+	if _, err := st.warningsSvc.Issue(ctx, warnings.Input{
+		StudentID:   "44444444-4444-4444-8444-444444444444",
+		ClassID:     "9-1",
+		TeacherID:   login.ID,
+		HappenedAt:  time.Now().UTC(),
+		Gravity:     warnings.GravitySevere,
+		Title:       "Desorden",
+		Description: "Interrumpió la clase.",
+		Snapshot:    warnings.StudentSnapshot{Names: "Ana", Surnames: "Gómez", DocumentID: "123", ClassID: "9-1"},
+	}); err != nil {
+		t.Fatalf("issue warning: %v", err)
+	}
+
+	// Unknown teachers 404 on both feeds.
+	for _, target := range []string{
+		"/v1/teachers/00000000-0000-4000-8000-000000000000/sessions",
+		"/v1/teachers/00000000-0000-4000-8000-000000000000/warnings-made",
+	} {
+		rec := doRequest(t, h, http.MethodGet, target, adminSubject, "")
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d, want 404", target, rec.Code)
+		}
+	}
+
+	rec := doRequest(t, h, http.MethodGet, "/v1/teachers/"+profID+"/sessions", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sessions status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var taken []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &taken); err != nil {
+		t.Fatalf("decode sessions: %v", err)
+	}
+	if len(taken) != 1 || taken[0]["Absences"] != float64(1) || taken[0]["Students"] != float64(2) {
+		t.Fatalf("sessions = %v, want one roll with one absence of two", taken)
+	}
+
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/"+profID+"/warnings-made", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("warnings-made status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var made []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &made); err != nil {
+		t.Fatalf("decode warnings-made: %v", err)
+	}
+	if len(made) != 1 || made[0]["Title"] != "Desorden" {
+		t.Fatalf("warnings-made = %v, want the single llamado", made)
 	}
 }

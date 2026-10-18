@@ -88,4 +88,7 @@ type Store interface {
 	// first. It feeds the admin dashboard window without sweeping the
 	// whole table; both adapters filter at the source.
 	Recent(ctx context.Context, since time.Time) ([]Warning, error)
+	// ForAuthor returns every warning issued by the given login subject,
+	// newest first.
+	ForAuthor(ctx context.Context, authorID string) ([]Warning, error)
 }

@@ -163,3 +163,27 @@ func (s *WarningsStore) Recent(ctx context.Context, since time.Time) ([]warnings
 	}
 	return out, rows.Err()
 }
+
+// ForAuthor implements warnings.Store.
+func (s *WarningsStore) ForAuthor(ctx context.Context, authorID string) ([]warnings.Warning, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+warningColumns+`
+		FROM warnings
+		WHERE teacher_id = $1
+		ORDER BY happened_at DESC, id DESC`,
+		authorID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list author warnings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]warnings.Warning, 0)
+	for rows.Next() {
+		w, err := scanWarning(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan warning: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}

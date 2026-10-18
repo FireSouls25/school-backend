@@ -125,6 +125,10 @@ func routes(r *chi.Mux, deps Dependencies) {
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
 			Get("/teachers/{id}/attendance", handleTeacherHistory(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/{id}/sessions", handleTeacherSessions(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/{id}/warnings-made", handleTeacherWarningsMade(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
 			Get("/teachers/roll", handleTeacherRoll(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
 			Get("/teachers/attendance/history", handleTeacherAttendanceRange(deps))

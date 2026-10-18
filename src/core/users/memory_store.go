@@ -127,3 +127,16 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	delete(s.users, id)
 	return nil
 }
+
+// ForTeacher implements Store.
+func (s *MemoryStore) ForTeacher(_ context.Context, teacherID string) ([]User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []User
+	for _, u := range s.users {
+		if u.TeacherID == teacherID {
+			out = append(out, u.Sanitized())
+		}
+	}
+	return out, nil
+}

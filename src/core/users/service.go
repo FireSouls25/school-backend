@@ -262,6 +262,14 @@ func (s *Service) UnlinkTeacher(ctx context.Context, userID string) (User, error
 	return u.Sanitized(), nil
 }
 
+// ForTeacher returns every login linked to the given teacher profile.
+func (s *Service) ForTeacher(ctx context.Context, teacherID string) ([]User, error) {
+	if err := validateID(teacherID); err != nil {
+		return nil, err
+	}
+	return s.store.ForTeacher(ctx, strings.TrimSpace(teacherID))
+}
+
 // normalizeUsername trims and lowercases the username so validation and
 // storage see a canonical form.
 func normalizeUsername(s string) string {

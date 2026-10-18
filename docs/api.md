@@ -75,6 +75,8 @@ Routes declare one required permission, enforced by
 | `GET /v1/teachers/attendance/history?from=&to=` | `manage-teachers` | admin only |
 | `PUT /v1/teachers/{id}/photo` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/photo` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}/sessions` | `manage-teachers` | admin only |
+| `GET /v1/teachers/{id}/warnings-made` | `manage-teachers` | admin only |
 | `GET /v1/incidents/recent?limit=N` | `manage-system` | admin only |
 | `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
 | `POST /v1/schedule` | `manage-users` | admin only |
@@ -141,6 +143,12 @@ ever log in. Frontend flow in `docs/users.md`.
 - `PUT /v1/teachers/{id}/photo` / `GET /v1/teachers/{id}/photo`
   (`manage-users`) store and return the teacher picture (2 MiB max,
   empty photo is an honest 404), same contract as students.
+- `GET /v1/teachers/{id}/sessions` (`manage-teachers`) returns the
+  roll calls taken by one teacher, newest first (capped at 20), with
+  absence counts folded from the revision trail.
+- `GET /v1/teachers/{id}/warnings-made` (`manage-teachers`) returns
+  the llamados issued from the logins linked to one teacher (capped
+  at 50), newest first with display names.
 
 - `POST /v1/sessions/open` (`record-attendance`) opens an attendance
   call with its roster frozen as it is at that moment. Body
