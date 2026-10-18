@@ -761,6 +761,17 @@ func parseRecentLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return n, true
 }
 
+// recentWarning is one llamado row for the admin history: the stored
+// warning plus display names resolved best-effort. Deleted or renamed
+// records never break the list; blanks fall back to the frozen
+// snapshot the warning carries.
+type recentWarning struct {
+	warnings.Warning
+	StudentName string `json:"StudentName"`
+	ClassLabel  string `json:"ClassLabel"`
+	AuthorName  string `json:"AuthorName"`
+}
+
 // handleWarningsRecent returns the latest llamados, newest first.
 func handleWarningsRecent(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -773,14 +784,64 @@ func handleWarningsRecent(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		if list == nil {
-			list = []warnings.Warning{}
+		out := make([]recentWarning, 0, len(list))
+		for _, warn := range list {
+			out = append(out, enrichWarning(r.Context(), deps, warn))
 		}
-		if len(list) > limit {
-			list = list[:limit]
+		if len(out) > limit {
+			out = out[:limit]
 		}
-		writeJSON(w, http.StatusOK, list)
+		if out == nil {
+			out = []recentWarning{}
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
+}
+
+func enrichWarning(ctx context.Context, deps Dependencies, warn warnings.Warning) recentWarning {
+	e := recentWarning{Warning: warn}
+	studentName := strings.TrimSpace(warn.Snapshot.Names + " " + warn.Snapshot.Surnames)
+	if deps.Students != nil {
+		if st, err := deps.Students.ByID(ctx, warn.StudentID); err == nil {
+			studentName = strings.TrimSpace(st.Names + " " + st.Surnames)
+		}
+	}
+	e.StudentName = studentName
+	classID := strings.TrimSpace(warn.ClassID)
+	if classID == "" {
+		classID = strings.TrimSpace(warn.Snapshot.ClassID)
+	}
+	if deps.Classes != nil {
+		if g, err := deps.Classes.ByID(ctx, classID); err == nil {
+			e.ClassLabel = g.Label()
+		}
+	}
+	e.AuthorName = authorName(ctx, deps, warn.TeacherID)
+	return e
+}
+
+// authorName resolves who issued a warning: the stored id is the login
+// subject, so a linked teacher profile wins and the username stands in
+// otherwise (admins have no teacher profile).
+func authorName(ctx context.Context, deps Dependencies, subject string) string {
+	if deps.Teachers != nil {
+		if t, err := deps.Teachers.ByID(ctx, subject); err == nil {
+			return strings.TrimSpace(t.Names + " " + t.Surnames)
+		}
+	}
+	if deps.Users == nil {
+		return ""
+	}
+	u, err := deps.Users.ByID(ctx, subject)
+	if err != nil {
+		return ""
+	}
+	if strings.TrimSpace(u.TeacherID) != "" && deps.Teachers != nil {
+		if t, err := deps.Teachers.ByID(ctx, u.TeacherID); err == nil {
+			return strings.TrimSpace(t.Names + " " + t.Surnames)
+		}
+	}
+	return u.Username
 }
 
 // recentIncident is the admin history row: faults carry no title, so the

@@ -129,6 +129,23 @@ ever log in. Frontend flow in `docs/users.md`.
   before anything persists, so an unknown student fails the whole
   batch with `404` and an empty batch with `400`. `201` returns the
   stored warnings.
+- `GET /v1/warnings/recent?limit=N` (`manage-system`, admin only)
+  returns the latest llamados newest first, each with the stored
+  warning plus `StudentName`, `ClassLabel` and `AuthorName` resolved
+  best-effort (live records win, the frozen snapshot stands in
+  otherwise; admins show their username, linked logins their teacher
+  name). Powers the admin history at `/admin/llamados`, where an
+  admin can also issue llamados through the same batch endpoint.
+  against several students. Body
+  `{"classID","gravity","title","description","happenedAt?","studentIDs"}`:
+  `gravity` accepts the stable id and the Spanish term
+  (`leve/medio/moderado/grave`); `happenedAt` is optional RFC3339
+  (defaults to now, UTC). Snapshots freeze from the current profiles
+  and the teacher is always the caller. Every warning shares a fresh
+  group id while each student keeps its own history; profiles resolve
+  before anything persists, so an unknown student fails the whole
+  batch with `404` and an empty batch with `400`. `201` returns the
+  stored warnings.
 - `POST /v1/incidents` (`record-incidents`) records one fault. Body
   `{"studentID","classID","date?","severity","description"}`:
   `severity` accepts the stable id and the Spanish term
