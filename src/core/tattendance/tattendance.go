@@ -81,3 +81,16 @@ type Summary struct {
 	Absent  int
 	Late    int
 }
+
+// Revision is one change to a mark: the status before and after, who
+// recorded it and when. OldStatus is empty for the first mark of a day.
+// The roll never rewrites history; correcting a day appends a revision.
+type Revision struct {
+	TeacherID  string
+	Day        time.Time
+	OldStatus  Status
+	NewStatus  Status
+	Note       string
+	RecordedBy string
+	RecordedAt time.Time
+}

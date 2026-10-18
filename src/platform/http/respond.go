@@ -103,6 +103,8 @@ var statusByCode = map[string]int{
 	"teachers.err_invalid_document": http.StatusBadRequest,
 	"teachers.err_invalid_birth":    http.StatusBadRequest,
 	"teachers.err_invalid_email":    http.StatusBadRequest,
+	"teachers.err_photo_too_large":  http.StatusBadRequest,
+	"teachers.err_photo_not_found":  http.StatusNotFound,
 
 	"subjects.err_not_found":            http.StatusNotFound,
 	"subjects.err_assignment_not_found": http.StatusNotFound,

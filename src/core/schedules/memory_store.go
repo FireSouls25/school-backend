@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 )
 
 // MemoryStore is an in-memory Store for tests and development.
@@ -76,6 +77,24 @@ func (s *MemoryStore) EntriesForSubject(_ context.Context, subjectID string) ([]
 		}
 	}
 	sortEntries(out)
+	return out, nil
+}
+
+// TeachersOnWeekday implements Store.
+func (s *MemoryStore) TeachersOnWeekday(_ context.Context, weekday time.Weekday) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := make(map[string]struct{})
+	for _, e := range s.entries {
+		if time.Weekday(e.Weekday) == weekday {
+			seen[e.TeacherID] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	sort.Strings(out)
 	return out, nil
 }
 

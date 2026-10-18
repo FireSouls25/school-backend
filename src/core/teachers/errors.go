@@ -20,6 +20,8 @@ func newError(code, message string) *Error {
 var (
 	// ErrNotFound is returned when no teacher matches the given id.
 	ErrNotFound = newError("teachers.err_not_found", "teachers: not found")
+	// ErrPhotoTooLarge is returned when a photo exceeds MaxPhotoSize.
+	ErrPhotoTooLarge = newError("teachers.err_photo_too_large", "teachers: photo too large")
 	// ErrInvalidID is returned when a teacher id is missing or malformed.
 	ErrInvalidID = newError("teachers.err_invalid_id", "teachers: invalid id")
 	// ErrInvalidName is returned when names or surnames are missing.

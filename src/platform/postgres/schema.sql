@@ -152,6 +152,22 @@ CREATE TABLE IF NOT EXISTS teacher_attendance (
 
 CREATE INDEX IF NOT EXISTS idx_teacher_attendance_day ON teacher_attendance (day);
 
+-- Append-only trail of teacher mark changes: correcting a day never
+-- rewrites, it appends a revision with the status before and after.
+CREATE TABLE IF NOT EXISTS teacher_attendance_revisions (
+    id          UUID PRIMARY KEY,
+    teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
+    day         DATE NOT NULL,
+    old_status  TEXT NOT NULL DEFAULT '',
+    new_status  TEXT NOT NULL CHECK (new_status IN ('present', 'absent', 'late')),
+    note        TEXT NOT NULL DEFAULT '',
+    recorded_by TEXT NOT NULL DEFAULT '',
+    recorded_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_teacher_attendance_revisions_teacher_day
+    ON teacher_attendance_revisions (teacher_id, day);
+
 -- Correlate warnings issued in one batch against several students.
 ALTER TABLE warnings ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_warnings_group_id ON warnings (group_id);
@@ -175,6 +191,7 @@ CREATE TABLE IF NOT EXISTS teachers (
 
 -- Retiring a teacher flips active instead of deleting the profile.
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS photo BYTEA;
 
 CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
 

@@ -158,6 +158,9 @@ type photoResponse struct {
 // errPhotoNotFound renders 404 when the student has no photo yet.
 var errPhotoNotFound = codedError{"students.err_photo_not_found"}
 
+// errTeacherPhotoNotFound renders 404 when the teacher has no photo yet.
+var errTeacherPhotoNotFound = codedError{"teachers.err_photo_not_found"}
+
 // maxPhotoBodyBytes caps photo uploads above the 2 MiB domain limit:
 // base64 inflates by 4/3, so the JSON envelope needs headroom.
 const maxPhotoBodyBytes = 4 << 20
@@ -406,7 +409,7 @@ func handleTeacherHistory(deps Dependencies) http.HandlerFunc {
 				return
 			}
 		}
-		marks, sum, err := deps.TAttendance.History(r.Context(), id, from, to)
+		marks, sum, revisions, err := deps.TAttendance.History(r.Context(), id, from, to)
 		if err != nil {
 			WriteError(w, r, err)
 			return
@@ -416,6 +419,180 @@ func handleTeacherHistory(deps Dependencies) http.HandlerFunc {
 			"TeacherName": teacherDisplayName(r.Context(), deps, id),
 			"Marks":       marks,
 			"Summary":     sum,
+			"Revisions":   revisions,
+		})
+	}
+}
+
+// teacherRollRow is one expected teacher with its mark, if recorded.
+type teacherRollRow struct {
+	TeacherID   string `json:"TeacherID"`
+	TeacherName string `json:"TeacherName"`
+	Day         string `json:"Day"`
+	Status      string `json:"Status"`
+	Note        string `json:"Note"`
+	Recorded    bool   `json:"Recorded"`
+}
+
+// handleTeacherRoll returns the teachers expected on a day (from the
+// weekly schedule) with their recorded marks, if any. Unmarked teachers
+// carry an empty status: the roll screen shows nothing pre-selected.
+func handleTeacherRoll(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		day, err := parseDayParam(r.URL.Query().Get("date"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		expected, err := deps.Schedules.TeachersOnWeekday(r.Context(), day.Weekday())
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		marks, err := deps.TAttendance.Day(r.Context(), day)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		byTeacher := make(map[string]tattendance.Mark, len(marks))
+		for _, m := range marks {
+			byTeacher[m.TeacherID] = m
+		}
+		dayLabel := day.UTC().Format("2006-01-02")
+		out := make([]teacherRollRow, 0, len(expected))
+		for _, id := range expected {
+			name := teacherDisplayName(r.Context(), deps, id)
+			if name == "" {
+				continue
+			}
+			row := teacherRollRow{TeacherID: id, TeacherName: name, Day: dayLabel}
+			if m, ok := byTeacher[id]; ok {
+				row.Status = string(m.Status)
+				row.Note = m.Note
+				row.Recorded = true
+				delete(byTeacher, id)
+			}
+			out = append(out, row)
+		}
+		// Marks for teachers no longer expected stay visible: history
+		// must not silently drop a recorded day.
+		for _, m := range marks {
+			if _, ok := byTeacher[m.TeacherID]; !ok {
+				continue
+			}
+			name := teacherDisplayName(r.Context(), deps, m.TeacherID)
+			if name == "" {
+				name = m.TeacherID
+			}
+			out = append(out, teacherRollRow{
+				TeacherID:   m.TeacherID,
+				TeacherName: name,
+				Day:         dayLabel,
+				Status:      string(m.Status),
+				Note:        m.Note,
+				Recorded:    true,
+			})
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// teacherHistoryCard is one day roll for the history feed.
+type teacherHistoryCard struct {
+	Day     string `json:"Day"`
+	Total   int    `json:"Total"`
+	Present int    `json:"Present"`
+	Absent  int    `json:"Absent"`
+	Late    int    `json:"Late"`
+}
+
+// handleTeacherAttendanceRange returns one card per recorded day inside
+// the range, newest first, with summary counts.
+func handleTeacherAttendanceRange(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		var from, to time.Time
+		var err error
+		if raw := strings.TrimSpace(q.Get("from")); raw != "" {
+			if from, err = parseDayParam(raw); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		if raw := strings.TrimSpace(q.Get("to")); raw != "" {
+			if to, err = parseDayParam(raw); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		marks, err := deps.TAttendance.Range(r.Context(), from, to)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		byDay := make(map[string]*teacherHistoryCard)
+		var order []string
+		for _, m := range marks {
+			key := m.Day.Format("2006-01-02")
+			card, ok := byDay[key]
+			if !ok {
+				card = &teacherHistoryCard{Day: key}
+				byDay[key] = card
+				order = append(order, key)
+			}
+			card.Total++
+			switch m.Status {
+			case tattendance.StatusPresent:
+				card.Present++
+			case tattendance.StatusAbsent:
+				card.Absent++
+			case tattendance.StatusLate:
+				card.Late++
+			}
+		}
+		out := make([]teacherHistoryCard, 0, len(order))
+		for _, key := range order {
+			out = append(out, *byDay[key])
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// handlePutTeacherPhoto stores (or clears, when empty) a teacher photo.
+func handlePutTeacherPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body photoRequest
+		if !decodePhotoBody(w, r, &body) {
+			return
+		}
+		data, err := photoBytes(body.Data)
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		if err := deps.Teachers.PutPhoto(r.Context(), chi.URLParam(r, "id"), teachers.Photo{Data: data}); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleGetTeacherPhoto returns the stored teacher photo, if any.
+func handleGetTeacherPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		photo, err := deps.Teachers.Photo(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if len(photo.Data) == 0 {
+			WriteError(w, r, errTeacherPhotoNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, photoResponse{
+			Data:        base64.StdEncoding.EncodeToString(photo.Data),
+			ContentType: http.DetectContentType(photo.Data),
 		})
 	}
 }

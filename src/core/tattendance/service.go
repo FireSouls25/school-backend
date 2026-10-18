@@ -53,12 +53,34 @@ func (s *Service) RecordDay(ctx context.Context, in DayInput) ([]Mark, error) {
 		})
 	}
 	out := make([]Mark, 0, len(marks))
+	current, err := s.store.ForDay(ctx, day)
+	if err != nil {
+		return nil, err
+	}
+	before := make(map[string]Mark, len(current))
+	for _, m := range current {
+		before[m.TeacherID] = m
+	}
 	for _, m := range marks {
 		stored, err := s.store.Upsert(ctx, m)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, stored)
+		old, had := before[m.TeacherID]
+		if !had || old.Status != m.Status || old.Note != m.Note {
+			if _, err := s.store.AddRevision(ctx, Revision{
+				TeacherID:  m.TeacherID,
+				Day:        day,
+				OldStatus:  old.Status,
+				NewStatus:  m.Status,
+				Note:       m.Note,
+				RecordedBy: m.RecordedBy,
+				RecordedAt: m.RecordedAt,
+			}); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return out, nil
 }
@@ -73,25 +95,22 @@ func (s *Service) Day(ctx context.Context, day time.Time) ([]Mark, error) {
 }
 
 // History returns one teacher's marks inside [from, to], newest first,
-// with its summary counts.
-func (s *Service) History(ctx context.Context, teacherID string, from, to time.Time) ([]Mark, Summary, error) {
+// with its summary counts and the revision trail (what changed, when).
+func (s *Service) History(ctx context.Context, teacherID string, from, to time.Time) ([]Mark, Summary, []Revision, error) {
 	if strings.TrimSpace(teacherID) == "" {
-		return nil, Summary{}, ErrInvalidTeacher
+		return nil, Summary{}, nil, ErrInvalidTeacher
 	}
-	if to.IsZero() {
-		to = time.Now().UTC()
-	}
-	if from.IsZero() {
-		from = to.AddDate(0, 0, -30)
-	}
-	from = startOfDay(from)
-	to = startOfDay(to)
-	if to.Before(from) || to.Sub(from).Hours() > MaxHistoryDays*24 {
-		return nil, Summary{}, ErrInvalidRange
+	from, to, err := normalizeRange(from, to)
+	if err != nil {
+		return nil, Summary{}, nil, err
 	}
 	marks, err := s.store.ForTeacher(ctx, strings.TrimSpace(teacherID), from, to)
 	if err != nil {
-		return nil, Summary{}, err
+		return nil, Summary{}, nil, err
+	}
+	revisions, err := s.store.RevisionsForTeacher(ctx, strings.TrimSpace(teacherID), from, to)
+	if err != nil {
+		return nil, Summary{}, nil, err
 	}
 	var sum Summary
 	for _, m := range marks {
@@ -104,7 +123,32 @@ func (s *Service) History(ctx context.Context, teacherID string, from, to time.T
 			sum.Late++
 		}
 	}
-	return marks, sum, nil
+	return marks, sum, revisions, nil
+}
+
+// Range returns every mark inside [from, to], newest day first. The
+// history cards group these by day.
+func (s *Service) Range(ctx context.Context, from, to time.Time) ([]Mark, error) {
+	from, to, err := normalizeRange(from, to)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.ForRange(ctx, from, to)
+}
+
+func normalizeRange(from, to time.Time) (time.Time, time.Time, error) {
+	if to.IsZero() {
+		to = time.Now().UTC()
+	}
+	if from.IsZero() {
+		from = to.AddDate(0, 0, -30)
+	}
+	from = startOfDay(from)
+	to = startOfDay(to)
+	if to.Before(from) || to.Sub(from).Hours() > MaxHistoryDays*24 {
+		return time.Time{}, time.Time{}, ErrInvalidRange
+	}
+	return from, to, nil
 }
 
 // normalizeDay truncates to the day and rejects future days: the roll

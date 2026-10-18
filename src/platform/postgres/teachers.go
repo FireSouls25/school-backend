@@ -134,3 +134,36 @@ func (s *TeachersStore) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// PutPhoto implements teachers.Store.
+func (s *TeachersStore) PutPhoto(ctx context.Context, teacherID string, photo teachers.Photo) error {
+	var data []byte
+	if len(photo.Data) > 0 {
+		data = photo.Data
+	}
+	tag, err := s.db.pool.Exec(ctx,
+		`UPDATE teachers SET photo = $2, updated_at = now() WHERE id = $1`,
+		teacherID, data)
+	if err != nil {
+		return fmt.Errorf("postgres: put photo: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return teachers.ErrNotFound
+	}
+	return nil
+}
+
+// Photo implements teachers.Store.
+func (s *TeachersStore) Photo(ctx context.Context, teacherID string) (teachers.Photo, error) {
+	row := s.db.pool.QueryRow(ctx,
+		`SELECT photo FROM teachers WHERE id = $1`, teacherID)
+	var data []byte
+	err := row.Scan(&data)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return teachers.Photo{}, teachers.ErrNotFound
+	}
+	if err != nil {
+		return teachers.Photo{}, fmt.Errorf("postgres: get photo: %w", err)
+	}
+	return teachers.Photo{Data: data}, nil
+}

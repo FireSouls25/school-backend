@@ -71,6 +71,10 @@ Routes declare one required permission, enforced by
 | `POST /v1/teachers/attendance` | `manage-teachers` | admin only |
 | `GET /v1/teachers/attendance?date=YYYY-MM-DD` | `manage-teachers` | admin only |
 | `GET /v1/teachers/{id}/attendance?from=&to=` | `manage-teachers` | admin only |
+| `GET /v1/teachers/roll?date=YYYY-MM-DD` | `manage-teachers` | admin only |
+| `GET /v1/teachers/attendance/history?from=&to=` | `manage-teachers` | admin only |
+| `PUT /v1/teachers/{id}/photo` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}/photo` | `manage-users` | admin only |
 | `GET /v1/incidents/recent?limit=N` | `manage-system` | admin only |
 | `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
 | `POST /v1/schedule` | `manage-users` | admin only |
@@ -125,7 +129,18 @@ ever log in. Frontend flow in `docs/users.md`.
   with `404`; recording again corrects the day (upsert) and each mark
   is audited. `GET /v1/teachers/attendance?date=` returns the day with
   display names; `GET /v1/teachers/{id}/attendance?from=&to=` returns
-  one teacher's history newest first with summary counts.
+  one teacher's history newest first with summary counts and the
+  revision trail (old/new status, who, when).
+- `GET /v1/teachers/attendance/history?from=&to=` (`manage-teachers`)
+  returns one card per recorded day, newest first: total, present,
+  absent and late counts. Powers the roll history feed.
+- `GET /v1/teachers/roll?date=` (`manage-teachers`) returns the
+  teachers expected that weekday (from the weekly schedule) with
+  their recorded marks, if any. Unmarked teachers carry an empty
+  status: the roll screen shows nothing pre-selected.
+- `PUT /v1/teachers/{id}/photo` / `GET /v1/teachers/{id}/photo`
+  (`manage-users`) store and return the teacher picture (2 MiB max,
+  empty photo is an honest 404), same contract as students.
 
 - `POST /v1/sessions/open` (`record-attendance`) opens an attendance
   call with its roster frozen as it is at that moment. Body

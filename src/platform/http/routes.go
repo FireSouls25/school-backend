@@ -114,12 +114,20 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/teachers/me/schedule", handleMySchedule(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/teachers/{id}/photo", handlePutTeacherPhoto(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Get("/teachers/{id}/photo", handleGetTeacherPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
 			Post("/teachers/attendance", handleRecordTeacherDay(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
 			Get("/teachers/attendance", handleTeacherDay(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
 			Get("/teachers/{id}/attendance", handleTeacherHistory(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/roll", handleTeacherRoll(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/attendance/history", handleTeacherAttendanceRange(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/subjects", handleListSubjects(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).

@@ -12,11 +12,12 @@ import (
 type MemoryStore struct {
 	mu       sync.Mutex
 	teachers map[string]Teacher
+	photos   map[string][]byte
 }
 
 // NewMemoryStore returns an empty, ready-to-use MemoryStore.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{teachers: make(map[string]Teacher)}
+	return &MemoryStore{teachers: make(map[string]Teacher), photos: make(map[string][]byte)}
 }
 
 // Create implements Store.
@@ -68,5 +69,27 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.teachers, id)
+	delete(s.photos, id)
 	return nil
+}
+
+// PutPhoto implements Store.
+func (s *MemoryStore) PutPhoto(_ context.Context, teacherID string, photo Photo) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.teachers[teacherID]; !ok {
+		return ErrNotFound
+	}
+	s.photos[teacherID] = append([]byte(nil), photo.Data...)
+	return nil
+}
+
+// Photo implements Store.
+func (s *MemoryStore) Photo(_ context.Context, teacherID string) (Photo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.teachers[teacherID]; !ok {
+		return Photo{}, ErrNotFound
+	}
+	return Photo{Data: append([]byte(nil), s.photos[teacherID]...)}, nil
 }

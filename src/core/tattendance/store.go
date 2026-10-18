@@ -16,4 +16,11 @@ type Store interface {
 	// ForTeacher returns the marks of one teacher inside [from, to],
 	// newest first.
 	ForTeacher(ctx context.Context, teacherID string, from, to time.Time) ([]Mark, error)
+	// AddRevision appends one mark change to the history.
+	AddRevision(ctx context.Context, r Revision) (Revision, error)
+	// RevisionsForTeacher returns the revisions of one teacher inside
+	// [from, to], newest first.
+	RevisionsForTeacher(ctx context.Context, teacherID string, from, to time.Time) ([]Revision, error)
+	// ForRange returns every mark inside [from, to], newest day first.
+	ForRange(ctx context.Context, from, to time.Time) ([]Mark, error)
 }

@@ -98,6 +98,16 @@ func (s *Service) EntriesForSubject(ctx context.Context, subjectID string) ([]En
 	return s.store.EntriesForSubject(ctx, strings.TrimSpace(subjectID))
 }
 
+// TeachersOnWeekday returns the distinct teacher ids expected on the
+// given weekday (at least one entry), sorted. Days without entries yield
+// an empty list: nobody is expected, nobody is listed.
+func (s *Service) TeachersOnWeekday(ctx context.Context, weekday time.Weekday) ([]string, error) {
+	if weekday < time.Sunday || weekday > time.Saturday {
+		return nil, ErrInvalidWeekday
+	}
+	return s.store.TeachersOnWeekday(ctx, weekday)
+}
+
 // Update replaces an existing entry, re-checking conflicts and pairing.
 func (s *Service) Update(ctx context.Context, e Entry) (Entry, error) {
 	e.ID = strings.TrimSpace(e.ID)
