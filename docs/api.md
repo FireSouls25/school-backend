@@ -77,6 +77,8 @@ Routes declare one required permission, enforced by
 | `GET /v1/teachers/{id}/photo` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/sessions` | `manage-teachers` | admin only |
 | `GET /v1/teachers/{id}/warnings-made` | `manage-teachers` | admin only |
+| `GET /v1/sessions/history?classGroupID=&from=&to=` | `view-class-statistics` | teacher, admin |
+| `GET /v1/sessions/{id}` | `view-class-statistics` | teacher, admin |
 | `GET /v1/incidents/recent?limit=N` | `manage-system` | admin only |
 | `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
 | `POST /v1/schedule` | `manage-users` | admin only |
@@ -122,6 +124,15 @@ ever log in. Frontend flow in `docs/users.md`.
 
 ## Sessions, warnings and faults
 
+- `GET /v1/sessions/history?classGroupID=&from=&to=`
+  (`view-class-statistics`) returns the roll calls of one salon in a
+  range, newest first (capped at 50): date, group, period, subject
+  and teacher resolved, with present/absent/late counts folded from
+  the revision trail.
+- `GET /v1/sessions/{id}` (`view-class-statistics`) returns one roll
+  call with its current marks and full revision trail (student,
+  before/after, author, timestamp, note).
+
 - `POST /v1/teachers/attendance` (`manage-teachers`, admin only)
   records the daily roll of teachers. Body
   `{"day","marks":[{"teacherID","status?","note?"}]}`: `day` is
@@ -136,6 +147,9 @@ ever log in. Frontend flow in `docs/users.md`.
 - `GET /v1/teachers/attendance/history?from=&to=` (`manage-teachers`)
   returns one card per recorded day, newest first: total, present,
   absent and late counts. Powers the roll history feed.
+- `GET /v1/teachers/attendance/revisions?date=` (`manage-teachers`)
+  returns every change recorded one day, newest first: teacher,
+  old/new status, note, author and timestamp.
 - `GET /v1/teachers/roll?date=` (`manage-teachers`) returns the
   teachers expected that weekday (from the weekly schedule) with
   their recorded marks, if any. Unmarked teachers carry an empty
