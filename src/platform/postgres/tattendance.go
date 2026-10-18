@@ -172,3 +172,27 @@ func (s *TAttendanceStore) ForRange(ctx context.Context, from, to time.Time) ([]
 	}
 	return out, rows.Err()
 }
+
+// RevisionsForDay implements tattendance.Store.
+func (s *TAttendanceStore) RevisionsForDay(ctx context.Context, day time.Time) ([]tattendance.Revision, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+tattendanceRevisionColumns+`
+		FROM teacher_attendance_revisions
+		WHERE day = $1
+		ORDER BY recorded_at DESC`,
+		day)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list teacher day revisions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]tattendance.Revision, 0)
+	for rows.Next() {
+		r, err := scanTAttendanceRevision(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan teacher revision: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

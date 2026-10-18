@@ -558,6 +558,64 @@ func handleTeacherAttendanceRange(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// teacherRevisionRow is one day-roll change with its author resolved.
+type teacherRevisionRow struct {
+	TeacherID   string `json:"TeacherID"`
+	TeacherName string `json:"TeacherName"`
+	Day         string `json:"Day"`
+	OldStatus   string `json:"OldStatus"`
+	NewStatus   string `json:"NewStatus"`
+	Note        string `json:"Note"`
+	Author      string `json:"Author"`
+	RecordedAt  string `json:"RecordedAt"`
+}
+
+func revisionAuthor(ctx context.Context, deps Dependencies, subject string) string {
+	if deps.Users != nil {
+		if u, err := deps.Users.ByID(ctx, subject); err == nil && u.Username != "" {
+			return u.Username
+		}
+	}
+	if name := teacherDisplayName(ctx, deps, subject); name != "" {
+		return name
+	}
+	if len(subject) >= 8 {
+		return subject[:8]
+	}
+	return subject
+}
+
+// handleTeacherDayRevisions returns every change recorded on one day,
+// newest first: who modified, when, and what changed.
+func handleTeacherDayRevisions(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		day, err := parseDayParam(r.URL.Query().Get("date"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		revs, err := deps.TAttendance.RevisionsForDay(r.Context(), day)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		out := make([]teacherRevisionRow, 0, len(revs))
+		for _, rev := range revs {
+			out = append(out, teacherRevisionRow{
+				TeacherID:   rev.TeacherID,
+				TeacherName: teacherDisplayName(r.Context(), deps, rev.TeacherID),
+				Day:         rev.Day.Format("2006-01-02"),
+				OldStatus:   string(rev.OldStatus),
+				NewStatus:   string(rev.NewStatus),
+				Note:        rev.Note,
+				Author:      revisionAuthor(r.Context(), deps, rev.RecordedBy),
+				RecordedAt:  rev.RecordedAt.Format(time.RFC3339),
+			})
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
 // handlePutTeacherPhoto stores (or clears, when empty) a teacher photo.
 func handlePutTeacherPhoto(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

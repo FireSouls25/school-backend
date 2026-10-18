@@ -122,3 +122,24 @@ func (s *MemoryStore) ForRange(_ context.Context, from, to time.Time) ([]Mark, e
 	}
 	return out, nil
 }
+
+// RevisionsForDay implements Store.
+func (s *MemoryStore) RevisionsForDay(_ context.Context, day time.Time) ([]Revision, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	want := day.UTC().Format("2006-01-02")
+	var out []Revision
+	for _, r := range s.revisions {
+		if r.Day.UTC().Format("2006-01-02") == want {
+			out = append(out, r)
+		}
+	}
+	for i := 0; i < len(out); i++ {
+		for j := i + 1; j < len(out); j++ {
+			if out[j].RecordedAt.After(out[i].RecordedAt) {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+	return out, nil
+}

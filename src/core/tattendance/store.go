@@ -23,4 +23,7 @@ type Store interface {
 	RevisionsForTeacher(ctx context.Context, teacherID string, from, to time.Time) ([]Revision, error)
 	// ForRange returns every mark inside [from, to], newest day first.
 	ForRange(ctx context.Context, from, to time.Time) ([]Mark, error)
+	// RevisionsForDay returns every revision recorded on the given day,
+	// newest first. It backs the per-day change trail.
+	RevisionsForDay(ctx context.Context, day time.Time) ([]Revision, error)
 }

@@ -120,3 +120,37 @@ func TestTeacherAttendanceFlow(t *testing.T) {
 		t.Fatalf("day2 = %v, want the corrected present", day2)
 	}
 }
+
+func TestTeacherDayRevisionsFlow(t *testing.T) {
+	h, profID := tattendanceStack(t)
+	today := time.Now().UTC().Format("2006-01-02")
+
+	// Record, then correct: two revisions with before and after.
+	for _, body := range []string{
+		fmt.Sprintf(`{"day":%q,"marks":[{"teacherID":%q,"status":"ausente","note":"Cita"}]}`, today, profID),
+		fmt.Sprintf(`{"day":%q,"marks":[{"teacherID":%q,"status":"tarde"}]}`, today, profID),
+	} {
+		rec := doRequest(t, h, http.MethodPost, "/v1/teachers/attendance", adminSubject, body)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("record status = %d, want 200: %s", rec.Code, rec.Body.String())
+		}
+	}
+	rec := doRequest(t, h, http.MethodGet, "/v1/teachers/attendance/revisions?date="+today, adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("revisions status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var revs []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &revs); err != nil {
+		t.Fatalf("decode revisions: %v", err)
+	}
+	if len(revs) != 2 {
+		t.Fatalf("revisions = %v, want first mark + correction", revs)
+	}
+	// Newest first: the correction carries absent -> late.
+	if revs[0]["OldStatus"] != "absent" || revs[0]["NewStatus"] != "late" {
+		t.Fatalf("latest = %v, want absent -> late", revs[0])
+	}
+	if revs[0]["TeacherName"] == "" || revs[0]["Author"] == "" || revs[0]["RecordedAt"] == "" {
+		t.Fatalf("latest = %v, want resolved names and timestamp", revs[0])
+	}
+}

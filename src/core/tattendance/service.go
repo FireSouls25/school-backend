@@ -126,8 +126,15 @@ func (s *Service) History(ctx context.Context, teacherID string, from, to time.T
 	return marks, sum, revisions, nil
 }
 
-// Range returns every mark inside [from, to], newest day first. The
-// history cards group these by day.
+// RevisionsForDay returns every revision recorded on the given day,
+// newest first.
+func (s *Service) RevisionsForDay(ctx context.Context, day time.Time) ([]Revision, error) {
+	d, err := normalizeDay(day)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.RevisionsForDay(ctx, d)
+}
 func (s *Service) Range(ctx context.Context, from, to time.Time) ([]Mark, error) {
 	from, to, err := normalizeRange(from, to)
 	if err != nil {
