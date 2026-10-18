@@ -699,6 +699,170 @@ func handleTeacherSessions(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// classSessionCard is one roll call for the salon history feed.
+type classSessionCard struct {
+	ID         string `json:"ID"`
+	Date       string `json:"Date"`
+	ClassLabel string `json:"ClassLabel"`
+	Period     int    `json:"Period"`
+	Subject    string `json:"Subject"`
+	Teacher    string `json:"Teacher"`
+	Students   int    `json:"Students"`
+	Present    int    `json:"Present"`
+	Absent     int    `json:"Absent"`
+	Late       int    `json:"Late"`
+}
+
+func foldSessionMarks(revs []sessions.Revision, rosterLen int) (present, absent, late int) {
+	marks := make(map[string]sessions.Mark)
+	for _, rev := range revs {
+		marks[rev.StudentID] = rev.To
+	}
+	for _, m := range marks {
+		switch m {
+		case sessions.MarkAbsence:
+			absent++
+		case sessions.MarkLate:
+			late++
+		}
+	}
+	present = rosterLen - absent - late
+	if present < 0 {
+		present = 0
+	}
+	return present, absent, late
+}
+
+func sessionCard(ctx context.Context, deps Dependencies, sess sessions.Session) (classSessionCard, error) {
+	revs, err := deps.Sessions.RevisionsForSession(ctx, sess.ID)
+	if err != nil {
+		return classSessionCard{}, err
+	}
+	present, absent, late := foldSessionMarks(revs, len(sess.Roster))
+	card := classSessionCard{
+		ID:         sess.ID,
+		Date:       sess.Date.Format("2006-01-02"),
+		ClassLabel: sess.ClassLabel,
+		Period:     sess.Period,
+		Students:   len(sess.Roster),
+		Present:    present,
+		Absent:     absent,
+		Late:       late,
+	}
+	if sess.SubjectID != "" && deps.Subjects != nil {
+		if subj, err := deps.Subjects.SubjectByID(ctx, sess.SubjectID); err == nil {
+			card.Subject = subj.Name
+		}
+	}
+	if deps.Teachers != nil {
+		if t, err := deps.Teachers.ByID(ctx, sess.TeacherID); err == nil {
+			card.Teacher = t.FullName()
+		}
+	}
+	return card, nil
+}
+
+// handleSessionsHistory returns the roll calls of one salon inside a
+// range, newest first. Unfiltered dumps stay forbidden: a salon is
+// always required.
+func handleSessionsHistory(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		groupID := strings.TrimSpace(q.Get("classGroupID"))
+		if groupID == "" {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		var from, to time.Time
+		var err error
+		if raw := strings.TrimSpace(q.Get("from")); raw != "" {
+			if from, err = parseDayParam(raw); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		if raw := strings.TrimSpace(q.Get("to")); raw != "" {
+			if to, err = parseDayParam(raw); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		if to.IsZero() {
+			to = time.Now().UTC()
+		}
+		if from.IsZero() {
+			from = to.AddDate(0, 0, -30)
+		}
+		list, err := deps.Sessions.SessionsForGroup(r.Context(), groupID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		out := make([]classSessionCard, 0)
+		for _, sess := range list {
+			d := sess.Date.UTC()
+			if d.Before(from) || d.After(to.AddDate(0, 0, 1).Add(-time.Nanosecond)) {
+				continue
+			}
+			card, err := sessionCard(r.Context(), deps, sess)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			out = append(out, card)
+			if len(out) >= 50 {
+				break
+			}
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// sessionRevisionRow is one mark change with student and author resolved.
+type sessionRevisionRow struct {
+	Student   string `json:"Student"`
+	From      string `json:"From"`
+	To        string `json:"To"`
+	Author    string `json:"Author"`
+	ChangedAt string `json:"ChangedAt"`
+	Note      string `json:"Note"`
+}
+
+// handleSessionDetail returns one roll call with its current marks and
+// full revision trail for the history expand.
+func handleSessionDetail(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		detail, err := deps.Sessions.SessionDetail(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		revs := make([]sessionRevisionRow, 0, len(detail.Revisions))
+		for _, rev := range detail.Revisions {
+			name := rev.StudentID
+			for _, entry := range detail.Session.Roster {
+				if entry.StudentID == rev.StudentID {
+					name = strings.TrimSpace(entry.Names + " " + entry.Surnames)
+					break
+				}
+			}
+			revs = append(revs, sessionRevisionRow{
+				Student:   name,
+				From:      string(rev.From),
+				To:        string(rev.To),
+				Author:    revisionAuthor(r.Context(), deps, rev.ChangedBy),
+				ChangedAt: rev.ChangedAt.Format(time.RFC3339),
+				Note:      rev.Note,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"Session":   detail.Session,
+			"Marks":     detail.Marks,
+			"Revisions": revs,
+		})
+	}
+}
+
 // handleTeacherWarningsMade returns the llamados issued from the logins
 // linked to one teacher, newest first with display names.
 func handleTeacherWarningsMade(deps Dependencies) http.HandlerFunc {

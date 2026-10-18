@@ -284,3 +284,68 @@ func TestTeacherActivityFlow(t *testing.T) {
 		t.Fatalf("warnings-made = %v, want the single llamado", made)
 	}
 }
+
+func TestSessionsHistoryFlow(t *testing.T) {
+	st := teachRollStack(t)
+	h := st.h
+	ctx := context.Background()
+
+	groupID := "66666666-6666-4666-8666-666666666666"
+	sess, err := st.sessionsSvc.OpenSession(ctx, sessions.Session{
+		ClassGroupID: groupID,
+		ClassLabel:   "9-1",
+		SchoolYear:   2026,
+		TeacherID:    st.profID,
+		Date:         time.Now().UTC(),
+		Period:       1,
+		Roster: []sessions.RosterEntry{
+			{StudentID: "44444444-4444-4444-8444-444444444444", Names: "Ana", Surnames: "Gómez"},
+			{StudentID: "55555555-5555-4555-8555-555555555555", Names: "Luis", Surnames: "Pardo"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("open session: %v", err)
+	}
+	if _, err := st.sessionsSvc.RecordMark(ctx, sess.ID, "44444444-4444-4444-8444-444444444444", sessions.MarkLate, st.profID, "Bus"); err != nil {
+		t.Fatalf("record mark: %v", err)
+	}
+
+	// Salon is required: no unfiltered dumps.
+	rec := doRequest(t, h, http.MethodGet, "/v1/sessions/history", adminSubject, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unfiltered status = %d, want 400", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/sessions/history?classGroupID="+groupID, adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("history status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var cards []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &cards); err != nil {
+		t.Fatalf("decode cards: %v", err)
+	}
+	if len(cards) != 1 || cards[0]["Late"] != float64(1) || cards[0]["ClassLabel"] != "9-1" {
+		t.Fatalf("cards = %v, want the single late roll", cards)
+	}
+	if cards[0]["Teacher"] == "" {
+		t.Fatalf("cards = %v, want the teacher resolved", cards)
+	}
+
+	// Detail with marks and the revision trail.
+	rec = doRequest(t, h, http.MethodGet, "/v1/sessions/"+sess.ID, adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detail status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var detail struct {
+		Marks     map[string]string `json:"Marks"`
+		Revisions []map[string]any  `json:"Revisions"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if len(detail.Revisions) != 1 || detail.Revisions[0]["To"] != "late" {
+		t.Fatalf("detail = %+v, want the late revision", detail)
+	}
+	if detail.Revisions[0]["Student"] != "Ana Gómez" || detail.Revisions[0]["Note"] != "Bus" {
+		t.Fatalf("detail = %+v, want resolved student and note", detail)
+	}
+}
