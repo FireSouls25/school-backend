@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"grade/src/core/audit"
 	"grade/src/core/auth"
@@ -1600,6 +1601,16 @@ func enrichWarning(ctx context.Context, deps Dependencies, warn warnings.Warning
 						break
 					}
 				}
+			}
+		}
+	}
+	// Last resort: the id itself is already a human label. Short opaque
+	// strings display verbatim so legacy rows match the student file,
+	// which shows the raw profile value.
+	if e.ClassLabel == "" {
+		if raw := strings.TrimSpace(warn.ClassID); raw != "" && len(raw) <= 20 {
+			if _, err := uuid.Parse(raw); err != nil {
+				e.ClassLabel = raw
 			}
 		}
 	}
