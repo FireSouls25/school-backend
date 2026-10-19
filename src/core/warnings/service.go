@@ -115,6 +115,64 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
+// Correct replaces the editable fields of a warning and appends the
+// change to the trail. Unchanged fields write no revision.
+func (s *Service) Correct(ctx context.Context, id string, in Update) (Warning, error) {
+	current, err := s.store.Fetch(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return Warning{}, err
+	}
+	gravity := in.Gravity
+	if gravity == "" {
+		gravity = current.Gravity
+	}
+	if !gravity.IsValid() {
+		return Warning{}, ErrUnknownGravity
+	}
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		title = current.Title
+	}
+	description := strings.TrimSpace(in.Description)
+	if description == "" {
+		description = current.Description
+	}
+	if gravity == current.Gravity && title == current.Title && description == current.Description {
+		return current, nil
+	}
+	updated := current
+	updated.Gravity = gravity
+	updated.Title = title
+	updated.Description = description
+	if _, err := s.store.Update(ctx, updated); err != nil {
+		return Warning{}, err
+	}
+	if _, err := s.store.AddRevision(ctx, Revision{
+		WarningID:  updated.ID,
+		StudentID:  updated.StudentID,
+		OldGravity: current.Gravity,
+		NewGravity: updated.Gravity,
+		OldTitle:   current.Title,
+		NewTitle:   updated.Title,
+		OldDetail:  current.Description,
+		NewDetail:  updated.Description,
+		ChangedBy:  strings.TrimSpace(in.ChangedBy),
+		ChangedAt:  time.Now().UTC(),
+	}); err != nil {
+		return Warning{}, err
+	}
+	return updated, nil
+}
+
+// RevisionsForWarning returns every correction of one warning, newest
+// first.
+func (s *Service) RevisionsForWarning(ctx context.Context, warningID string) ([]Revision, error) {
+	if strings.TrimSpace(warningID) == "" {
+		return nil, ErrNotFound
+	}
+	return s.store.RevisionsForWarning(ctx, strings.TrimSpace(warningID))
+}
+
 func normalizeSnapshot(s StudentSnapshot) StudentSnapshot {
 	trim := strings.TrimSpace
 	s.Names = trim(s.Names)

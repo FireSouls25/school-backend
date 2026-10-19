@@ -139,6 +139,23 @@ CREATE TABLE IF NOT EXISTS warnings (
 
 CREATE INDEX IF NOT EXISTS idx_warnings_student_id ON warnings (student_id);
 
+-- Append-only trail of llamado corrections: editing never rewrites.
+CREATE TABLE IF NOT EXISTS warning_revisions (
+    id          UUID PRIMARY KEY,
+    warning_id  UUID NOT NULL REFERENCES warnings (id) ON DELETE CASCADE,
+    student_id  TEXT NOT NULL DEFAULT '',
+    old_gravity TEXT NOT NULL DEFAULT '',
+    new_gravity TEXT NOT NULL,
+    old_title   TEXT NOT NULL DEFAULT '',
+    new_title   TEXT NOT NULL DEFAULT '',
+    old_detail  TEXT NOT NULL DEFAULT '',
+    new_detail  TEXT NOT NULL DEFAULT '',
+    changed_by  TEXT NOT NULL DEFAULT '',
+    changed_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_warning_revisions_warning_id ON warning_revisions (warning_id);
+
 -- Daily roll of teachers: one explicit mark per teacher per day.
 CREATE TABLE IF NOT EXISTS teacher_attendance (
     teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,

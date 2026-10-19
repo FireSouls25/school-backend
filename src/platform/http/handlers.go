@@ -969,7 +969,93 @@ func handleGetStudentWarnings(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, list)
+		out := make([]recentWarning, 0, len(list))
+		for _, warn := range list {
+			out = append(out, enrichWarning(r.Context(), deps, warn))
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// warningUpdateRequest is the body for correcting a llamado. Empty
+// fields keep the current value.
+type warningUpdateRequest struct {
+	Gravity     string `json:"gravity"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+// handleCorrectWarning replaces the editable fields of a llamado and
+// appends the change to its trail. Unchanged saves are no-ops.
+func handleCorrectWarning(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var body warningUpdateRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		var gravity warnings.Gravity
+		if strings.TrimSpace(body.Gravity) != "" {
+			var err error
+			if gravity, err = warnings.Parse(body.Gravity); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+		}
+		subject, _ := SubjectFrom(r.Context())
+		updated, err := deps.Warnings.Correct(r.Context(), id, warnings.Update{
+			Gravity:     gravity,
+			Title:       body.Title,
+			Description: body.Description,
+			ChangedBy:   subject,
+		})
+		if err != nil {
+			recordAudit(deps, r, audit.ActionUpdate, audit.ResourceWarning, id, updated.StudentID, statusForErr(err))
+			WriteError(w, r, err)
+			return
+		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceWarning, updated.ID, updated.StudentID, http.StatusOK)
+		writeJSON(w, http.StatusOK, enrichWarning(r.Context(), deps, updated))
+	}
+}
+
+// warningRevisionRow is one llamado correction with its author resolved.
+type warningRevisionRow struct {
+	WarningID  string `json:"WarningID"`
+	OldGravity string `json:"OldGravity"`
+	NewGravity string `json:"NewGravity"`
+	OldTitle   string `json:"OldTitle"`
+	NewTitle   string `json:"NewTitle"`
+	OldDetail  string `json:"OldDetail"`
+	NewDetail  string `json:"NewDetail"`
+	Author     string `json:"Author"`
+	ChangedAt  string `json:"ChangedAt"`
+}
+
+// handleWarningRevisions returns every correction of one llamado,
+// newest first.
+func handleWarningRevisions(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		revs, err := deps.Warnings.RevisionsForWarning(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		out := make([]warningRevisionRow, 0, len(revs))
+		for _, rev := range revs {
+			out = append(out, warningRevisionRow{
+				WarningID:  rev.WarningID,
+				OldGravity: string(rev.OldGravity),
+				NewGravity: string(rev.NewGravity),
+				OldTitle:   rev.OldTitle,
+				NewTitle:   rev.NewTitle,
+				OldDetail:  rev.OldDetail,
+				NewDetail:  rev.NewDetail,
+				Author:     revisionAuthor(r.Context(), deps, rev.ChangedBy),
+				ChangedAt:  rev.ChangedAt.Format(time.RFC3339),
+			})
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 

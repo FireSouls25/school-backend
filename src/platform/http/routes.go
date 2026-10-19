@@ -95,6 +95,10 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/sessions/{id}", handleSessionDetail(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Post("/warnings/batch", handleIssueWarningBatch(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Put("/warnings/{id}", handleCorrectWarning(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Get("/warnings/{id}/revisions", handleWarningRevisions(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
 			Get("/warnings/recent", handleWarningsRecent(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
