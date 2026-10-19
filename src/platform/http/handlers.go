@@ -1523,8 +1523,8 @@ func parseRecentLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 		WriteError(w, r, errBadRequest)
 		return 0, false
 	}
-	if n > 100 {
-		n = 100
+	if n > 500 {
+		n = 500
 	}
 	return n, true
 }
@@ -1541,13 +1541,18 @@ type recentWarning struct {
 }
 
 // handleWarningsRecent returns the latest llamados, newest first.
+// all=1 lifts the dashboard window for admin history screens.
 func handleWarningsRecent(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit, ok := parseRecentLimit(w, r)
 		if !ok {
 			return
 		}
-		list, err := deps.Warnings.Recent(r.Context(), time.Now().AddDate(0, 0, -recentWindowDays))
+		since := time.Now().AddDate(0, 0, -recentWindowDays)
+		if strings.TrimSpace(r.URL.Query().Get("all")) == "1" {
+			since = time.Time{}
+		}
+		list, err := deps.Warnings.Recent(r.Context(), since)
 		if err != nil {
 			WriteError(w, r, err)
 			return
@@ -1582,6 +1587,20 @@ func enrichWarning(ctx context.Context, deps Dependencies, warn warnings.Warning
 	if deps.Classes != nil {
 		if g, err := deps.Classes.ByID(ctx, classID); err == nil {
 			e.ClassLabel = g.Label()
+		}
+	}
+	// Legacy profiles store the label ("9-1") instead of the group id:
+	// fall back to the live enrollment so the salon still resolves.
+	if e.ClassLabel == "" && deps.Enrollments != nil {
+		if enrolls, err := deps.Enrollments.EnrollmentsForStudent(ctx, warn.StudentID); err == nil {
+			for _, en := range enrolls {
+				if deps.Classes != nil {
+					if g, err := deps.Classes.ByID(ctx, en.ClassGroupID); err == nil {
+						e.ClassLabel = g.Label()
+						break
+					}
+				}
+			}
 		}
 	}
 	e.AuthorName = authorName(ctx, deps, warn.TeacherID)

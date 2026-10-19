@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"grade/src/core/classes"
+	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
 	"grade/src/core/students"
@@ -34,6 +35,7 @@ func recentsStack(t *testing.T) http.Handler {
 
 	studentsSvc := students.NewService(students.NewMemoryStore())
 	classesSvc := classes.NewService(classes.NewMemoryStore())
+	enrollmentsSvc := enrollments.NewService(enrollments.NewMemoryStore())
 	teachersSvc := teachers.NewService(teachers.NewMemoryStore())
 	usersSvc := users.NewServiceWithCost(users.NewMemoryStore(), 4)
 	now := time.Now().UTC()
@@ -46,6 +48,9 @@ func recentsStack(t *testing.T) http.Handler {
 	})
 	must(err)
 	sid := st.ID
+	if _, err := enrollmentsSvc.Enroll(ctx, enrollments.Enrollment{StudentID: sid, ClassGroupID: group.ID}); err != nil {
+		t.Fatalf("setup enroll: %v", err)
+	}
 	prof, err := teachersSvc.Create(ctx, teachers.Teacher{Names: "Carlos", Surnames: "Mendoza", DocumentID: "79800111"})
 	must(err)
 	// The login subject doubles as author id: link it to the teacher
@@ -62,10 +67,10 @@ func recentsStack(t *testing.T) http.Handler {
 	})
 	must(err)
 	_, err = warningsSvc.Issue(ctx, warnings.Input{
-		StudentID: sid, ClassID: group.ID, TeacherID: adminUser.ID,
+		StudentID: sid, ClassID: "9-1", TeacherID: adminUser.ID,
 		HappenedAt: now.AddDate(0, 0, -100), Gravity: warnings.GravityMild,
 		Title: "Tarde", Description: "Llega tarde",
-		Snapshot: warnings.StudentSnapshot{Names: "Ana", Surnames: "Gómez", DocumentID: "123", ClassID: group.ID},
+		Snapshot: warnings.StudentSnapshot{Names: "Ana", Surnames: "Gómez", DocumentID: "123", ClassID: "9-1"},
 	})
 	must(err)
 	_, err = incidentsSvc.Report(ctx, sid, group.ID, now.AddDate(0, 0, -1),
@@ -81,6 +86,7 @@ func recentsStack(t *testing.T) http.Handler {
 		Incidents:        incidentsSvc,
 		Students:         studentsSvc,
 		Classes:          classesSvc,
+		Enrollments:      enrollmentsSvc,
 		Teachers:         teachersSvc,
 		Users:            usersSvc,
 	}, newI18n(t))
@@ -114,6 +120,26 @@ func TestRecentsFeeds(t *testing.T) {
 	}
 	if len(warns) != 1 || warns[0]["Gravity"] != "severe" || warns[0]["Title"] != "Pelea" {
 		t.Fatalf("warnings = %v, want the single fresh severe", warns)
+	}
+
+	// all=1 lifts the window: the stale warning joins, with the live
+	// profile name winning over its frozen snapshot.
+	rec = doRequest(t, h, http.MethodGet, "/v1/warnings/recent?limit=10&all=1", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("all status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var allWarns []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &allWarns); err != nil {
+		t.Fatalf("decode all: %v", err)
+	}
+	if len(allWarns) != 2 {
+		t.Fatalf("all = %v, want both warnings", allWarns)
+	}
+	// The legacy label id resolves through the live enrollment.
+	for _, w := range allWarns {
+		if w["Title"] == "Tarde" && w["ClassLabel"] != "9-1" {
+			t.Fatalf("legacy ClassLabel = %v, want 9-1", w["ClassLabel"])
+		}
 	}
 	wrow := warns[0]
 	// Live records win over the frozen snapshot: the profile says Ana
