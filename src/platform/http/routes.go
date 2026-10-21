@@ -60,6 +60,11 @@ func routes(r *chi.Mux, deps Dependencies) {
 	r.Get("/healthz", handleHealthz)
 
 	r.Post("/v1/login", handleLogin(deps, newLoginLimiter(loginLimitPerMinute, loginWindow)))
+	r.Post("/v1/refresh", handleRefresh(deps, newLoginLimiter(refreshLimitPerMinute, loginWindow)))
+	// Logout revokes the presented refresh (cookie/body) or, with all=true
+	// plus an access bearer, every session of the caller. No subject is
+	// required for single logout: the refresh token itself authenticates.
+	r.Post("/v1/logout", handleLogout(deps))
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(func(next http.Handler) http.Handler {

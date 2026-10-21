@@ -15,8 +15,17 @@ import (
 	"time"
 )
 
-// DefaultAuthTTL is the login token lifetime when AUTH_TTL is unset.
+// DefaultAuthTTL is the legacy login token lifetime, kept as the access
+// fallback when AUTH_ACCESS_TTL is unset.
 const DefaultAuthTTL = 12 * time.Hour
+
+// DefaultAuthAccessTTL is the short API bearer lifetime: a stolen access
+// token dies on its own in minutes.
+const DefaultAuthAccessTTL = 15 * time.Minute
+
+// DefaultAuthRefreshTTL is the rotation token lifetime: long enough for a
+// school week, revocable server-side on logout/password rotation.
+const DefaultAuthRefreshTTL = 7 * 24 * time.Hour
 
 // AppEnv selects the deployment shape and the safety rules that apply.
 type AppEnv string
@@ -68,8 +77,15 @@ type Config struct {
 	// development an empty value means a random per-boot secret (logins
 	// die with the process, never with a shipped default).
 	AuthSecret string
-	// AuthTTL is the login token lifetime. Zero means the default.
+	// AuthTTL is the legacy login token lifetime (access fallback).
+	// Prefer AUTH_ACCESS_TTL/AUTH_REFRESH_TTL. Zero means the default.
 	AuthTTL time.Duration
+	// AuthAccessTTL is the API bearer lifetime. Zero means the default
+	// (15m) or AUTH_TTL when set.
+	AuthAccessTTL time.Duration
+	// AuthRefreshTTL is the rotation token lifetime. Zero means the
+	// default (7d).
+	AuthRefreshTTL time.Duration
 }
 
 // devPasswords are the passwords shipped in the demo data and docs. They
@@ -144,12 +160,30 @@ func FromEnv() (Config, error) {
 			"config: BOOTSTRAP_ADMIN_PASSWORD set without BOOTSTRAP_ADMIN_USERNAME")
 	}
 	cfg.AuthSecret = os.Getenv("AUTH_SECRET")
+	if raw := strings.TrimSpace(os.Getenv("AUTH_ACCESS_TTL")); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil || ttl <= 0 {
+			return Config{}, fmt.Errorf("config: AUTH_ACCESS_TTL: %q is not a positive duration", raw)
+		}
+		cfg.AuthAccessTTL = ttl
+	}
+	if raw := strings.TrimSpace(os.Getenv("AUTH_REFRESH_TTL")); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil || ttl <= 0 {
+			return Config{}, fmt.Errorf("config: AUTH_REFRESH_TTL: %q is not a positive duration", raw)
+		}
+		cfg.AuthRefreshTTL = ttl
+	}
 	if raw := strings.TrimSpace(os.Getenv("AUTH_TTL")); raw != "" {
 		ttl, err := time.ParseDuration(raw)
 		if err != nil || ttl <= 0 {
 			return Config{}, fmt.Errorf("config: AUTH_TTL: %q is not a positive duration", raw)
 		}
 		cfg.AuthTTL = ttl
+	}
+	// Legacy fallback: AUTH_TTL configures access when the split vars are absent.
+	if cfg.AuthAccessTTL == 0 && cfg.AuthTTL != 0 {
+		cfg.AuthAccessTTL = cfg.AuthTTL
 	}
 	return cfg, nil
 }
@@ -174,6 +208,25 @@ func (c Config) Validate() error {
 		return fmt.Errorf("config: AUTH_SECRET is required when APP_ENV=production")
 	}
 	return nil
+}
+
+// AccessTTL resolves the effective access lifetime.
+func (c Config) AccessTTL() time.Duration {
+	if c.AuthAccessTTL != 0 {
+		return c.AuthAccessTTL
+	}
+	if c.AuthTTL != 0 {
+		return c.AuthTTL
+	}
+	return DefaultAuthAccessTTL
+}
+
+// RefreshTTL resolves the effective refresh lifetime.
+func (c Config) RefreshTTL() time.Duration {
+	if c.AuthRefreshTTL != 0 {
+		return c.AuthRefreshTTL
+	}
+	return DefaultAuthRefreshTTL
 }
 
 // UsesMemoryStores reports whether the deployment would fall back to the

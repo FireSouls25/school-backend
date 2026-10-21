@@ -44,6 +44,7 @@ var statusByCode = map[string]int{
 
 	"auth.err_invalid_token":   http.StatusUnauthorized,
 	"auth.err_expired_token":   http.StatusUnauthorized,
+	"auth.err_revoked_token":   http.StatusUnauthorized,
 	"auth.err_invalid_subject": http.StatusBadRequest,
 	"auth.err_invalid_secret":  http.StatusInternalServerError,
 	"auth.err_invalid_ttl":     http.StatusInternalServerError,

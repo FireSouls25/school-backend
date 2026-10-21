@@ -3,32 +3,35 @@
 Base path: `/v1` (plus public `/healthz`). All responses are JSON;
 all user-facing text is Spanish from the i18n catalogs.
 
-## Identity (pre-auth)
+## Identity (Bearer + refresh rotation)
 
-Real accounts already exist in the `users` table (bcrypt passwords,
-`docs/users.md`), but no login/token endpoint issues sessions yet, so the
-caller still identifies with the `X-Subject-ID` header carrying a valid
-UUID (which is a `User.ID` once the account is created):
+Logins live in the `users` table (bcrypt, `docs/users.md`).
+`POST /v1/login {identifier, password}` mints a short access bearer
+(15m default, `AUTH_ACCESS_TTL`) plus a rotating refresh token (7d
+default, `AUTH_REFRESH_TTL`):
 
-- Missing or malformed id → `401 http.err_unauthorized`, nothing runs.
-- The header is trusted transport, not proof: it is only acceptable
-  because no login exists yet. A token scheme replaces the header
-  without touching handlers (they only read the context subject).
+- Access travels as `Authorization: Bearer <token>`; only `typ=access`
+  opens API routes. Refresh tokens (`typ=refresh`) only open
+  `POST /v1/refresh`.
+- Refresh rotates on every use: reuse of a rotated token fails with
+  `401 auth.err_revoked_token`. `POST /v1/logout` revokes the presented
+  refresh (cookie/body); `{all:true}` with an access bearer revokes every
+  session. The rotation cookie is `HttpOnly, SameSite=Lax, Path=/v1`
+  (`Secure` on TLS); JSON keeps a transitional copy for the SPA.
+- Every access carries `ver` (account token version) and `jti`. Password
+  rotation and disable bump the version: old access dies at the next
+  request (`401`), old refresh at the next rotation. Unknown/wrong/inactive
+  share `401 users.err_invalid_credentials` (no enumeration); throttled
+  logins answer `429 http.err_rate_limited`.
+- `X-Subject-ID` survives only when `AllowDevIdentity` holds
+  (development/tests, never production). Missing/invalid identity →
+  `401 http.err_unauthorized`.
 
 ## Test accounts (dev only)
 
-Roles live in memory, so every restart wipes them. `SEED_ADMINS` and
-`SEED_TEACHERS` (comma-separated subject UUIDs) grant roles at boot:
-
-```sh
-SEED_ADMINS=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa \
-SEED_TEACHERS=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb \
-python3 scripts/dev.py run
-```
-
-Never set these in production. The frontend dev directory
-(`frontend/src/domains/auth/accounts.ts`) maps test usernames to these
-ids until real authentication replaces it.
+Demo school seeds `admin / admin123*` and `carlos.mendoza / docente123*`
+(`go run ./src/cmd/devseed`, `SEED_DEMO`). Never set these in production;
+`APP_ENV=production` rejects them and requires `AUTH_SECRET`.
 
 ## Authorization
 
@@ -37,6 +40,9 @@ Routes declare one required permission, enforced by
 
 | Route | Permission | Who |
 |---|---|---|
+| `POST /v1/login` | public (throttled 10/min) | anyone with credentials |
+| `POST /v1/refresh` | refresh token (throttled 30/min) | session holder (cookie/body) |
+| `POST /v1/logout` | refresh token, or access bearer for `all:true` | session holder |
 | `GET /v1/me` | authenticated only | anyone with an id |
 | `PUT /v1/me/password` | authenticated only | anyone with an account row |
 | `GET /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |

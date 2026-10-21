@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 
 func newService(t *testing.T) *auth.Service {
 	t.Helper()
-	svc, err := auth.NewService("test-secret-for-suite-only", time.Hour)
+	svc, err := auth.NewService("test-secret-for-suite-only", time.Hour, 7*24*time.Hour, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -21,7 +22,7 @@ func TestMintVerifyRoundTrip(t *testing.T) {
 	svc := newService(t)
 	now := time.Now()
 
-	token, expiresAt, err := svc.Mint("subject-1", []string{"admin", "teacher"}, 0, now)
+	token, expiresAt, err := svc.MintAccess("subject-1", []string{"admin", "teacher"}, 0, now)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestVerifyRejects(t *testing.T) {
 	svc := newService(t)
 	now := time.Now()
 
-	token, _, err := svc.Mint("subject-1", nil, 0, now)
+	token, _, err := svc.MintAccess("subject-1", nil, 0, now)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestVerifyRejects(t *testing.T) {
 		}
 	})
 	t.Run("wrong secret", func(t *testing.T) {
-		other, _ := auth.NewService("another-secret", time.Hour)
+		other, _ := auth.NewService("another-secret", time.Hour, 7*24*time.Hour, nil)
 		if _, err := other.Verify(token, now); !errors.Is(err, auth.ErrInvalidToken) {
 			t.Errorf("error = %v, want ErrInvalidToken", err)
 		}
@@ -76,13 +77,16 @@ func TestVerifyRejects(t *testing.T) {
 }
 
 func TestNewServiceRejectsWeakConfig(t *testing.T) {
-	if _, err := auth.NewService("", time.Hour); !errors.Is(err, auth.ErrInvalidSecret) {
+	if _, err := auth.NewService("", time.Hour, 7*24*time.Hour, nil); !errors.Is(err, auth.ErrInvalidSecret) {
 		t.Errorf("empty secret error = %v, want ErrInvalidSecret", err)
 	}
-	if _, err := auth.NewService("s", 0); !errors.Is(err, auth.ErrInvalidTTL) {
+	if _, err := auth.NewService("s", 0, 7*24*time.Hour, nil); !errors.Is(err, auth.ErrInvalidTTL) {
+		t.Errorf("zero access ttl error = %v, want ErrInvalidTTL", err)
+	}
+	if _, err := auth.NewService("s", time.Hour, 0, nil); !errors.Is(err, auth.ErrInvalidTTL) {
 		t.Errorf("zero ttl error = %v, want ErrInvalidTTL", err)
 	}
-	if _, _, err := newService(t).Mint("  ", nil, 0, time.Now()); !errors.Is(err, auth.ErrInvalidSubject) {
+	if _, _, err := newService(t).MintAccess("  ", nil, 0, time.Now()); !errors.Is(err, auth.ErrInvalidSubject) {
 		t.Errorf("blank subject error = %v, want ErrInvalidSubject", err)
 	}
 }
@@ -90,7 +94,7 @@ func TestNewServiceRejectsWeakConfig(t *testing.T) {
 func TestMintCarriesVersion(t *testing.T) {
 	svc := newService(t)
 	now := time.Now()
-	token, _, err := svc.Mint("subject-1", nil, 7, now)
+	token, _, err := svc.MintAccess("subject-1", nil, 7, now)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -100,5 +104,64 @@ func TestMintCarriesVersion(t *testing.T) {
 	}
 	if claims.Ver != 7 {
 		t.Errorf("claims.Ver = %d, want 7", claims.Ver)
+	}
+}
+
+func TestRefreshRoundTripAndRotation(t *testing.T) {
+	svc := newService(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	refresh, exp, err := svc.IssueRefresh(ctx, "subject-1", 3, now)
+	if err != nil {
+		t.Fatalf("IssueRefresh: %v", err)
+	}
+	if refresh == "" || !exp.After(now) {
+		t.Fatalf("refresh = %q, %v; want token and future expiry", refresh, exp)
+	}
+	claims, err := svc.CheckRefresh(ctx, refresh, now)
+	if err != nil {
+		t.Fatalf("CheckRefresh: %v", err)
+	}
+	if claims.Subject != "subject-1" || claims.Ver != 3 || claims.Typ != auth.RefreshTokenType {
+		t.Errorf("claims = %+v, want subject/ver/refresh typ", claims)
+	}
+	// Access tokens are not refresh tokens.
+	access, _, err := svc.MintAccess("subject-1", nil, 3, now)
+	if err != nil {
+		t.Fatalf("MintAccess: %v", err)
+	}
+	if _, err := svc.CheckRefresh(ctx, access, now); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("access as refresh error = %v, want ErrInvalidToken", err)
+	}
+	// Rotation: revoke the presented refresh; reuse fails as revoked.
+	if err := svc.Revoke(ctx, claims.Jti); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	if _, err := svc.CheckRefresh(ctx, refresh, now); !errors.Is(err, auth.ErrRevokedToken) {
+		t.Errorf("reused refresh error = %v, want ErrRevokedToken", err)
+	}
+}
+
+func TestRefreshRevokedForUser(t *testing.T) {
+	svc := newService(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	r1, _, err := svc.IssueRefresh(ctx, "subject-9", 0, now)
+	if err != nil {
+		t.Fatalf("IssueRefresh: %v", err)
+	}
+	r2, _, err := svc.IssueRefresh(ctx, "subject-9", 0, now)
+	if err != nil {
+		t.Fatalf("IssueRefresh: %v", err)
+	}
+	if err := svc.RevokeAllForUser(ctx, "subject-9"); err != nil {
+		t.Fatalf("RevokeAllForUser: %v", err)
+	}
+	for i, tok := range []string{r1, r2} {
+		if _, err := svc.CheckRefresh(ctx, tok, now); !errors.Is(err, auth.ErrRevokedToken) {
+			t.Errorf("token %d error = %v, want ErrRevokedToken", i, err)
+		}
 	}
 }

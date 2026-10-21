@@ -226,6 +226,14 @@ func handleChangeMyPassword(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		// Rotation already kills access via token_version; revoke refresh
+		// rows too so stolen rotations die server-side (best effort: the
+		// version check rejects them at next use either way).
+		if deps.Tokens != nil {
+			if err := deps.Tokens.RevokeAllForUser(r.Context(), subject); err != nil {
+				slog.Warn("revoke refresh after password change failed", "error", err)
+			}
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

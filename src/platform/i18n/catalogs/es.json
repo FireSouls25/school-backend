@@ -18,6 +18,7 @@
   "http.err_rate_limited": "Demasiados intentos; espera un momento e intenta de nuevo",
   "auth.err_invalid_token": "Sesión inválida; inicia sesión de nuevo",
   "auth.err_expired_token": "La sesión venció; inicia sesión de nuevo",
+  "auth.err_revoked_token": "Sesión revocada; inicia sesión de nuevo",
   "auth.err_invalid_subject": "Sesión inválida; inicia sesión de nuevo",
   "auth.err_invalid_secret": "Error interno de autenticación",
   "auth.err_invalid_ttl": "Error interno de autenticación",

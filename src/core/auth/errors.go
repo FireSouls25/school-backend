@@ -31,4 +31,7 @@ var (
 	ErrInvalidToken = newError("auth.err_invalid_token", "auth: invalid token")
 	// ErrExpiredToken is returned when a well-formed token is past expiry.
 	ErrExpiredToken = newError("auth.err_expired_token", "auth: expired token")
+	// ErrRevokedToken is returned when a refresh token was rotated or
+	// revoked (logout, password change, disable). Login again.
+	ErrRevokedToken = newError("auth.err_revoked_token", "auth: revoked token")
 )

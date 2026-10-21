@@ -397,6 +397,19 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS photo BYTEA;
 -- Auth revocation: bumping invalidates previously minted bearers.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version BIGINT NOT NULL DEFAULT 0;
 
+-- Refresh rotation: only hashes persist, never usable bearers. Revoked
+-- rows stay until expiry for reuse detection, then DeleteExpired purges.
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    jti         UUID PRIMARY KEY,
+    user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token_hash  TEXT NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    revoked_at  TIMESTAMPTZ NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens (expires_at);
+
 -- Role grants survive restarts (the memory store they replace does not).
 CREATE TABLE IF NOT EXISTS role_grants (
     subject_id UUID NOT NULL,

@@ -65,6 +65,13 @@ func MiddlewareSubjectWith(next http.Handler, tokens TokenVerifier, allowDevIden
 					WriteError(w, r, err)
 					return
 				}
+				// Only access bearers open API routes. Refresh tokens
+				// (and pre-typ tokens, read as access) go through the
+				// typed verifiers in login/refresh handlers.
+				if claims.Typ != "" && claims.Typ != auth.AccessTokenType {
+					WriteError(w, r, errUnauthorized)
+					return
+				}
 				ctx := WithSubject(r.Context(), claims.Subject)
 				ctx = WithClaims(ctx, claims)
 				next.ServeHTTP(w, r.WithContext(ctx))

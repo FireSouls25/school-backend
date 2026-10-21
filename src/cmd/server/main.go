@@ -3,13 +3,10 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"log/slog"
 	"os"
 
 	"grade/src/app"
-	"grade/src/core/auth"
 	"grade/src/platform/config"
 	httpapi "grade/src/platform/http"
 	"grade/src/platform/i18n"
@@ -35,29 +32,6 @@ func main() {
 		os.Exit(1)
 	}
 	defer application.Close()
-
-	// Token secret: production requires AUTH_SECRET (enforced by
-	// Validate); development mints a random per-boot secret so no
-	// default ever ships, at the cost of logins dying on restart.
-	secret := cfg.AuthSecret
-	if secret == "" {
-		var raw [32]byte
-		if _, err := rand.Read(raw[:]); err != nil {
-			slog.Error("random secret failed", "error", err)
-			os.Exit(1)
-		}
-		secret = hex.EncodeToString(raw[:])
-		slog.Warn("AUTH_SECRET unset; using a random per-boot secret (development only)")
-	}
-	ttl := cfg.AuthTTL
-	if ttl <= 0 {
-		ttl = config.DefaultAuthTTL
-	}
-	tokens, err := auth.NewService(secret, ttl)
-	if err != nil {
-		slog.Error("auth wiring failed", "error", err)
-		os.Exit(1)
-	}
 
 	// Legacy placeholder identities (X-Subject-ID), when configured.
 	application.SeedPlaceholderRoles(ctx)
@@ -87,7 +61,7 @@ func main() {
 		Schedules:        application.Services.Schedules,
 		Incidents:        application.Services.Incidents,
 		Audit:            application.Services.Audit,
-		Tokens:           tokens,
+		Tokens:           application.Services.Auth,
 		AllowDevIdentity: !cfg.Env.IsProduction(),
 		Subjects:         application.Services.Subjects,
 		TAttendance:      application.Services.TAttendance,

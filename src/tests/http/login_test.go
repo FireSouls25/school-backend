@@ -21,7 +21,7 @@ func loginStack(t *testing.T) http.Handler {
 	ctx := context.Background()
 	roleSvc := roles.NewService(roles.NewMemoryStore())
 	usersSvc := users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost)
-	tokens, err := auth.NewService("http-suite-secret", time.Hour)
+	tokens, err := auth.NewService("http-suite-secret", time.Hour, 7*24*time.Hour, nil)
 	if err != nil {
 		t.Fatalf("tokens: %v", err)
 	}

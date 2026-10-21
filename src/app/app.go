@@ -6,6 +6,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +15,7 @@ import (
 
 	"grade/src/core/attendance"
 	"grade/src/core/audit"
+	"grade/src/core/auth"
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
@@ -52,6 +55,8 @@ type Stores struct {
 	// Roles is still in-memory when DATABASE_URL is empty; the Postgres
 	// adapter below takes over otherwise, so grants survive restarts.
 	Roles roles.Store
+	// RefreshTokens persists rotation hashes (never usable bearers).
+	RefreshTokens auth.Store
 }
 
 // Services holds the application services built over those stores.
@@ -73,6 +78,7 @@ type Services struct {
 	Dashboard   *statistics.DashboardService
 	Users       *users.Service
 	Roles       *roles.Service
+	Auth        *auth.Service
 }
 
 // App is the wired application.
@@ -92,21 +98,22 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 
 	s := Stores{
-		Students:    students.NewMemoryStore(),
-		Attendance:  attendance.NewMemoryStore(),
-		Incidents:   incidents.NewMemoryStore(),
-		Warnings:    warnings.NewMemoryStore(),
-		Audit:       audit.NewMemoryStore(),
-		Teachers:    teachers.NewMemoryStore(),
-		Subjects:    subjects.NewMemoryStore(),
-		Years:       schoolyears.NewMemoryStore(),
-		Classes:     classes.NewMemoryStore(),
-		Enrollments: enrollments.NewMemoryStore(),
-		Schedules:   schedules.NewMemoryStore(),
-		Sessions:    sessions.NewMemoryStore(),
-		TAttendance: tattendance.NewMemoryStore(),
-		Users:       users.NewMemoryStore(),
-		Roles:       roles.NewMemoryStore(),
+		Students:      students.NewMemoryStore(),
+		Attendance:    attendance.NewMemoryStore(),
+		Incidents:     incidents.NewMemoryStore(),
+		Warnings:      warnings.NewMemoryStore(),
+		Audit:         audit.NewMemoryStore(),
+		Teachers:      teachers.NewMemoryStore(),
+		Subjects:      subjects.NewMemoryStore(),
+		Years:         schoolyears.NewMemoryStore(),
+		Classes:       classes.NewMemoryStore(),
+		Enrollments:   enrollments.NewMemoryStore(),
+		Schedules:     schedules.NewMemoryStore(),
+		Sessions:      sessions.NewMemoryStore(),
+		TAttendance:   tattendance.NewMemoryStore(),
+		Users:         users.NewMemoryStore(),
+		Roles:         roles.NewMemoryStore(),
+		RefreshTokens: auth.NewMemoryStore(),
 	}
 
 	var db *pg.DB
@@ -131,6 +138,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.TAttendance = pg.NewTAttendanceStore(db)
 		s.Users = pg.NewUsersStore(db)
 		s.Roles = pg.NewRolesStore(db)
+		s.RefreshTokens = pg.NewRefreshStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only, data lost on restart)")
@@ -152,6 +160,22 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	enrollmentsSvc := enrollments.NewService(s.Enrollments)
 	sessAdapter := statisticsSessions{sessionsSvc}
 
+	// Token secret: production requires AUTH_SECRET (enforced by
+	// Validate); development mints a random per-boot secret so no
+	// default ever ships, at the cost of logins dying on restart.
+	secret := cfg.AuthSecret
+	if secret == "" {
+		var raw [32]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			return nil, fmt.Errorf("app: random secret: %w", err)
+		}
+		secret = hex.EncodeToString(raw[:])
+		slog.Warn("AUTH_SECRET unset; using a random per-boot secret (development only)")
+	}
+	authSvc, err := auth.NewService(secret, cfg.AccessTTL(), cfg.RefreshTTL(), s.RefreshTokens)
+	if err != nil {
+		return nil, fmt.Errorf("app: auth: %w", err)
+	}
 	return &App{
 		Config: cfg,
 		Stores: s,
@@ -189,6 +213,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			),
 			Users: users.NewService(s.Users),
 			Roles: roles.NewService(s.Roles),
+			Auth:  authSvc,
 		},
 	}, nil
 }
