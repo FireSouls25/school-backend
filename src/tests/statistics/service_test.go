@@ -69,6 +69,12 @@ func fixture() fakeSources {
 				Roster: roster,
 				Marks:  map[string]string{studentA: "late", studentB: "evasion"},
 			},
+			{
+				ID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", ClassGroupID: groupID,
+				ClassLabel: "9-1", SchoolYear: 2026, Date: day(2026, 8, 21), Period: 2,
+				Roster: roster,
+				Marks:  map[string]string{studentB: "absence-permission"},
+			},
 		},
 		warnings: map[string][]statistics.WarningView{
 			studentA: {{Gravity: "moderate", Date: day(2026, 8, 20)}},
@@ -88,8 +94,8 @@ func TestClassReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClassReport: %v", err)
 	}
-	if report.Sessions != 2 {
-		t.Errorf("Sessions = %d, want 2", report.Sessions)
+	if report.Sessions != 3 {
+		t.Errorf("Sessions = %d, want 3", report.Sessions)
 	}
 	if len(report.Students) != 2 {
 		t.Fatalf("len(Students) = %d, want 2", len(report.Students))
@@ -99,21 +105,22 @@ func TestClassReport(t *testing.T) {
 		t.Errorf("order = %+v, want Gómez then Pardo", report.Students)
 	}
 	a := report.Students[0]
-	if a.Sessions != 2 || a.Presences != 0 || a.Absences != 1 || a.Lates != 1 {
+	if a.Sessions != 3 || a.Presences != 1 || a.Absences != 1 || a.Excused != 0 || a.Lates != 1 {
 		t.Errorf("studentA = %+v", a)
 	}
-	if got := a.AttendanceRate(); got != 0 {
-		t.Errorf("studentA rate = %v, want 0", got)
+	if got := a.AttendanceRate(); got != 1.0/3.0 {
+		t.Errorf("studentA rate = %v, want %v", got, 1.0/3.0)
 	}
 	b := report.Students[1]
-	if b.Presences != 1 || b.Evasions != 1 {
+	if b.Presences != 1 || b.Excused != 1 || b.Evasions != 1 {
 		t.Errorf("studentB = %+v", b)
 	}
-	if got := b.AttendanceRate(); got != 0.5 {
-		t.Errorf("studentB rate = %v, want 0.5", got)
+	if got := b.AttendanceRate(); got != 1.0/3.0 {
+		t.Errorf("studentB rate = %v, want %v", got, 1.0/3.0)
 	}
 	if report.Totals.Students != 2 || report.Totals.Absences != 1 ||
-		report.Totals.Evasions != 1 || report.Totals.Lates != 1 || report.Totals.Presences != 1 {
+		report.Totals.Excused != 1 || report.Totals.Evasions != 1 ||
+		report.Totals.Lates != 1 || report.Totals.Presences != 2 {
 		t.Errorf("totals = %+v", report.Totals)
 	}
 
@@ -131,16 +138,16 @@ func TestStudentReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StudentReport: %v", err)
 	}
-	if len(report.Sessions) != 2 {
-		t.Fatalf("len(Sessions) = %d, want 2", len(report.Sessions))
+	if len(report.Sessions) != 3 {
+		t.Fatalf("len(Sessions) = %d, want 3", len(report.Sessions))
 	}
-	if report.Sessions[0].Mark != "absence" || report.Sessions[1].Mark != "late" {
+	if report.Sessions[0].Mark != "absence" || report.Sessions[1].Mark != "late" || report.Sessions[2].Mark != "" {
 		t.Errorf("marks = %+v", report.Sessions)
 	}
 	if report.Sessions[0].ClassLabel != "9-1" || report.Sessions[0].SchoolYear != 2026 {
 		t.Errorf("frozen context lost: %+v", report.Sessions[0])
 	}
-	if report.Absences != 1 || report.Lates != 1 || report.Presences != 0 {
+	if report.Absences != 1 || report.Lates != 1 || report.Presences != 1 || report.Excused != 0 {
 		t.Errorf("tallies = %+v", report)
 	}
 	if report.WarningsModerate != 1 || report.WarningsMild+report.WarningsSevere != 0 {
@@ -156,6 +163,14 @@ func TestStudentReport(t *testing.T) {
 	}
 	if len(empty.Sessions) != 0 || empty.Presences+empty.Absences != 0 {
 		t.Errorf("unknown student report not empty: %+v", empty)
+	}
+
+	reportB, err := svc.StudentReport(ctx, studentB)
+	if err != nil {
+		t.Fatalf("StudentReport B: %v", err)
+	}
+	if reportB.Presences != 1 || reportB.Excused != 1 || reportB.Evasions != 1 {
+		t.Errorf("tallies B = %+v", reportB)
 	}
 
 	if _, err := svc.StudentReport(ctx, "nope"); !errors.Is(err, statistics.ErrInvalidStudent) {

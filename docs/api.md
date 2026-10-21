@@ -158,7 +158,8 @@ ever log in. Frontend flow in `docs/users.md`.
 - `GET /v1/sessions/history?classGroupID=&from=&to=`
   (`view-class-statistics`) returns the roll calls of one salon in a
   range, newest first (capped at 50): date, group, period, subject
-  and teacher resolved, with present/absent/evasion/late counts folded
+  and teacher resolved, with
+  present/absent/permission/evasion/late counts folded
   from the revision trail.
 - `GET /v1/sessions/{id}` (`view-class-statistics`) returns one roll
   call with its current marks and full revision trail (student,
@@ -304,7 +305,9 @@ or on `/docente` by default.
 - Ids in paths and bodies must be UUIDs; domain services validate and
   map to `400` codes, unknown ids to `404`.
 - `POST /v1/sessions/{id}/marks` accepts `"mark": ""` to clear back to
-  present (correction flow) and Spanish aliases (`"atraso"`, …).
+  present (correction flow) and Spanish aliases (`"atraso"`). Marks are
+  `absence` (falta injustificada), `absence-permission` (falta con
+  permiso — also `"permiso"`), `evasion` and `late`.
 - CORS reflects only origins in `ALLOWED_ORIGINS` (comma-separated);
   empty means same-origin only. Non-browser clients are unaffected.
 - Server timeouts: 5s headers, 10s read, 15s write, 60s idle.

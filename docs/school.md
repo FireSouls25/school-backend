@@ -157,9 +157,14 @@ mistake. Repeating the current mark fails with `ErrNoChange`; marking
 outside the roster fails with `ErrNotEnrolled`. Revisions are append-only;
 timestamps are set by the Service, never the caller.
 
-Marks reuse the attendance vocabulary (`absence` / `evasion` / `late`,
-labels from the `reason.*` catalog) without importing the attendance
-package: each capability stays decoupled.
+Marks reuse the attendance vocabulary (`absence` / `absence-permission` /
+`evasion` / `late`, labels from the `reason.*` catalog) without importing
+the attendance package: each capability stays decoupled.
+`absence-permission` is the falta con permiso: the student still misses
+the roll, but the teacher records the school permission behind it —
+typically when the parent's note arrives after the call — and the
+revision keeps the plain absence → permission trail. Reports tally it
+as `Excused`, apart from the plain `Absences`.
 
 ### Statistics: read-only admin reports
 
@@ -183,8 +188,9 @@ StudentReport(ctx, studentID string) (StudentReport, error)
 
 `ClassReport` lists one `StudentSummary` per roster student (names from
 the frozen roster, alphabetical by surnames) with sessions taken,
-presences, absences, evasions, lates and attendance rate, plus class
-totals — the per-group, per-year view admins filter on. `StudentReport`
+presences, absences, excused permissions, evasions, lates and attendance
+rate, plus class totals — the per-group, per-year view admins filter on.
+`StudentReport`
 covers the full cross-year history: every session as recorded (frozen
 class label and year), mark totals, warning tallies by gravity and fault
 tallies by severity.
@@ -229,7 +235,8 @@ session_rosters(session_id FK->sessions CASCADE, student_id FK->students CASCADE
                 names, surnames, document_id; PK(session_id, student_id))
 session_revisions(id uuid PK, session_id FK->sessions CASCADE, rev_no,
                   student_id FK->students CASCADE,
-                  from_mark/to_mark CHECK IN ('', 'absence', 'evasion', 'late'),
+                  from_mark/to_mark CHECK IN ('', 'absence',
+                      'absence-permission', 'evasion', 'late'),
                   changed_by, changed_at, note; UNIQUE(session_id, rev_no))
 ```
 

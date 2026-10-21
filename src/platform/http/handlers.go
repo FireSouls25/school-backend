@@ -897,11 +897,12 @@ type classSessionCard struct {
 	Students   int    `json:"Students"`
 	Present    int    `json:"Present"`
 	Absent     int    `json:"Absent"`
+	Permission int    `json:"Permission"`
 	Evasion    int    `json:"Evasion"`
 	Late       int    `json:"Late"`
 }
 
-func foldSessionMarks(revs []sessions.Revision, rosterLen int) (present, absent, evasion, late int) {
+func foldSessionMarks(revs []sessions.Revision, rosterLen int) (present, absent, permission, evasion, late int) {
 	marks := make(map[string]sessions.Mark)
 	for _, rev := range revs {
 		marks[rev.StudentID] = rev.To
@@ -910,17 +911,19 @@ func foldSessionMarks(revs []sessions.Revision, rosterLen int) (present, absent,
 		switch m {
 		case sessions.MarkAbsence:
 			absent++
+		case sessions.MarkAbsencePermission:
+			permission++
 		case sessions.MarkEvasion:
 			evasion++
 		case sessions.MarkLate:
 			late++
 		}
 	}
-	present = rosterLen - absent - evasion - late
+	present = rosterLen - absent - permission - evasion - late
 	if present < 0 {
 		present = 0
 	}
-	return present, absent, evasion, late
+	return present, absent, permission, evasion, late
 }
 
 func sessionCard(ctx context.Context, deps Dependencies, sess sessions.Session) (classSessionCard, error) {
@@ -928,7 +931,7 @@ func sessionCard(ctx context.Context, deps Dependencies, sess sessions.Session) 
 	if err != nil {
 		return classSessionCard{}, err
 	}
-	present, absent, evasion, late := foldSessionMarks(revs, len(sess.Roster))
+	present, absent, permission, evasion, late := foldSessionMarks(revs, len(sess.Roster))
 	card := classSessionCard{
 		ID:         sess.ID,
 		Date:       sess.Date.Format("2006-01-02"),
@@ -937,6 +940,7 @@ func sessionCard(ctx context.Context, deps Dependencies, sess sessions.Session) 
 		Students:   len(sess.Roster),
 		Present:    present,
 		Absent:     absent,
+		Permission: permission,
 		Evasion:    evasion,
 		Late:       late,
 	}

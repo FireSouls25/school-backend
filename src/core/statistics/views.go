@@ -17,8 +17,8 @@ type RosterEntryView struct {
 }
 
 // SessionView is one attendance call with its folded current marks.
-// Marks map student ids to "absence", "evasion" or "late"; students
-// without a mark count as present.
+// Marks map student ids to "absence", "absence-permission", "evasion" or
+// "late"; students without a mark count as present.
 type SessionView struct {
 	ID           string
 	ClassGroupID string

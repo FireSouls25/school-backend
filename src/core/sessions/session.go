@@ -21,15 +21,20 @@ const MaxYear = 2100
 type Mark string
 
 const (
-	// MarkAbsence is a plain absence (inasistencia).
+	// MarkAbsence is a plain, unexcused absence (falta injustificada).
 	MarkAbsence Mark = "absence"
+	// MarkAbsencePermission is an absence covered by a school permission
+	// handed to the teacher (falta con permiso). Unlike MarkAbsence it is
+	// not counted as a fault, but it still keeps the student out of the
+	// room for that call.
+	MarkAbsencePermission Mark = "absence-permission"
 	// MarkEvasion is leaving or skipping class (evasión).
 	MarkEvasion Mark = "evasion"
 	// MarkLate is arriving late to class (atraso).
 	MarkLate Mark = "late"
 )
 
-var knownMarks = [...]Mark{MarkAbsence, MarkEvasion, MarkLate}
+var knownMarks = [...]Mark{MarkAbsence, MarkAbsencePermission, MarkEvasion, MarkLate}
 
 // Parse converts a case-insensitive, whitespace-trimmed string into a
 // Mark, accepting both the stable id and the Spanish term.
@@ -41,6 +46,8 @@ func Parse(s string) (Mark, error) {
 	switch v {
 	case "inasistencia":
 		return MarkAbsence, nil
+	case "permiso", "con permiso", "con-permiso", "absence-permission":
+		return MarkAbsencePermission, nil
 	case "evasion":
 		return MarkEvasion, nil
 	case "atraso":
@@ -60,7 +67,7 @@ func stripAccents(s string) string {
 // IsValid reports whether m is one of the known marks.
 func (m Mark) IsValid() bool {
 	switch m {
-	case MarkAbsence, MarkEvasion, MarkLate:
+	case MarkAbsence, MarkAbsencePermission, MarkEvasion, MarkLate:
 		return true
 	}
 	return false

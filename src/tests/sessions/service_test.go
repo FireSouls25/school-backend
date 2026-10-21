@@ -47,6 +47,9 @@ func TestMarkParsing(t *testing.T) {
 		{"atraso", sessions.MarkLate},
 		{"Evasión", sessions.MarkEvasion},
 		{"inasistencia", sessions.MarkAbsence},
+		{"permiso", sessions.MarkAbsencePermission},
+		{"con permiso", sessions.MarkAbsencePermission},
+		{"ABSENCE-PERMISSION", sessions.MarkAbsencePermission},
 	} {
 		got, err := sessions.Parse(tc.in)
 		if err != nil || got != tc.want {
@@ -56,8 +59,8 @@ func TestMarkParsing(t *testing.T) {
 	if _, err := sessions.Parse("present"); err == nil {
 		t.Error(`Parse("present") expected error: presence is the absence of a mark`)
 	}
-	if ms := sessions.KnownMarks(); len(ms) != 3 {
-		t.Errorf("KnownMarks length = %d, want 3", len(ms))
+	if ms := sessions.KnownMarks(); len(ms) != 4 {
+		t.Errorf("KnownMarks length = %d, want 4", len(ms))
 	}
 }
 
@@ -149,6 +152,48 @@ func TestRecordMarkKeepsBothStates(t *testing.T) {
 	// Repeating the current mark is a no-op error.
 	if _, err := svc.RecordMark(ctx, sess.ID, studentA, sessions.MarkLate, "teacher-1", ""); !errors.Is(err, sessions.ErrNoChange) {
 		t.Errorf("repeat error = %v, want ErrNoChange", err)
+	}
+}
+
+// TestRecordAbsencePermissionTrail keeps the trail when a permission
+// converts a plain absence: the revision shows absence then
+// absence-permission, and the detail folds to the permission mark.
+func TestRecordAbsencePermissionTrail(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	sess, err := svc.OpenSession(ctx, validSession())
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+
+	r1, err := svc.RecordMark(ctx, sess.ID, studentA, sessions.MarkAbsence, "teacher-1", "")
+	if err != nil {
+		t.Fatalf("RecordMark absence: %v", err)
+	}
+	if r1.Number != 1 || r1.To != sessions.MarkAbsence {
+		t.Errorf("rev1 = %+v, want number 1 to absence", r1)
+	}
+	r2, err := svc.RecordMark(ctx, sess.ID, studentA, sessions.MarkAbsencePermission, "teacher-1", "permiso trae papá")
+	if err != nil {
+		t.Fatalf("RecordMark absence-permission: %v", err)
+	}
+	if r2.Number != 2 || r2.From != sessions.MarkAbsence || r2.To != sessions.MarkAbsencePermission {
+		t.Errorf("rev2 = %+v, want number 2 from absence to absence-permission", r2)
+	}
+
+	detail, err := svc.SessionDetail(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("SessionDetail: %v", err)
+	}
+	if detail.MarkOf(studentA) != sessions.MarkAbsencePermission {
+		t.Errorf("current mark = %q, want absence-permission", detail.MarkOf(studentA))
+	}
+	if len(detail.Revisions) != 2 {
+		t.Fatalf("len(revisions) = %d, want 2", len(detail.Revisions))
+	}
+	if got := detail.Revisions[1].Number; got != 2 {
+		t.Errorf("revision order number = %d, want 2", got)
 	}
 }
 

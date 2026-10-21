@@ -352,9 +352,9 @@ CREATE TABLE IF NOT EXISTS session_revisions (
     rev_no     INTEGER     NOT NULL,
     student_id UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
     from_mark  TEXT        NOT NULL DEFAULT ''
-        CHECK (from_mark IN ('', 'absence', 'evasion', 'late')),
+        CHECK (from_mark IN ('', 'absence', 'absence-permission', 'evasion', 'late')),
     to_mark    TEXT        NOT NULL DEFAULT ''
-        CHECK (to_mark IN ('', 'absence', 'evasion', 'late')),
+        CHECK (to_mark IN ('', 'absence', 'absence-permission', 'evasion', 'late')),
     changed_by TEXT        NOT NULL,
     changed_at TIMESTAMPTZ NOT NULL,
     note       TEXT        NOT NULL DEFAULT '',

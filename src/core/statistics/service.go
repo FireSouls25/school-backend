@@ -18,9 +18,13 @@ type StudentSummary struct {
 	Sessions int
 	// Presences counts roster calls without a mark.
 	Presences int
-	Absences  int
-	Evasions  int
-	Lates     int
+	// Absences counts plain absences (falta injustificada).
+	Absences int
+	// Excused counts absences covered by a school permission
+	// (falta con permiso).
+	Excused int
+	Evasions int
+	Lates    int
 }
 
 // AttendanceRate returns presences over sessions, or 0 without sessions.
@@ -36,9 +40,13 @@ type ClassTotals struct {
 	Sessions  int
 	Students  int
 	Presences int
-	Absences  int
-	Evasions  int
-	Lates     int
+	// Absences counts plain absences (falta injustificada).
+	Absences int
+	// Excused counts absences covered by a school permission
+	// (falta con permiso).
+	Excused  int
+	Evasions int
+	Lates    int
 }
 
 // ClassReport is the per-class-group view admins filter by year and group:
@@ -51,7 +59,8 @@ type ClassReport struct {
 }
 
 // SessionEntry is one call inside a student's history with its mark.
-// Mark is "" for present, otherwise "absence", "evasion" or "late".
+// Mark is "" for present, otherwise "absence", "absence-permission",
+// "evasion" or "late".
 type SessionEntry struct {
 	SessionID  string
 	Date       time.Time
@@ -67,9 +76,13 @@ type StudentReport struct {
 	StudentID string
 	Sessions  []SessionEntry
 	Presences int
-	Absences  int
-	Evasions  int
-	Lates     int
+	// Absences counts plain absences (falta injustificada).
+	Absences int
+	// Excused counts absences covered by a school permission
+	// (falta con permiso).
+	Excused  int
+	Evasions int
+	Lates    int
 	// Warnings tallies llamados by gravity.
 	WarningsMild     int
 	WarningsModerate int
@@ -115,6 +128,8 @@ func (s *Service) ClassReport(ctx context.Context, classGroupID string) (ClassRe
 			switch v.Marks[e.StudentID] {
 			case "absence":
 				sum.Absences++
+			case "absence-permission":
+				sum.Excused++
 			case "evasion":
 				sum.Evasions++
 			case "late":
@@ -130,6 +145,7 @@ func (s *Service) ClassReport(ctx context.Context, classGroupID string) (ClassRe
 		report.Totals.Students++
 		report.Totals.Presences += sum.Presences
 		report.Totals.Absences += sum.Absences
+		report.Totals.Excused += sum.Excused
 		report.Totals.Evasions += sum.Evasions
 		report.Totals.Lates += sum.Lates
 	}
@@ -170,6 +186,8 @@ func (s *Service) StudentReport(ctx context.Context, studentID string) (StudentR
 		switch mark {
 		case "absence":
 			report.Absences++
+		case "absence-permission":
+			report.Excused++
 		case "evasion":
 			report.Evasions++
 		case "late":
