@@ -87,11 +87,49 @@ func recordAudit(deps Dependencies, r *http.Request, action audit.Action, resour
 	}
 }
 
-// meResponse describes the caller for frontend navigation (roles, home).
+// meResponse describes the caller for frontend navigation (roles, home)
+// plus the personal profile of the login account. Account fields are
+// zero-valued for dev identities (X-Subject-ID) that carry no users row.
 type meResponse struct {
 	Subject string       `json:"subject"`
 	Roles   []roles.Role `json:"roles"`
 	Home    string       `json:"home"`
+	// Account profile: the login itself.
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	Active    bool   `json:"active"`
+	CreatedAt string `json:"createdAt"`
+	TeacherID string `json:"teacherID"`
+	// Teacher is the linked teaching profile, when the account has one.
+	Teacher *meTeacher `json:"teacher,omitempty"`
+}
+
+// meTeacher is the personal summary of the teacher linked to the login.
+// Address, medical conditions and other sensitive fields stay out: the
+// profile panel only shows identity and contact data.
+type meTeacher struct {
+	ID         string `json:"id"`
+	Names      string `json:"names"`
+	Surnames   string `json:"surnames"`
+	DocumentID string `json:"documentID"`
+	Phone      string `json:"phone"`
+	Email      string `json:"email"`
+	Birthdate  string `json:"birthdate"`
+	Sex        string `json:"sex"`
+	Active     bool   `json:"active"`
+}
+
+// meTeacherFrom maps a teacher profile onto the /me summary.
+func meTeacherFrom(t teachers.Teacher) *meTeacher {
+	var birth string
+	if !t.Birthdate.IsZero() {
+		birth = t.Birthdate.Format("2006-01-02")
+	}
+	return &meTeacher{
+		ID: t.ID, Names: t.Names, Surnames: t.Surnames,
+		DocumentID: t.DocumentID, Phone: t.Phone, Email: t.Email,
+		Birthdate: birth, Sex: t.Sex, Active: t.Active,
+	}
 }
 
 // homeFor maps the highest-priority role to the frontend home path.
@@ -113,7 +151,10 @@ func homeFor(rs []roles.Role) string {
 	}
 }
 
-// handleMe returns the caller identity, roles and suggested home.
+// handleMe returns the caller identity, roles, suggested home and the
+// personal profile of the login account (username, email and the linked
+// teacher, when any). Dev identities without a users row still get
+// subject, roles and home; the account fields stay empty.
 func handleMe(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		subject, _ := SubjectFrom(r.Context())
@@ -125,8 +166,52 @@ func handleMe(deps Dependencies) http.HandlerFunc {
 		if rs == nil {
 			rs = []roles.Role{}
 		}
-		writeJSON(w, http.StatusOK, meResponse{Subject: subject, Roles: rs, Home: homeFor(rs)})
+		resp := meResponse{Subject: subject, Roles: rs, Home: homeFor(rs)}
+		if deps.Users != nil {
+			u, err := deps.Users.ByID(r.Context(), subject)
+			switch {
+			case err == nil:
+				resp.Username = u.Username
+				resp.Email = u.Email
+				resp.Active = u.Active
+				resp.CreatedAt = u.CreatedAt.UTC().Format(time.RFC3339)
+				resp.TeacherID = u.TeacherID
+			case errors.Is(err, users.ErrNotFound):
+				// Dev identity: no account row, nothing to enrich.
+			default:
+				WriteError(w, r, err)
+				return
+			}
+			if resp.TeacherID != "" && deps.Teachers != nil {
+				if t, err := deps.Teachers.ByID(r.Context(), resp.TeacherID); err == nil {
+					resp.Teacher = meTeacherFrom(t)
+				} else if !errors.Is(err, teachers.ErrNotFound) {
+					WriteError(w, r, err)
+					return
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// myTeacherID resolves the caller to their own teacher profile id: the
+// account link when present, the subject itself otherwise (callers whose
+// subject already is a teacher id keep working). ok is false when neither
+// resolves, or the linked profile no longer exists.
+func myTeacherID(ctx context.Context, deps Dependencies, subject string) (string, bool) {
+	if deps.Users != nil {
+		if u, err := deps.Users.ByID(ctx, subject); err == nil && u.TeacherID != "" {
+			if _, err := deps.Teachers.ByID(ctx, u.TeacherID); err == nil {
+				return u.TeacherID, true
+			}
+			return "", false
+		}
+	}
+	if _, err := deps.Teachers.ByID(ctx, subject); err == nil {
+		return subject, true
+	}
+	return "", false
 }
 
 // allowStudentView reports whether the caller may see studentID: teachers
@@ -935,6 +1020,60 @@ func handleGetTeacherPhoto(deps Dependencies) http.HandlerFunc {
 			Data:        base64.StdEncoding.EncodeToString(photo.Data),
 			ContentType: http.DetectContentType(photo.Data),
 		})
+	}
+}
+
+// handleGetMyTeacherPhoto returns the caller's own teacher photo. No
+// extra permission: it is the caller's own image, resolved through the
+// account link (or the subject when it already is a teacher id).
+func handleGetMyTeacherPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		teacherID, ok := myTeacherID(r.Context(), deps, subject)
+		if !ok {
+			WriteError(w, r, errForbidden)
+			return
+		}
+		photo, err := deps.Teachers.Photo(r.Context(), teacherID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if len(photo.Data) == 0 {
+			WriteError(w, r, errTeacherPhotoNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, photoResponse{
+			Data:        base64.StdEncoding.EncodeToString(photo.Data),
+			ContentType: http.DetectContentType(photo.Data),
+		})
+	}
+}
+
+// handlePutMyTeacherPhoto stores (or clears, when empty) the caller's
+// own teacher photo. Same self-service rule as the GET above.
+func handlePutMyTeacherPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body photoRequest
+		if !decodePhotoBody(w, r, &body) {
+			return
+		}
+		data, err := photoBytes(body.Data)
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		teacherID, ok := myTeacherID(r.Context(), deps, subject)
+		if !ok {
+			WriteError(w, r, errForbidden)
+			return
+		}
+		if err := deps.Teachers.PutPhoto(r.Context(), teacherID, teachers.Photo{Data: data}); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

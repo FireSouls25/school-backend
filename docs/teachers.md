@@ -16,6 +16,8 @@ profile keeps:
   school listings and the basis for alphabetical ordering.
 - **Document and contact**: identity document number (`DocumentID`),
   phone, address and email (validated when present).
+- **Sex**: `Sex` records `female`, `male` or empty when not declared.
+  Validated against those two values; the profile panel translates.
 - **Birth data**: place (`Birthplace`) and date (`Birthdate`) of birth.
   Age is never stored; `AgeAt(ref)` derives full years from the birthdate.
 - **Health**: free-text medical conditions (`MedicalConditions`).
@@ -106,7 +108,8 @@ RemoveAssignment(ctx, id string) error           // no-op when absent, correctio
 ### teachers.Service validation
 
 Required: names, surnames, document number. Validated when present: email
-format, birthdate not in the future. All free text is trimmed and email
+format, birthdate not in the future, sex one of `female`/`male` or empty.
+All free text is trimmed and email
 lowercased before storage. New teachers are always active (`Active=true`,
 ignored on input); retiring sets `Active=false` through `Update` instead
 of deleting the profile, so history keeps resolving.
@@ -119,7 +122,7 @@ EXISTS`).
 
 ```
 teachers(id uuid PK, names, surnames, document_id, phone, address,
-         birthplace, birthdate DATE NULL, email, medical_conditions,
+         birthplace, birthdate DATE NULL, email, sex, medical_conditions,
          homeroom_class_id, active, created_at, updated_at)
 subjects(id uuid PK, name, code, description, active,
          created_at, updated_at;
@@ -149,7 +152,7 @@ on `teachers.homeroom_class_id` and on both assignment foreign keys.
 | Code | HTTP |
 |---|---|
 | `teachers.err_not_found` | 404 |
-| `teachers.err_invalid_id` / `err_invalid_name` / `err_invalid_document` / `err_invalid_birth` / `err_invalid_email` | 400 |
+| `teachers.err_invalid_id` / `err_invalid_name` / `err_invalid_document` / `err_invalid_birth` / `err_invalid_email` / `err_invalid_sex` | 400 |
 | `subjects.err_not_found` / `err_assignment_not_found` | 404 |
 | `subjects.err_invalid_id` / `err_invalid_name` / `err_invalid_teacher` / `err_invalid_subject` / `err_invalid_date` / `err_invalid_end` / `err_duplicate_subject` / `err_already_assigned` / `err_already_ended` / `err_has_assignments` | 400 |
 

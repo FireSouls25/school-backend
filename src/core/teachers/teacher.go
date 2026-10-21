@@ -30,6 +30,9 @@ type Teacher struct {
 	Birthdate time.Time
 	// Email is the teacher's email address, if any.
 	Email string
+	// Sex is the teacher's sex as recorded by the school: "female",
+	// "male" or empty when not declared.
+	Sex string
 	// MedicalConditions is a free-text report of medical conditions, if any.
 	MedicalConditions string
 	// HomeroomClassID names the class-group the teacher leads as director
@@ -47,6 +50,12 @@ type Teacher struct {
 func (t Teacher) FullName() string {
 	return strings.TrimSpace(t.Surnames + " " + t.Names)
 }
+
+// Sex values the system records. Empty means not declared.
+const (
+	SexFemale = "female"
+	SexMale   = "male"
+)
 
 // IsHomeroomDirector reports whether the teacher leads a class-group.
 func (t Teacher) IsHomeroomDirector() bool {

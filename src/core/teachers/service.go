@@ -92,6 +92,7 @@ func normalize(t Teacher) Teacher {
 	t.Address = trim(t.Address)
 	t.Birthplace = trim(t.Birthplace)
 	t.Email = strings.ToLower(trim(t.Email))
+	t.Sex = strings.ToLower(trim(t.Sex))
 	t.MedicalConditions = trim(t.MedicalConditions)
 	t.HomeroomClassID = trim(t.HomeroomClassID)
 	return t
@@ -117,6 +118,9 @@ func validate(t Teacher) error {
 		if _, err := mail.ParseAddress(t.Email); err != nil {
 			return ErrInvalidEmail
 		}
+	}
+	if t.Sex != "" && t.Sex != SexFemale && t.Sex != SexMale {
+		return ErrInvalidSex
 	}
 	return nil
 }

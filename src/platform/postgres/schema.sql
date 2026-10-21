@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS teachers (
     birthplace          TEXT        NOT NULL DEFAULT '',
     birthdate           DATE,
     email               TEXT        NOT NULL DEFAULT '',
+    sex                 TEXT        NOT NULL DEFAULT '',
     medical_conditions  TEXT        NOT NULL DEFAULT '',
     homeroom_class_id   TEXT        NOT NULL DEFAULT '',
     active              BOOLEAN     NOT NULL DEFAULT TRUE,
@@ -209,6 +210,8 @@ CREATE TABLE IF NOT EXISTS teachers (
 -- Retiring a teacher flips active instead of deleting the profile.
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS photo BYTEA;
+-- Sex as recorded by the school: 'female', 'male' or empty when not declared.
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS sex TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
 

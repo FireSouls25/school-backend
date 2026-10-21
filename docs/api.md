@@ -47,6 +47,8 @@ Routes declare one required permission, enforced by
 | `POST /v1/classes` | `manage-users` | admin only |
 | `GET /v1/classes/{groupID}/roster` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
+| `GET /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
+| `PUT /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
 | `POST /v1/sessions/open` | `record-attendance` | teacher, admin |
 | `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
 | `POST /v1/incidents` | `record-incidents` | teacher, admin |
@@ -91,6 +93,14 @@ Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.
 Unknown subjects (valid UUID, no roles) are denied everywhere guarded.
 Authorizer failures fail closed: no data, `500` with no details.
+
+`GET /v1/me` returns navigation plus the personal profile of the login:
+`{subject, roles, home, username, email, active, createdAt, teacherID,
+teacher?}`. `teacher` is the linked teaching profile summarized for the
+profile panel (`{id, names, surnames, documentID, phone, email,
+birthdate, sex, active}`); address and medical conditions stay out. Dev
+identities without a `users` row still get subject, roles and home, with
+the account fields empty — never invented.
 
 ### User accounts (admin only)
 
@@ -157,6 +167,11 @@ ever log in. Frontend flow in `docs/users.md`.
 - `PUT /v1/teachers/{id}/photo` / `GET /v1/teachers/{id}/photo`
   (`manage-users`) store and return the teacher picture (2 MiB max,
   empty photo is an honest 404), same contract as students.
+- `PUT /v1/teachers/me/photo` / `GET /v1/teachers/me/photo`
+  (authenticated only) are the self-service twins: the caller's own
+  teacher photo, resolved through the account link (the subject itself
+  is tried when it already is a teacher id). Same 2 MiB cap and honest
+  404; callers without a teacher profile get `403`.
 - `GET /v1/teachers/{id}/sessions` (`manage-teachers`) returns the
   roll calls taken by one teacher, newest first (capped at 20), with
   absence counts folded from the revision trail.

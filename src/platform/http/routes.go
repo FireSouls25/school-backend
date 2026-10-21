@@ -120,6 +120,10 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/teachers", handleListTeachers(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/teachers/me/schedule", handleMySchedule(deps))
+		// Self-service photo: the caller's own teacher profile. Auth only,
+		// no permission — it can only resolve to the caller's own image.
+		r.Get("/teachers/me/photo", handleGetMyTeacherPhoto(deps))
+		r.Put("/teachers/me/photo", handlePutMyTeacherPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).

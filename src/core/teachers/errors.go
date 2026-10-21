@@ -32,4 +32,6 @@ var (
 	ErrInvalidBirth = newError("teachers.err_invalid_birth", "teachers: invalid birth data")
 	// ErrInvalidEmail is returned when the email address is malformed.
 	ErrInvalidEmail = newError("teachers.err_invalid_email", "teachers: invalid email")
+	// ErrInvalidSex is returned when the sex is neither empty nor a known value.
+	ErrInvalidSex = newError("teachers.err_invalid_sex", "teachers: invalid sex")
 )
