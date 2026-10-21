@@ -13,12 +13,16 @@ type MemoryStore struct {
 	mu          sync.Mutex
 	enrollments map[string]enrollmentRow
 	promotions  map[string]Promotion
+	nextSeq     int
 }
 
-// enrollmentRow carries the insertion time used for stable ordering.
+// enrollmentRow carries the insertion order used for stable ordering.
+// seq beats clock comparisons: two enrolls recorded within the same
+// timestamp resolution (coarse clocks) would otherwise tie and shuffle.
 type enrollmentRow struct {
 	Enrollment
 	addedAt time.Time
+	seq     int
 }
 
 // NewMemoryStore returns an empty, ready-to-use MemoryStore.
@@ -33,7 +37,8 @@ func NewMemoryStore() *MemoryStore {
 func (s *MemoryStore) AddEnrollment(_ context.Context, e Enrollment) (Enrollment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.enrollments[e.ID] = enrollmentRow{Enrollment: e, addedAt: time.Now().UTC()}
+	s.nextSeq++
+	s.enrollments[e.ID] = enrollmentRow{Enrollment: e, addedAt: time.Now().UTC(), seq: s.nextSeq}
 	return e, nil
 }
 
@@ -101,15 +106,11 @@ func (s *MemoryStore) PromotionsForStudent(_ context.Context, studentID string) 
 }
 
 func (s *MemoryStore) sortByAddedLocked(out []Enrollment) {
-	byID := make(map[string]time.Time, len(out))
+	seqByID := make(map[string]int, len(out))
 	for _, row := range s.enrollments {
-		byID[row.ID] = row.addedAt
+		seqByID[row.ID] = row.seq
 	}
 	sort.Slice(out, func(i, j int) bool {
-		ai, aj := byID[out[i].ID], byID[out[j].ID]
-		if ai.Equal(aj) {
-			return out[i].ID < out[j].ID
-		}
-		return ai.Before(aj)
+		return seqByID[out[i].ID] < seqByID[out[j].ID]
 	})
 }
