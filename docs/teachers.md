@@ -25,6 +25,11 @@ profile keeps:
   as director de grupo (e.g. `"9-1"`). Empty means the teacher leads no
   class-group; `IsHomeroomDirector()` reports which case applies.
 
+`PUT /v1/teachers/{id}` (`manage-users`, admin only) is the HTTP partial
+update: every field is optional and what the body omits keeps its stored
+value ("actualización parcial con punteros"). Validation is the same as
+`Create`, so an invalid field answers `400` without touching the record.
+
 What each teacher teaches is **not** a profile field: it lives in the
 separate `subjects` capability so subject ids stay reusable by future
 capabilities such as a calendar.

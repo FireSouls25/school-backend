@@ -66,6 +66,7 @@ Authenticate(ctx, identifier, password string) (User, error)
 ByID(ctx, id string) (User, error)
 ByUsername(ctx, username string) (User, error) // admin tooling; login uses Authenticate
 SetPassword(ctx, id, newPassword string) error
+ChangePassword(ctx, id, currentPassword, newPassword string) error // verifies current first (used by PUT /v1/me/password)
 SetActive(ctx, id string, active bool) (User, error)
 LinkTeacher(ctx, userID, teacherID string) (User, error) // binds login to profile
 UnlinkTeacher(ctx, userID string) (User, error)         // back to a pure account

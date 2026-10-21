@@ -195,6 +195,41 @@ func handleMe(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// passwordChangeRequest is the body for PUT /v1/me/password. The current
+// password must be repeated: the bearer alone never grants a password
+// swap, so a stolen token cannot silently take over the account.
+type passwordChangeRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
+// handleChangeMyPassword lets the signed-in account replace its own
+// password. Ids and other profiles stay out of reach: nobody changes
+// passwords on behalf of someone else through this route. An empty
+// current password is simply a wrong one.
+func handleChangeMyPassword(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, ok := SubjectFrom(r.Context())
+		if !ok {
+			WriteError(w, r, errUnauthorized)
+			return
+		}
+		var body passwordChangeRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if deps.Users == nil {
+			WriteError(w, r, errInternal)
+			return
+		}
+		if err := deps.Users.ChangePassword(r.Context(), subject, body.CurrentPassword, body.NewPassword); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // myTeacherID resolves the caller to their own teacher profile id: the
 // account link when present, the subject itself otherwise (callers whose
 // subject already is a teacher id keep working). ok is false when neither
@@ -343,6 +378,72 @@ func handleUpdateStudent(deps Dependencies) http.HandlerFunc {
 		}
 		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceStudent, updated.ID, updated.ID, http.StatusOK)
 		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
+// teacherUpdate is the editable part of a teacher profile. Every field
+// is optional so a partial form can never silently retire a teacher or
+// erase their contact data: what the body omits keeps its stored value.
+type teacherUpdate struct {
+	Names             *string    `json:"Names"`
+	Surnames          *string    `json:"Surnames"`
+	DocumentID        *string    `json:"DocumentID"`
+	Phone             *string    `json:"Phone"`
+	Address           *string    `json:"Address"`
+	Birthplace        *string    `json:"Birthplace"`
+	Birthdate         *time.Time `json:"Birthdate"`
+	Email             *string    `json:"Email"`
+	Sex               *string    `json:"Sex"`
+	MedicalConditions *string    `json:"MedicalConditions"`
+	HomeroomClassID   *string    `json:"HomeroomClassID"`
+	Active            *bool      `json:"Active"`
+}
+
+// handleUpdateTeacher applies a partial update to a teacher profile.
+// Retiring a teacher (Active=false) keeps the profile so old records keep
+// resolving, exactly as the domain intends. Validation runs through the
+// service, so an invalid field answers 400 without touching the record.
+func handleUpdateTeacher(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body teacherUpdate
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		id := strings.TrimSpace(chi.URLParam(r, "id"))
+		current, err := deps.Teachers.ByID(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		applyIfSet(&current.Names, body.Names)
+		applyIfSet(&current.Surnames, body.Surnames)
+		applyIfSet(&current.DocumentID, body.DocumentID)
+		applyIfSet(&current.Phone, body.Phone)
+		applyIfSet(&current.Address, body.Address)
+		applyIfSet(&current.Birthplace, body.Birthplace)
+		if body.Birthdate != nil {
+			current.Birthdate = *body.Birthdate
+		}
+		applyIfSet(&current.Email, body.Email)
+		applyIfSet(&current.Sex, body.Sex)
+		applyIfSet(&current.MedicalConditions, body.MedicalConditions)
+		applyIfSet(&current.HomeroomClassID, body.HomeroomClassID)
+		if body.Active != nil {
+			current.Active = *body.Active
+		}
+		updated, err := deps.Teachers.Update(r.Context(), current)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
+// applyIfSet copies a pointer field into target when the body provided it.
+func applyIfSet(target *string, value *string) {
+	if value != nil {
+		*target = *value
 	}
 }
 

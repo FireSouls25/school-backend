@@ -66,6 +66,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 			return MiddlewareSubjectWith(next, deps.Tokens, deps.AllowDevIdentity)
 		})
 		r.Get("/me", handleMe(deps))
+		// Self-service password: auth only, the current password gates
+		// the swap, so permissions play no part here.
+		r.Put("/me/password", handleChangeMyPassword(deps))
 
 		r.Get("/students/{id}", handleGetStudent(deps))
 		r.Get("/students/{id}/warnings", handleGetStudentWarnings(deps))
@@ -116,6 +119,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/students/{id}/photo", handleGetPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/teachers", handleCreateTeacher(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/teachers/{id}", handleUpdateTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers", handleListTeachers(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).

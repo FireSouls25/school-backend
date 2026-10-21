@@ -38,6 +38,7 @@ Routes declare one required permission, enforced by
 | Route | Permission | Who |
 |---|---|---|
 | `GET /v1/me` | authenticated only | anyone with an id |
+| `PUT /v1/me/password` | authenticated only | anyone with an account row |
 | `GET /v1/students/{id}` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/students/{id}/warnings` | same as above | teacher, admin / student (own) |
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
@@ -57,6 +58,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/students` | `manage-students` | admin only |
 | `PUT /v1/students/{id}` | `manage-students` | admin only |
 | `POST /v1/teachers` | `manage-users` | admin only |
+| `PUT /v1/teachers/{id}` | `manage-users` | admin only |
 | `GET /v1/teachers` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}` | `manage-users` | admin only |
 | `GET /v1/subjects` | `view-class-statistics` | teacher, admin |
@@ -101,6 +103,14 @@ profile panel (`{id, names, surnames, documentID, phone, email,
 birthdate, sex, active}`); address and medical conditions stay out. Dev
 identities without a `users` row still get subject, roles and home, with
 the account fields empty — never invented.
+
+`PUT /v1/me/password` lets the signed-in account swap its own password:
+body `{"currentPassword","newPassword"}`, `204` on success. The current
+password is verified first, so a stolen bearer cannot silently take over
+the account; a wrong one answers `401` (`users.err_invalid_credentials`),
+a weak new one `400` (`users.err_weak_password`), and an unknown account
+`404`. Tokens already issued stay valid until expiry — there is no
+denylist yet.
 
 ### User accounts (admin only)
 
@@ -164,6 +174,14 @@ ever log in. Frontend flow in `docs/users.md`.
   teachers expected that weekday (from the weekly schedule) with
   their recorded marks, if any. Unmarked teachers carry an empty
   status: the roll screen shows nothing pre-selected.
+- `PUT /v1/teachers/{id}` (`manage-users`) applies a partial profile
+  update: every body field is optional (`{"Names","Surnames","DocumentID",
+  "Phone","Address","Birthplace","Birthdate","Email","Sex",
+  "MedicalConditions","HomeroomClassID","Active"}`) and what the body
+  omits keeps its stored value, so a closed form can never silently
+  erase contact data or retire a teacher. Validation runs through the
+  service (`400` `teachers.err_*` on bad input); `200` returns the
+  updated profile.
 - `PUT /v1/teachers/{id}/photo` / `GET /v1/teachers/{id}/photo`
   (`manage-users`) store and return the teacher picture (2 MiB max,
   empty photo is an honest 404), same contract as students.
