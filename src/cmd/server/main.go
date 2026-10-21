@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"grade/src/app"
+	"grade/src/core/throttle"
 	"grade/src/platform/config"
 	httpapi "grade/src/platform/http"
 	"grade/src/platform/i18n"
@@ -32,6 +33,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer application.Close()
+
+	// Trusted proxies for client IP (throttle + audit). Invalid values
+	// already fail in config.FromEnv; re-parse here for the nets.
+	trusted, err := throttle.ParseTrusted(cfg.TrustedProxies)
+	if err != nil {
+		slog.Error("invalid trusted proxies", "error", err)
+		os.Exit(1)
+	}
 
 	// Legacy placeholder identities (X-Subject-ID), when configured.
 	application.SeedPlaceholderRoles(ctx)
@@ -62,6 +71,8 @@ func main() {
 		Incidents:        application.Services.Incidents,
 		Audit:            application.Services.Audit,
 		Tokens:           application.Services.Auth,
+		Throttle:         application.Services.Throttle,
+		TrustedProxies:   trusted,
 		AllowDevIdentity: !cfg.Env.IsProduction(),
 		Subjects:         application.Services.Subjects,
 		TAttendance:      application.Services.TAttendance,

@@ -17,6 +17,7 @@ func clearEnv(t *testing.T) {
 		"PORT", "DATABASE_URL", "ALLOWED_ORIGINS", "APP_ENV", "SEED_DEMO",
 		"BOOTSTRAP_ADMIN_USERNAME", "BOOTSTRAP_ADMIN_EMAIL",
 		"BOOTSTRAP_ADMIN_PASSWORD", "BOOTSTRAP_ADMIN_PASSWORD_FILE",
+		"TRUSTED_PROXIES", "AUTH_ACCESS_TTL", "AUTH_REFRESH_TTL", "AUTH_TTL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -244,5 +245,33 @@ func TestEnvironmentAliases(t *testing.T) {
 		if cfg.Env != want {
 			t.Errorf("APP_ENV %q -> %q, want %q", raw, cfg.Env, want)
 		}
+	}
+}
+
+func TestTrustedProxiesValidation(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("TRUSTED_PROXIES", "10.0.0.1, 192.168.0.0/16")
+	if _, err := config.FromEnv(); err != nil {
+		t.Fatalf("valid proxies rejected: %v", err)
+	}
+	t.Setenv("TRUSTED_PROXIES", "no-es-ip")
+	if _, err := config.FromEnv(); err == nil {
+		t.Fatal("invalid proxies accepted, want error")
+	}
+}
+
+func TestAccessRefreshTTLSplit(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("AUTH_ACCESS_TTL", "15m")
+	t.Setenv("AUTH_REFRESH_TTL", "168h")
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.AccessTTL() != 15*60*1000*1000*1000 {
+		t.Errorf("AccessTTL = %v, want 15m", cfg.AccessTTL())
+	}
+	if cfg.RefreshTTL() != 168*60*60*1000*1000*1000 {
+		t.Errorf("RefreshTTL = %v, want 168h", cfg.RefreshTTL())
 	}
 }

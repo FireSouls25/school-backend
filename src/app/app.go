@@ -28,6 +28,7 @@ import (
 	"grade/src/core/subjects"
 	"grade/src/core/tattendance"
 	"grade/src/core/teachers"
+	"grade/src/core/throttle"
 	"grade/src/core/users"
 	"grade/src/core/warnings"
 	"grade/src/devseed"
@@ -57,6 +58,8 @@ type Stores struct {
 	Roles roles.Store
 	// RefreshTokens persists rotation hashes (never usable bearers).
 	RefreshTokens auth.Store
+	// Throttle persists login/refresh guesses (shared budget + audit).
+	Throttle throttle.Store
 }
 
 // Services holds the application services built over those stores.
@@ -79,6 +82,7 @@ type Services struct {
 	Users       *users.Service
 	Roles       *roles.Service
 	Auth        *auth.Service
+	Throttle    *throttle.Service
 }
 
 // App is the wired application.
@@ -114,6 +118,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Users:         users.NewMemoryStore(),
 		Roles:         roles.NewMemoryStore(),
 		RefreshTokens: auth.NewMemoryStore(),
+		Throttle:      throttle.NewMemoryStore(),
 	}
 
 	var db *pg.DB
@@ -136,9 +141,11 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Schedules = pg.NewSchedulesStore(db)
 		s.Sessions = pg.NewSessionsStore(db)
 		s.TAttendance = pg.NewTAttendanceStore(db)
+		s.Throttle = pg.NewThrottleStore(db)
 		s.Users = pg.NewUsersStore(db)
 		s.Roles = pg.NewRolesStore(db)
 		s.RefreshTokens = pg.NewRefreshStore(db)
+		s.Throttle = pg.NewThrottleStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only, data lost on restart)")
@@ -211,9 +218,10 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 					warnings:    warningsSvc,
 				},
 			),
-			Users: users.NewService(s.Users),
-			Roles: roles.NewService(s.Roles),
-			Auth:  authSvc,
+			Users:    users.NewService(s.Users),
+			Roles:    roles.NewService(s.Roles),
+			Auth:     authSvc,
+			Throttle: throttle.NewService(s.Throttle),
 		},
 	}, nil
 }

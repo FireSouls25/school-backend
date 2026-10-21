@@ -22,7 +22,14 @@ default, `AUTH_REFRESH_TTL`):
   rotation and disable bump the version: old access dies at the next
   request (`401`), old refresh at the next rotation. Unknown/wrong/inactive
   share `401 users.err_invalid_credentials` (no enumeration); throttled
-  logins answer `429 http.err_rate_limited`.
+  logins answer `429 http.err_rate_limited`. Budgets are persistent
+  (`login_attempts`: 10/min per identifier+IP on login, 30/min per IP on
+  refresh) and shared across restarts/replicas; denied attempts never
+  extend the window. Behind a reverse proxy set `TRUSTED_PROXIES` so
+  `X-Forwarded-For` is trusted for the client IP only from those proxies.
+  Every guess is audited (identifier, IP, success, time); there is no
+  permanent lockout by design (anti-DoS): disable the account to cut
+  access immediately (version bump kills bearers, refresh is rejected).
 - `X-Subject-ID` survives only when `AllowDevIdentity` holds
   (development/tests, never production). Missing/invalid identity →
   `401 http.err_unauthorized`.

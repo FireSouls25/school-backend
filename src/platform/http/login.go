@@ -1,14 +1,15 @@
 package httpapi
 
 import (
+	"context"
 	"log/slog"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"grade/src/core/roles"
+	"grade/src/core/throttle"
 )
 
 // loginRequest carries the credentials. Identifier is a username or an
@@ -66,38 +67,57 @@ const (
 	refreshLimitPerMinute = 30
 )
 
-// loginLimiter is a fixed-window counter per key. One instance lives in
-// the route closure, so every Router (production or test) gets isolated
-// counters and nothing global leaks between suites.
+// loginLimiter caps guesses per key and window. Backed by the shared
+// throttle service (persistent across restarts/replicas) when wired;
+// otherwise a per-Router memory map (tests). Denied attempts are never
+// recorded, so they cannot extend the window.
 type loginLimiter struct {
-	mu     sync.Mutex
-	max    int
-	window time.Duration
-	hits   map[string][]time.Time
+	svc     *throttle.Service
+	trusted *throttle.Nets
+	max     int
+	window  time.Duration
+
+	mu   sync.Mutex
+	hits map[string][]time.Time
 }
 
-func newLoginLimiter(max int, window time.Duration) *loginLimiter {
-	return &loginLimiter{max: max, window: window, hits: make(map[string][]time.Time)}
+func newLoginLimiter(svc *throttle.Service, trusted *throttle.Nets, max int, window time.Duration) *loginLimiter {
+	return &loginLimiter{svc: svc, trusted: trusted, max: max, window: window, hits: make(map[string][]time.Time)}
 }
 
-// allow reports whether key may try once more right now.
-func (l *loginLimiter) allow(key string) bool {
-	now := time.Now()
+// clientIP resolves the caller IP, trusting X-Forwarded-For only from
+// configured proxies.
+func (l *loginLimiter) clientIP(r *http.Request) string {
+	return throttle.ClientIP(r.RemoteAddr, r.Header.Get("X-Forwarded-For"), l.trusted)
+}
+
+// check reports whether key may try once more, without recording.
+func (l *loginLimiter) check(ctx context.Context, key string, now time.Time) bool {
+	if l.svc != nil {
+		return l.svc.Check(ctx, key, l.max, l.window, now)
+	}
 	cutoff := now.Add(-l.window)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	kept := l.hits[key][:0]
-	for _, t := range l.hits[key] {
-		if t.After(cutoff) {
-			kept = append(kept, t)
+	n := 0
+	for _, ts := range l.hits[key] {
+		if ts.After(cutoff) {
+			n++
 		}
 	}
-	if len(kept) >= l.max {
-		l.hits[key] = kept
-		return false
+	return n < l.max
+}
+
+// record persists one attempt (success or failure) for future windows
+// and the audit trail.
+func (l *loginLimiter) record(ctx context.Context, key, ip string, success bool, now time.Time) {
+	if l.svc != nil {
+		l.svc.Record(ctx, key, ip, success, now)
+		return
 	}
-	l.hits[key] = append(kept, now)
-	return true
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.hits[key] = append(l.hits[key], now)
 }
 
 // errRateLimited renders 429 when the login throttle bites.
@@ -106,21 +126,13 @@ var errRateLimited = codedError{"http.err_rate_limited"}
 // loginKey scopes throttling to one identifier from one address. Shared
 // NATs share a budget per identifier: the standard tradeoff between
 // brute-force cost and lockout blast radius at school scale.
-func loginKey(r *http.Request, identifier string) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	return strings.ToLower(strings.TrimSpace(identifier)) + "|" + host
+func loginKey(l *loginLimiter, r *http.Request, identifier string) string {
+	return strings.ToLower(strings.TrimSpace(identifier)) + "|" + l.clientIP(r)
 }
 
 // refreshKey scopes rotation throttling per address.
-func refreshKey(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	return "refresh|" + host
+func refreshKey(l *loginLimiter, r *http.Request) string {
+	return "refresh|" + l.clientIP(r)
 }
 
 // setRefreshCookie stores the rotation token HttpOnly. Secure follows the
@@ -174,15 +186,24 @@ func handleLogin(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 			WriteError(w, r, errBadRequest)
 			return
 		}
-		if !limit.allow(loginKey(r, body.Identifier)) {
+		now := time.Now()
+		key := loginKey(limit, r, body.Identifier)
+		ip := limit.clientIP(r)
+		if !limit.check(r.Context(), key, now) {
+			slog.Warn("login throttled", "identifier", strings.ToLower(strings.TrimSpace(body.Identifier)), "ip", ip)
 			WriteError(w, r, errRateLimited)
 			return
 		}
 		u, err := deps.Users.Authenticate(r.Context(), body.Identifier, body.Password)
 		if err != nil {
+			limit.record(r.Context(), key, ip, false, now)
+			if err == errRateLimited {
+				slog.Warn("login throttled", "ip", ip)
+			}
 			WriteError(w, r, err)
 			return
 		}
+		limit.record(r.Context(), key, ip, true, now)
 		rs, err := deps.Roles.Roles(r.Context(), u.ID)
 		if err != nil {
 			WriteError(w, r, err)
@@ -199,7 +220,6 @@ func handleLogin(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 		for _, role := range rs {
 			roleNames = append(roleNames, string(role))
 		}
-		now := time.Now()
 		token, expiresAt, err := deps.Tokens.MintAccess(u.ID, roleNames, u.TokenVersion, now)
 		if err != nil {
 			WriteError(w, r, err)
@@ -235,31 +255,39 @@ func handleRefresh(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 				return
 			}
 		}
-		if !limit.allow(refreshKey(r)) {
+		now := time.Now()
+		key := refreshKey(limit, r)
+		ip := limit.clientIP(r)
+		if !limit.check(r.Context(), key, now) {
+			slog.Warn("refresh throttled", "ip", ip)
 			WriteError(w, r, errRateLimited)
 			return
 		}
 		presented := refreshFromRequest(r, body)
 		if presented == "" || deps.Tokens == nil || deps.Users == nil {
+			limit.record(r.Context(), key, ip, false, now)
 			WriteError(w, r, errUnauthorized)
 			return
 		}
-		now := time.Now()
 		claims, err := deps.Tokens.CheckRefresh(r.Context(), presented, now)
 		if err != nil {
+			limit.record(r.Context(), key, ip, false, now)
 			WriteError(w, r, err)
 			return
 		}
 		u, err := deps.Users.ByID(r.Context(), claims.Subject)
 		if err != nil {
+			limit.record(r.Context(), key, ip, false, now)
 			WriteError(w, r, errUnauthorized)
 			return
 		}
 		if !u.Active || u.TokenVersion != claims.Ver {
 			_ = deps.Tokens.Revoke(r.Context(), claims.Jti)
+			limit.record(r.Context(), key, ip, false, now)
 			WriteError(w, r, errUnauthorized)
 			return
 		}
+		limit.record(r.Context(), key, ip, true, now)
 		rs, err := deps.Roles.Roles(r.Context(), u.ID)
 		if err != nil {
 			WriteError(w, r, err)

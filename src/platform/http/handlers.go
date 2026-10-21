@@ -29,6 +29,7 @@ import (
 	"grade/src/core/subjects"
 	"grade/src/core/tattendance"
 	"grade/src/core/teachers"
+	"grade/src/core/throttle"
 	"grade/src/core/users"
 	"grade/src/core/warnings"
 )
@@ -68,6 +69,13 @@ type Dependencies struct {
 	Incidents        *incidents.Service
 	// AllowedOrigins lists browser origins accepted by CORS.
 	AllowedOrigins []string
+	// Throttle caps login/refresh guesses persistently. Nil means a
+	// per-Router memory fallback (tests); production wires the shared
+	// service from app.Services.
+	Throttle *throttle.Service
+	// TrustedProxies gates X-Forwarded-For for client IP. Nil trusts
+	// none (direct RemoteAddr).
+	TrustedProxies *throttle.Nets
 }
 
 // recordAudit trails one mutating action with its real outcome, so

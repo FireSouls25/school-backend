@@ -410,6 +410,18 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens (user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens (expires_at);
 
+-- Auth throttle + audit: every login/refresh guess lands here (keyed
+-- identifier|ip), so restarts and replicas share one budget. Denied
+-- attempts are not recorded (they must not extend the window).
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id      BIGSERIAL PRIMARY KEY,
+    bucket  TEXT        NOT NULL,
+    ip      TEXT        NOT NULL DEFAULT '',
+    success BOOLEAN     NOT NULL DEFAULT FALSE,
+    at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_bucket_at ON login_attempts (bucket, at);
+
 -- Role grants survive restarts (the memory store they replace does not).
 CREATE TABLE IF NOT EXISTS role_grants (
     subject_id UUID NOT NULL,

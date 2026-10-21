@@ -10,10 +10,31 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
 )
+
+// ParseTrustedProxies validates comma-separated IPs/CIDRs; empty trusts none.
+func ParseTrustedProxies(raw string) (bool, error) {
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.Contains(part, "/") {
+			if _, _, err := net.ParseCIDR(part); err != nil {
+				return false, err
+			}
+			continue
+		}
+		if net.ParseIP(part) == nil {
+			return false, &net.ParseError{Type: "IP address", Text: part}
+		}
+	}
+	return true, nil
+}
 
 // DefaultAuthTTL is the legacy login token lifetime, kept as the access
 // fallback when AUTH_ACCESS_TTL is unset.
@@ -66,6 +87,11 @@ type Config struct {
 	// AllowedOrigins lists browser origins accepted by CORS,
 	// comma-separated. Empty means same-origin only.
 	AllowedOrigins []string
+	// TrustedProxies lists IPs/CIDRs (comma-separated) whose
+	// X-Forwarded-For the throttle trusts for client IP. Empty (default)
+	// trusts none: direct RemoteAddr is throttled. Set to the reverse
+	// proxy (e.g. compose nginx) when the API sits behind one.
+	TrustedProxies string
 	// Env is the deployment shape (development by default).
 	Env AppEnv
 	// SeedDemo creates the demo school at boot when Env is development.
@@ -120,6 +146,10 @@ func FromEnv() (Config, error) {
 		return Config{}, err
 	}
 	cfg.Env = env
+	cfg.TrustedProxies = strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	if _, err := ParseTrustedProxies(cfg.TrustedProxies); err != nil {
+		return Config{}, fmt.Errorf("config: TRUSTED_PROXIES: %w", err)
+	}
 
 	// SEED_DEMO defaults to on in development and always off in
 	// production, so the flag can never weaken prod by omission.

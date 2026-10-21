@@ -59,8 +59,8 @@ func MiddlewareCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 func routes(r *chi.Mux, deps Dependencies) {
 	r.Get("/healthz", handleHealthz)
 
-	r.Post("/v1/login", handleLogin(deps, newLoginLimiter(loginLimitPerMinute, loginWindow)))
-	r.Post("/v1/refresh", handleRefresh(deps, newLoginLimiter(refreshLimitPerMinute, loginWindow)))
+	r.Post("/v1/login", handleLogin(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, loginLimitPerMinute, loginWindow)))
+	r.Post("/v1/refresh", handleRefresh(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, refreshLimitPerMinute, loginWindow)))
 	// Logout revokes the presented refresh (cookie/body) or, with all=true
 	// plus an access bearer, every session of the caller. No subject is
 	// required for single logout: the refresh token itself authenticates.
