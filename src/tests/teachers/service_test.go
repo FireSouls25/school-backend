@@ -42,6 +42,7 @@ func TestServiceCreateValidation(t *testing.T) {
 		{"future birthdate", func(tc *teachers.Teacher) {
 			tc.Birthdate = time.Now().Add(24 * time.Hour)
 		}, teachers.ErrInvalidBirth},
+		{"bad sex", func(tc *teachers.Teacher) { tc.Sex = "other" }, teachers.ErrInvalidSex},
 	}
 
 	for _, tc := range cases {
@@ -91,6 +92,21 @@ func TestServiceCreateAssignsUUID(t *testing.T) {
 	}
 	if !c.Active {
 		t.Errorf("Create with Active=false stayed inactive, want forced active")
+	}
+}
+
+func TestServiceNormalizesSex(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	p := validProfile()
+	p.Sex = "  Female "
+	got, err := svc.Create(ctx, p)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got.Sex != teachers.SexFemale {
+		t.Errorf("Sex = %q, want %q", got.Sex, teachers.SexFemale)
 	}
 }
 

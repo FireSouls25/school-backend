@@ -66,6 +66,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 			return MiddlewareSubjectWith(next, deps.Tokens, deps.AllowDevIdentity)
 		})
 		r.Get("/me", handleMe(deps))
+		// Self-service password: auth only, the current password gates
+		// the swap, so permissions play no part here.
+		r.Put("/me/password", handleChangeMyPassword(deps))
 
 		r.Get("/students/{id}", handleGetStudent(deps))
 		r.Get("/students/{id}/warnings", handleGetStudentWarnings(deps))
@@ -117,9 +120,20 @@ func routes(r *chi.Mux, deps Dependencies) {
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/teachers", handleCreateTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/teachers/{id}", handleUpdateTeacher(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers", handleListTeachers(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/teachers/me/schedule", handleMySchedule(deps))
+		// Self-service photo: the caller's own teacher profile. Auth only,
+		// no permission — it can only resolve to the caller's own image.
+		r.Get("/teachers/me/photo", handleGetMyTeacherPhoto(deps))
+		r.Put("/teachers/me/photo", handlePutMyTeacherPhoto(deps))
+		// Account-level twins: linked docentes keep writing through to
+		// their profile; every other login stores the picture inside its
+		// own account row. Auth only, no permission.
+		r.Get("/me/photo", handleGetMyPhoto(deps))
+		r.Put("/me/photo", handlePutMyPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).

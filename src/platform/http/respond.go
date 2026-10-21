@@ -38,6 +38,8 @@ var statusByCode = map[string]int{
 	"users.err_duplicate_email":     http.StatusBadRequest,
 	"users.err_invalid_credentials": http.StatusUnauthorized,
 	"users.err_invalid_teacher":     http.StatusBadRequest,
+	"users.err_photo_too_large":     http.StatusBadRequest,
+	"users.err_photo_not_found":     http.StatusNotFound,
 	"http.err_rate_limited":         http.StatusTooManyRequests,
 
 	"auth.err_invalid_token":   http.StatusUnauthorized,
@@ -103,6 +105,7 @@ var statusByCode = map[string]int{
 	"teachers.err_invalid_document": http.StatusBadRequest,
 	"teachers.err_invalid_birth":    http.StatusBadRequest,
 	"teachers.err_invalid_email":    http.StatusBadRequest,
+	"teachers.err_invalid_sex":      http.StatusBadRequest,
 	"teachers.err_photo_too_large":  http.StatusBadRequest,
 	"teachers.err_photo_not_found":  http.StatusNotFound,
 

@@ -41,10 +41,13 @@ type DashboardWarnings struct {
 }
 
 // DashboardMarks tallies window attendance marks. Presences counts roster
-// rows without a mark.
+// rows without a mark; Absences counts plain absences (falta
+// injustificada) while Excused counts absences covered by a school
+// permission (falta con permiso).
 type DashboardMarks struct {
 	Presences int
 	Absences  int
+	Excused   int
 	Evasions  int
 	Lates     int
 }
@@ -186,6 +189,8 @@ func (d *DashboardService) Summary(ctx context.Context, year int) (DashboardSumm
 				switch v.Marks[e.StudentID] {
 				case "absence":
 					summary.MarksLast7d.Absences++
+				case "absence-permission":
+					summary.MarksLast7d.Excused++
 				case "evasion":
 					summary.MarksLast7d.Evasions++
 				case "late":

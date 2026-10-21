@@ -92,12 +92,11 @@ func (s *MemoryStore) RevisionsForTeacher(_ context.Context, teacherID string, f
 			out = append(out, r)
 		}
 	}
-	for i := 0; i < len(out); i++ {
-		for j := i + 1; j < len(out); j++ {
-			if out[j].RecordedAt.After(out[i].RecordedAt) {
-				out[i], out[j] = out[j], out[i]
-			}
-		}
+	// Newest first: the trail appends in chronological order, so reversing
+	// the filter wins even when two revisions share a recorded timestamp
+	// (clock resolution can tie them).
+	for l, r := 0, len(out)-1; l < r; l, r = l+1, r-1 {
+		out[l], out[r] = out[r], out[l]
 	}
 	return out, nil
 }
@@ -134,12 +133,10 @@ func (s *MemoryStore) RevisionsForDay(_ context.Context, day time.Time) ([]Revis
 			out = append(out, r)
 		}
 	}
-	for i := 0; i < len(out); i++ {
-		for j := i + 1; j < len(out); j++ {
-			if out[j].RecordedAt.After(out[i].RecordedAt) {
-				out[i], out[j] = out[j], out[i]
-			}
-		}
+	// Newest first: same trick as RevisionsForTeacher — insertion order
+	// is the true chronology, reversing it is stable under ties.
+	for l, r := 0, len(out)-1; l < r; l, r = l+1, r-1 {
+		out[l], out[r] = out[r], out[l]
 	}
 	return out, nil
 }

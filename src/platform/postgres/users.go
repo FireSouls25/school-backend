@@ -188,3 +188,36 @@ func (s *UsersStore) ForTeacher(ctx context.Context, teacherID string) ([]users.
 	}
 	return out, rows.Err()
 }
+
+// Photo implements users.Store. A NULL column means no picture yet and
+// scans as an empty Data.
+func (s *UsersStore) Photo(ctx context.Context, id string) (users.Photo, error) {
+	row := s.db.pool.QueryRow(ctx, `SELECT photo FROM users WHERE id = $1`, id)
+	var data []byte
+	if err := row.Scan(&data); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return users.Photo{}, users.ErrNotFound
+		}
+		return users.Photo{}, fmt.Errorf("postgres: get user photo: %w", err)
+	}
+	return users.Photo{Data: data}, nil
+}
+
+// SetPhoto implements users.Store. An empty photo stores NULL, so a
+// cleared picture reads back as "no picture yet" instead of zero bytes.
+func (s *UsersStore) SetPhoto(ctx context.Context, id string, photo users.Photo) error {
+	var data []byte
+	if len(photo.Data) > 0 {
+		data = photo.Data
+	}
+	tag, err := s.db.pool.Exec(ctx,
+		`UPDATE users SET photo = $2, updated_at = now() WHERE id = $1`,
+		id, data)
+	if err != nil {
+		return fmt.Errorf("postgres: put user photo: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return users.ErrNotFound
+	}
+	return nil
+}

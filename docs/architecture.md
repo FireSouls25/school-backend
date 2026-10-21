@@ -234,8 +234,10 @@ header is still pending (see `docs/users.md`).
 
 - `Session` is one attendance call (llamado a lista): class-group, frozen
   `ClassLabel`/`SchoolYear`, teacher, optional subject, date, period and
-  the frozen `Roster`. `Mark` (`absence`/`evasion`/`late`, `""` = present)
-  reuses the attendance vocabulary without importing the package.
+  the frozen `Roster`. `Mark` (`absence`/`absence-permission`/`evasion`/
+  `late`, `""` = present) reuses the attendance vocabulary without
+  importing the package; `absence-permission` is a falta con permiso and
+  is tallied apart from the plain absence.
 - `RecordMark` appends a `Revision{Number, From, To, ChangedBy, ChangedAt,
   Note}` — including the first mark — and current state folds from
   revisions (`SessionDetail`). Both states are always kept; repeating a
@@ -250,10 +252,10 @@ header is still pending (see `docs/users.md`).
   the composition root (same pattern as `schedules.Checker`). Owns no
   tables; view structs carry plain strings, never core types.
 - `ClassReport` gives one alphabetical `StudentSummary` per roster student
-  (sessions taken, presences, absences, evasions, lates, attendance rate)
-  plus class totals. `StudentReport` gives the full cross-year view:
-  session history as recorded, mark totals, warning tallies by gravity and
-  fault tallies by severity.
+  (sessions taken, presences, absences, excused permissions, evasions,
+  lates, attendance rate) plus class totals. `StudentReport` gives the
+  full cross-year view: session history as recorded, mark totals, warning
+  tallies by gravity and fault tallies by severity.
 
 ## Persistence (`src/platform/postgres`)
 

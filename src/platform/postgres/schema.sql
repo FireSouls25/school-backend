@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS teachers (
     birthplace          TEXT        NOT NULL DEFAULT '',
     birthdate           DATE,
     email               TEXT        NOT NULL DEFAULT '',
+    sex                 TEXT        NOT NULL DEFAULT '',
     medical_conditions  TEXT        NOT NULL DEFAULT '',
     homeroom_class_id   TEXT        NOT NULL DEFAULT '',
     active              BOOLEAN     NOT NULL DEFAULT TRUE,
@@ -209,6 +210,8 @@ CREATE TABLE IF NOT EXISTS teachers (
 -- Retiring a teacher flips active instead of deleting the profile.
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS photo BYTEA;
+-- Sex as recorded by the school: 'female', 'male' or empty when not declared.
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS sex TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
 
@@ -349,9 +352,9 @@ CREATE TABLE IF NOT EXISTS session_revisions (
     rev_no     INTEGER     NOT NULL,
     student_id UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
     from_mark  TEXT        NOT NULL DEFAULT ''
-        CHECK (from_mark IN ('', 'absence', 'evasion', 'late')),
+        CHECK (from_mark IN ('', 'absence', 'absence-permission', 'evasion', 'late')),
     to_mark    TEXT        NOT NULL DEFAULT ''
-        CHECK (to_mark IN ('', 'absence', 'evasion', 'late')),
+        CHECK (to_mark IN ('', 'absence', 'absence-permission', 'evasion', 'late')),
     changed_by TEXT        NOT NULL,
     changed_at TIMESTAMPTZ NOT NULL,
     note       TEXT        NOT NULL DEFAULT '',
@@ -384,6 +387,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
 -- unlinks instead of deleting the account. Placed last so the teachers
 -- table always exists for the reference.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS teacher_id UUID NULL REFERENCES teachers (id) ON DELETE SET NULL;
+
+-- Account phase: own picture for logins without a linked profile
+-- (admins). Linked docentes keep theirs inside teachers.photo so every
+-- listing stays the single source of truth.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo BYTEA;
 
 -- Role grants survive restarts (the memory store they replace does not).
 CREATE TABLE IF NOT EXISTS role_grants (

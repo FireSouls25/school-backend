@@ -38,6 +38,9 @@ Routes declare one required permission, enforced by
 | Route | Permission | Who |
 |---|---|---|
 | `GET /v1/me` | authenticated only | anyone with an id |
+| `PUT /v1/me/password` | authenticated only | anyone with an account row |
+| `GET /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
+| `PUT /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
 | `GET /v1/students/{id}` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/students/{id}/warnings` | same as above | teacher, admin / student (own) |
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
@@ -47,6 +50,8 @@ Routes declare one required permission, enforced by
 | `POST /v1/classes` | `manage-users` | admin only |
 | `GET /v1/classes/{groupID}/roster` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
+| `GET /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
+| `PUT /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
 | `POST /v1/sessions/open` | `record-attendance` | teacher, admin |
 | `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
 | `POST /v1/incidents` | `record-incidents` | teacher, admin |
@@ -55,6 +60,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/students` | `manage-students` | admin only |
 | `PUT /v1/students/{id}` | `manage-students` | admin only |
 | `POST /v1/teachers` | `manage-users` | admin only |
+| `PUT /v1/teachers/{id}` | `manage-users` | admin only |
 | `GET /v1/teachers` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}` | `manage-users` | admin only |
 | `GET /v1/subjects` | `view-class-statistics` | teacher, admin |
@@ -92,6 +98,31 @@ Self-scoped reads (`view-own-history`) additionally require
 Unknown subjects (valid UUID, no roles) are denied everywhere guarded.
 Authorizer failures fail closed: no data, `500` with no details.
 
+`GET /v1/me` returns navigation plus the personal profile of the login:
+`{subject, roles, home, username, email, active, createdAt, teacherID,
+teacher?}`. `teacher` is the linked teaching profile summarized for the
+profile panel (`{id, names, surnames, documentID, phone, email,
+birthdate, sex, active}`); address and medical conditions stay out. Dev
+identities without a `users` row still get subject, roles and home, with
+the account fields empty — never invented.
+
+`PUT /v1/me/password` lets the signed-in account swap its own password:
+body `{"currentPassword","newPassword"}`, `204` on success. The current
+password is verified first, so a stolen bearer cannot silently take over
+the account; a wrong one answers `401` (`users.err_invalid_credentials`),
+a weak new one `400` (`users.err_weak_password`), and an unknown account
+`404`. Tokens already issued stay valid until expiry — there is no
+denylist yet.
+
+`GET /v1/me/photo` / `PUT /v1/me/photo` are the account-level twins of
+the photo endpoints (auth only): the picture of the caller, resolved as
+the linked teacher photo when it exists, the login's own `users.photo`
+otherwise. The PUT accepts the same data URL/base64 payload, 2 MiB cap
+(`400` `teachers.err_photo_too_large` on teacher profiles,
+`users.err_photo_too_large` otherwise) and an empty `data` clears (back
+to an honest `404`). Student logins stay out until accounts link into
+students — there is no `StudentID` link yet.
+
 ### User accounts (admin only)
 
 `POST /v1/users` (`manage-users`) creates a login account with an
@@ -127,7 +158,8 @@ ever log in. Frontend flow in `docs/users.md`.
 - `GET /v1/sessions/history?classGroupID=&from=&to=`
   (`view-class-statistics`) returns the roll calls of one salon in a
   range, newest first (capped at 50): date, group, period, subject
-  and teacher resolved, with present/absent/evasion/late counts folded
+  and teacher resolved, with
+  present/absent/permission/evasion/late counts folded
   from the revision trail.
 - `GET /v1/sessions/{id}` (`view-class-statistics`) returns one roll
   call with its current marks and full revision trail (student,
@@ -154,9 +186,22 @@ ever log in. Frontend flow in `docs/users.md`.
   teachers expected that weekday (from the weekly schedule) with
   their recorded marks, if any. Unmarked teachers carry an empty
   status: the roll screen shows nothing pre-selected.
+- `PUT /v1/teachers/{id}` (`manage-users`) applies a partial profile
+  update: every body field is optional (`{"Names","Surnames","DocumentID",
+  "Phone","Address","Birthplace","Birthdate","Email","Sex",
+  "MedicalConditions","HomeroomClassID","Active"}`) and what the body
+  omits keeps its stored value, so a closed form can never silently
+  erase contact data or retire a teacher. Validation runs through the
+  service (`400` `teachers.err_*` on bad input); `200` returns the
+  updated profile.
 - `PUT /v1/teachers/{id}/photo` / `GET /v1/teachers/{id}/photo`
   (`manage-users`) store and return the teacher picture (2 MiB max,
   empty photo is an honest 404), same contract as students.
+- `PUT /v1/teachers/me/photo` / `GET /v1/teachers/me/photo`
+  (authenticated only) are the self-service twins: the caller's own
+  teacher photo, resolved through the account link (the subject itself
+  is tried when it already is a teacher id). Same 2 MiB cap and honest
+  404; callers without a teacher profile get `403`.
 - `GET /v1/teachers/{id}/sessions` (`manage-teachers`) returns the
   roll calls taken by one teacher, newest first (capped at 20), with
   absence counts folded from the revision trail.
@@ -260,7 +305,9 @@ or on `/docente` by default.
 - Ids in paths and bodies must be UUIDs; domain services validate and
   map to `400` codes, unknown ids to `404`.
 - `POST /v1/sessions/{id}/marks` accepts `"mark": ""` to clear back to
-  present (correction flow) and Spanish aliases (`"atraso"`, …).
+  present (correction flow) and Spanish aliases (`"atraso"`). Marks are
+  `absence` (falta injustificada), `absence-permission` (falta con
+  permiso — also `"permiso"`), `evasion` and `late`.
 - CORS reflects only origins in `ALLOWED_ORIGINS` (comma-separated);
   empty means same-origin only. Non-browser clients are unaffected.
 - Server timeouts: 5s headers, 10s read, 15s write, 60s idle.

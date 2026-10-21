@@ -10,13 +10,17 @@ import (
 // MemoryStore is an in-memory Store for tests and development.
 // It is not intended for production use.
 type MemoryStore struct {
-	mu    sync.Mutex
-	users map[string]User
+	mu     sync.Mutex
+	users  map[string]User
+	photos map[string][]byte
 }
 
 // NewMemoryStore returns an empty, ready-to-use MemoryStore.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{users: make(map[string]User)}
+	return &MemoryStore{
+		users:  make(map[string]User),
+		photos: make(map[string][]byte),
+	}
 }
 
 // Compile-time check that the adapter satisfies the port.
@@ -139,4 +143,29 @@ func (s *MemoryStore) ForTeacher(_ context.Context, teacherID string) ([]User, e
 		}
 	}
 	return out, nil
+}
+
+// Photo implements Store.
+func (s *MemoryStore) Photo(_ context.Context, id string) (Photo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.users[id]; !ok {
+		return Photo{}, ErrNotFound
+	}
+	return Photo{Data: s.photos[id]}, nil
+}
+
+// SetPhoto implements Store.
+func (s *MemoryStore) SetPhoto(_ context.Context, id string, photo Photo) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.users[id]; !ok {
+		return ErrNotFound
+	}
+	if len(photo.Data) == 0 {
+		delete(s.photos, id)
+		return nil
+	}
+	s.photos[id] = photo.Data
+	return nil
 }

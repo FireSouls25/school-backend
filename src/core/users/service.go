@@ -194,8 +194,59 @@ func (s *Service) SetPassword(ctx context.Context, id, newPassword string) error
 	return s.store.SetPasswordHash(ctx, strings.TrimSpace(id), string(hash))
 }
 
-// SetActive enables or disables the login without deleting the account.
-// Disabled users fail authentication with ErrInvalidCredentials.
+// ChangePassword verifies the current password before replacing the
+// stored hash, so a stolen bearer cannot silently take over the account.
+// A wrong current password answers ErrInvalidCredentials, exactly what
+// login answers, and unknown ids fail with ErrNotFound.
+func (s *Service) ChangePassword(ctx context.Context, id, currentPassword, newPassword string) error {
+	if err := validateID(id); err != nil {
+		return err
+	}
+	if err := validatePassword(newPassword); err != nil {
+		return err
+	}
+	u, err := s.store.ByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.cost)
+	if err != nil {
+		return err
+	}
+	return s.store.SetPasswordHash(ctx, strings.TrimSpace(id), string(hash))
+}
+
+// Photo returns the stored account picture: an empty Data when the
+// account has none yet, ErrNotFound when the account does not exist.
+func (s *Service) Photo(ctx context.Context, id string) (Photo, error) {
+	if err := validateID(id); err != nil {
+		return Photo{}, err
+	}
+	if _, err := s.store.ByID(ctx, strings.TrimSpace(id)); err != nil {
+		return Photo{}, err
+	}
+	return s.store.Photo(ctx, strings.TrimSpace(id))
+}
+
+// SetPhoto validates the 2 MiB limit, then stores (or clears, when the
+// data is empty) the picture of the account with the given id.
+func (s *Service) SetPhoto(ctx context.Context, id string, photo Photo) error {
+	if err := validateID(id); err != nil {
+		return err
+	}
+	if len(photo.Data) > MaxPhotoSize {
+		return ErrPhotoTooLarge
+	}
+	if _, err := s.store.ByID(ctx, strings.TrimSpace(id)); err != nil {
+		return err
+	}
+	return s.store.SetPhoto(ctx, strings.TrimSpace(id), photo)
+}
+
+// SetActive enables or disables the login without deleting the account.// Disabled users fail authentication with ErrInvalidCredentials.
 func (s *Service) SetActive(ctx context.Context, id string, active bool) (User, error) {
 	if err := validateID(id); err != nil {
 		return User{}, err

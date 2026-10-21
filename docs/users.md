@@ -27,6 +27,12 @@ The account keeps:
   deleting the account, so history keeps resolving. Disabled users fail
   authentication exactly like bad credentials (no enumeration).
 - **Timestamps**: `CreatedAt` / `UpdatedAt`.
+- **Photo**: own account picture (admins), capped at 2 MiB like every
+  other photo store. It travels through `Photo` / `SetPhoto` and lives
+  outside the `User` struct, so accounts never drag image bytes.
+  Docentes vinculados keep theirs in `teachers.photo`: the staff profile
+  stays the single source. Student logins cannot resolve anywhere yet —
+  no `StudentID` link exists — so their photos stay pending.
 
 ## Layout
 
@@ -66,6 +72,9 @@ Authenticate(ctx, identifier, password string) (User, error)
 ByID(ctx, id string) (User, error)
 ByUsername(ctx, username string) (User, error) // admin tooling; login uses Authenticate
 SetPassword(ctx, id, newPassword string) error
+ChangePassword(ctx, id, currentPassword, newPassword string) error // verifies current first (used by PUT /v1/me/password)
+Photo(ctx, id string) (Photo, error)             // account picture; empty when none
+SetPhoto(ctx, id string, photo Photo) error      // 2 MiB cap; empty data clears
 SetActive(ctx, id string, active bool) (User, error)
 LinkTeacher(ctx, userID, teacherID string) (User, error) // binds login to profile
 UnlinkTeacher(ctx, userID string) (User, error)         // back to a pure account
