@@ -30,6 +30,23 @@ default, `AUTH_REFRESH_TTL`):
   Every guess is audited (identifier, IP, success, time); there is no
   permanent lockout by design (anti-DoS): disable the account to cut
   access immediately (version bump kills bearers, refresh is rejected).
+
+## Password recovery and lockout
+
+- `POST /v1/recover/request {identifier}` always answers `204`, whether
+  the account exists or not. Valid active accounts get a single-use token
+  (`AUTH_RECOVERY_TTL`, default 1h, hashed at rest); the raw token is
+  logged only when the server runs outside production
+  (`RecoveryLogTokens`), until mail/WhatsApp delivery lands.
+- `POST /v1/recover/reset {token, newPassword}` consumes the token once:
+  unknown, expired and reused tokens share `401
+  users.err_invalid_recovery_token`; weak passwords answer `400`.
+  Success bumps the token version and revokes every refresh row, so all
+  sessions die with the old password.
+- Lockout response is administrative: `PUT /v1/users/{id}/active
+  {active:false}` (`manage-users`) disables a login without deleting
+  history; bearers fail at the next request and refresh at the next
+  rotation. Re-enable with `{active:true}` (re-login required).
 - `X-Subject-ID` survives only when `AllowDevIdentity` holds
   (development/tests, never production). Missing/invalid identity →
   `401 http.err_unauthorized`.
@@ -50,6 +67,9 @@ Routes declare one required permission, enforced by
 | `POST /v1/login` | public (throttled 10/min) | anyone with credentials |
 | `POST /v1/refresh` | refresh token (throttled 30/min) | session holder (cookie/body) |
 | `POST /v1/logout` | refresh token, or access bearer for `all:true` | session holder |
+| `POST /v1/recover/request` | public (throttled 5/min) | anyone (always 204, no enumeration) |
+| `POST /v1/recover/reset` | reset token (throttled 5/min) | password-forgotten holder |
+| `PUT /v1/users/{id}/active` | `manage-users` | admin only (lockout response) |
 | `GET /v1/me` | authenticated only | anyone with an id |
 | `PUT /v1/me/password` | authenticated only | anyone with an account row |
 | `GET /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |

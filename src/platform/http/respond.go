@@ -37,6 +37,7 @@ var statusByCode = map[string]int{
 	"users.err_duplicate_username":  http.StatusBadRequest,
 	"users.err_duplicate_email":     http.StatusBadRequest,
 	"users.err_invalid_credentials": http.StatusUnauthorized,
+	"users.err_invalid_recovery_token": http.StatusUnauthorized,
 	"users.err_invalid_teacher":     http.StatusBadRequest,
 	"users.err_photo_too_large":     http.StatusBadRequest,
 	"users.err_photo_not_found":     http.StatusNotFound,

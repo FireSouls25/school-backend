@@ -76,6 +76,12 @@ type Dependencies struct {
 	// TrustedProxies gates X-Forwarded-For for client IP. Nil trusts
 	// none (direct RemoteAddr).
 	TrustedProxies *throttle.Nets
+	// Recovery issues single-use password resets. Nil disables the
+	// endpoints (tests without recovery setup).
+	Recovery *users.RecoveryService
+	// RecoveryLogTokens logs raw reset tokens (development only, until
+	// mail/WhatsApp delivery lands). Never enable in production.
+	RecoveryLogTokens bool
 }
 
 // recordAudit trails one mutating action with its real outcome, so

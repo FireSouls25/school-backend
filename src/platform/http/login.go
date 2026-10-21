@@ -65,6 +65,7 @@ const (
 	loginLimitPerMinute   = 10
 	loginWindow           = time.Minute
 	refreshLimitPerMinute = 30
+	recoverLimitPerMinute = 5
 )
 
 // loginLimiter caps guesses per key and window. Backed by the shared

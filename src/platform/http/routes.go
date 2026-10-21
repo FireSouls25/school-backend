@@ -65,6 +65,10 @@ func routes(r *chi.Mux, deps Dependencies) {
 	// plus an access bearer, every session of the caller. No subject is
 	// required for single logout: the refresh token itself authenticates.
 	r.Post("/v1/logout", handleLogout(deps))
+	// Password recovery: always-204 request (no enumeration), single-use
+	// reset. Throttled per IP like login.
+	r.Post("/v1/recover/request", handleRecoverRequest(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, recoverLimitPerMinute, loginWindow)))
+	r.Post("/v1/recover/reset", handleRecoverReset(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, recoverLimitPerMinute, loginWindow)))
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(func(next http.Handler) http.Handler {
@@ -197,5 +201,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Post("/roles", handleAssignRole(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/users", handleCreateUser(deps))
+		// Lockout response: disable/enable a login without deleting it.
+		// The version bump kills bearers; refresh is rejected on Active.
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/users/{id}/active", handleSetUserActive(deps))
 	})
 }

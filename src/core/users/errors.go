@@ -43,4 +43,8 @@ var (
 	ErrInvalidTeacher = newError("users.err_invalid_teacher", "users: invalid teacher id")
 	// ErrPhotoTooLarge is returned when a photo exceeds MaxPhotoSize.
 	ErrPhotoTooLarge = newError("users.err_photo_too_large", "users: photo too large")
+	// ErrInvalidRecoveryToken is returned on every reset failure
+	// (unknown, expired or reused token) so callers cannot distinguish
+	// which half failed.
+	ErrInvalidRecoveryToken = newError("users.err_invalid_recovery_token", "users: invalid recovery token")
 )

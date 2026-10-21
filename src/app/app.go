@@ -60,6 +60,8 @@ type Stores struct {
 	RefreshTokens auth.Store
 	// Throttle persists login/refresh guesses (shared budget + audit).
 	Throttle throttle.Store
+	// Recovery persists single-use password-reset hashes.
+	Recovery users.RecoveryStore
 }
 
 // Services holds the application services built over those stores.
@@ -83,6 +85,7 @@ type Services struct {
 	Roles       *roles.Service
 	Auth        *auth.Service
 	Throttle    *throttle.Service
+	Recovery    *users.RecoveryService
 }
 
 // App is the wired application.
@@ -119,6 +122,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Roles:         roles.NewMemoryStore(),
 		RefreshTokens: auth.NewMemoryStore(),
 		Throttle:      throttle.NewMemoryStore(),
+		Recovery:      users.NewMemoryRecoveryStore(),
 	}
 
 	var db *pg.DB
@@ -142,15 +146,18 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Sessions = pg.NewSessionsStore(db)
 		s.TAttendance = pg.NewTAttendanceStore(db)
 		s.Throttle = pg.NewThrottleStore(db)
+		s.Recovery = pg.NewRecoveryStore(db)
 		s.Users = pg.NewUsersStore(db)
 		s.Roles = pg.NewRolesStore(db)
 		s.RefreshTokens = pg.NewRefreshStore(db)
 		s.Throttle = pg.NewThrottleStore(db)
+		s.Recovery = pg.NewRecoveryStore(db)
 		slog.Info("using postgres persistence")
 	} else {
 		slog.Warn("DATABASE_URL not set; using in-memory stores (development only, data lost on restart)")
 	}
 
+	usersSvc := users.NewService(s.Users)
 	subjectsSvc := subjects.NewService(s.Subjects)
 	auditSvc := audit.NewService(s.Audit)
 	schedulesSvc := schedules.NewService(s.Schedules, subjectChecker{subjectsSvc})
@@ -222,6 +229,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Roles:    roles.NewService(s.Roles),
 			Auth:     authSvc,
 			Throttle: throttle.NewService(s.Throttle),
+			Recovery: users.NewRecoveryService(usersSvc, s.Recovery, cfg.RecoveryTTL()),
 		},
 	}, nil
 }

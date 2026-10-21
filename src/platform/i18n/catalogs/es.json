@@ -12,6 +12,7 @@
   "users.err_duplicate_username": "Ya existe un usuario con ese nombre",
   "users.err_duplicate_email": "Ya existe un usuario con ese correo",
   "users.err_invalid_credentials": "Credenciales inválidas",
+  "users.err_invalid_recovery_token": "Enlace inválido o vencido; pide uno nuevo",
   "users.err_invalid_teacher": "Docente inválido para vincular",
   "users.err_photo_too_large": "La foto supera el tamaño máximo de 2 MB",
   "users.err_photo_not_found": "Todavía no tienes foto de perfil",

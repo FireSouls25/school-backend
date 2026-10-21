@@ -48,6 +48,9 @@ const DefaultAuthAccessTTL = 15 * time.Minute
 // school week, revocable server-side on logout/password rotation.
 const DefaultAuthRefreshTTL = 7 * 24 * time.Hour
 
+// DefaultRecoveryTTL is the password-reset token lifetime.
+const DefaultRecoveryTTL = time.Hour
+
 // AppEnv selects the deployment shape and the safety rules that apply.
 type AppEnv string
 
@@ -112,6 +115,9 @@ type Config struct {
 	// AuthRefreshTTL is the rotation token lifetime. Zero means the
 	// default (7d).
 	AuthRefreshTTL time.Duration
+	// AuthRecoveryTTL is the password-reset token lifetime. Zero means
+	// the default (1h).
+	AuthRecoveryTTL time.Duration
 }
 
 // devPasswords are the passwords shipped in the demo data and docs. They
@@ -204,6 +210,13 @@ func FromEnv() (Config, error) {
 		}
 		cfg.AuthRefreshTTL = ttl
 	}
+	if raw := strings.TrimSpace(os.Getenv("AUTH_RECOVERY_TTL")); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil || ttl <= 0 {
+			return Config{}, fmt.Errorf("config: AUTH_RECOVERY_TTL: %q is not a positive duration", raw)
+		}
+		cfg.AuthRecoveryTTL = ttl
+	}
 	if raw := strings.TrimSpace(os.Getenv("AUTH_TTL")); raw != "" {
 		ttl, err := time.ParseDuration(raw)
 		if err != nil || ttl <= 0 {
@@ -257,6 +270,14 @@ func (c Config) RefreshTTL() time.Duration {
 		return c.AuthRefreshTTL
 	}
 	return DefaultAuthRefreshTTL
+}
+
+// RecoveryTTL resolves the effective password-reset lifetime.
+func (c Config) RecoveryTTL() time.Duration {
+	if c.AuthRecoveryTTL != 0 {
+		return c.AuthRecoveryTTL
+	}
+	return DefaultRecoveryTTL
 }
 
 // UsesMemoryStores reports whether the deployment would fall back to the
