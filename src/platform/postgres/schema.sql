@@ -388,6 +388,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
 -- table always exists for the reference.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS teacher_id UUID NULL REFERENCES teachers (id) ON DELETE SET NULL;
 
+-- Account phase: own picture for logins without a linked profile
+-- (admins). Linked docentes keep theirs inside teachers.photo so every
+-- listing stays the single source of truth.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo BYTEA;
+
 -- Role grants survive restarts (the memory store they replace does not).
 CREATE TABLE IF NOT EXISTS role_grants (
     subject_id UUID NOT NULL,

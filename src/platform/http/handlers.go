@@ -1178,6 +1178,92 @@ func handlePutMyTeacherPhoto(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// errAccountPhotoNotFound renders 404 when neither the linked teacher
+// profile nor the account carries a stored picture.
+var errAccountPhotoNotFound = codedError{"users.err_photo_not_found"}
+
+// myPhoto returns the caller's own picture: the linked teacher photo
+// when it resolves, the account photo otherwise. It is shared by the
+// GET/PUT pair below. ok reports whether any storage could hold it.
+func myPhoto(ctx context.Context, deps Dependencies, subject string) (teachers.Photo, bool, error) {
+	if teacherID, ok := myTeacherID(ctx, deps, subject); ok {
+		photo, err := deps.Teachers.Photo(ctx, teacherID)
+		return photo, true, err
+	}
+	if deps.Users == nil {
+		return teachers.Photo{}, false, nil
+	}
+	raw, err := deps.Users.Photo(ctx, subject)
+	if err != nil {
+		return teachers.Photo{}, true, err
+	}
+	return teachers.Photo{Data: raw.Data}, true, nil
+}
+
+// handleGetMyPhoto returns the caller's own picture. Accounts with a
+// linked teacher profile keep that photo (the staff profile stays the
+// single source); the rest read their own users row. Auth only, no
+// permission, and no photo is an honest 404.
+func handleGetMyPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		photo, ok, err := myPhoto(r.Context(), deps, subject)
+		if !ok {
+			// Dev identity without an account row: nothing owns a photo.
+			WriteError(w, r, errAccountPhotoNotFound)
+			return
+		}
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if len(photo.Data) == 0 {
+			WriteError(w, r, errAccountPhotoNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, photoResponse{
+			Data:        base64.StdEncoding.EncodeToString(photo.Data),
+			ContentType: http.DetectContentType(photo.Data),
+		})
+	}
+}
+
+// handlePutMyPhoto stores (or clears, when empty) the caller's own
+// picture. Linked teachers write through to their profile photo; every
+// other login (admins, and student logins once accounts link into
+// students) stores it inside its own account row.
+func handlePutMyPhoto(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body photoRequest
+		if !decodePhotoBody(w, r, &body) {
+			return
+		}
+		data, err := photoBytes(body.Data)
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		if deps.Users == nil {
+			WriteError(w, r, errInternal)
+			return
+		}
+		if teacherID, ok := myTeacherID(r.Context(), deps, subject); ok {
+			if err := deps.Teachers.PutPhoto(r.Context(), teacherID, teachers.Photo{Data: data}); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if err := deps.Users.SetPhoto(r.Context(), subject, users.Photo{Data: data}); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // handleGetStudent returns one student profile.
 func handleGetStudent(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

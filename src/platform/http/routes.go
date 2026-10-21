@@ -129,6 +129,11 @@ func routes(r *chi.Mux, deps Dependencies) {
 		// no permission — it can only resolve to the caller's own image.
 		r.Get("/teachers/me/photo", handleGetMyTeacherPhoto(deps))
 		r.Put("/teachers/me/photo", handlePutMyTeacherPhoto(deps))
+		// Account-level twins: linked docentes keep writing through to
+		// their profile; every other login stores the picture inside its
+		// own account row. Auth only, no permission.
+		r.Get("/me/photo", handleGetMyPhoto(deps))
+		r.Put("/me/photo", handlePutMyPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).

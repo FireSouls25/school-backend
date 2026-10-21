@@ -2,6 +2,16 @@ package users
 
 import "context"
 
+// Photo is the account picture. It travels alone, never inside the
+// account row, so reading or listing accounts never drags image bytes.
+type Photo struct {
+	// Data holds the encoded image, at most MaxPhotoSize bytes.
+	Data []byte
+}
+
+// MaxPhotoSize bounds the stored photo to 2 MiB.
+const MaxPhotoSize = 2 << 20
+
 // Store is the persistence port for user accounts. Implementations must
 // be safe for concurrent use. Username and email lookups are
 // case-insensitive. Replace MemoryStore with the PostgreSQL adapter in
@@ -34,4 +44,11 @@ type Store interface {
 	// ForTeacher returns every login linked to the given teacher profile.
 	// It backs the "made by this teacher" history on the teacher file.
 	ForTeacher(ctx context.Context, teacherID string) ([]User, error)
+	// Photo returns the stored picture of the user with the given id or
+	// ErrNotFound when the account does not exist; Data is empty when the
+	// account has none yet.
+	Photo(ctx context.Context, id string) (Photo, error)
+	// SetPhoto stores (or clears, when Data is empty) the picture of the
+	// user with the given id, returning ErrNotFound when missing.
+	SetPhoto(ctx context.Context, id string, photo Photo) error
 }

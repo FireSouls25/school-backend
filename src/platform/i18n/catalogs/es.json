@@ -13,6 +13,8 @@
   "users.err_duplicate_email": "Ya existe un usuario con ese correo",
   "users.err_invalid_credentials": "Credenciales inválidas",
   "users.err_invalid_teacher": "Docente inválido para vincular",
+  "users.err_photo_too_large": "La foto supera el tamaño máximo de 2 MB",
+  "users.err_photo_not_found": "Todavía no tienes foto de perfil",
   "http.err_rate_limited": "Demasiados intentos; espera un momento e intenta de nuevo",
   "auth.err_invalid_token": "Sesión inválida; inicia sesión de nuevo",
   "auth.err_expired_token": "La sesión venció; inicia sesión de nuevo",

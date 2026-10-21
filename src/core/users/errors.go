@@ -41,4 +41,6 @@ var (
 	// capability owns profiles, and a dangling link resolves to no
 	// schedule rather than failing.
 	ErrInvalidTeacher = newError("users.err_invalid_teacher", "users: invalid teacher id")
+	// ErrPhotoTooLarge is returned when a photo exceeds MaxPhotoSize.
+	ErrPhotoTooLarge = newError("users.err_photo_too_large", "users: photo too large")
 )

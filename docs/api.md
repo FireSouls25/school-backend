@@ -39,6 +39,8 @@ Routes declare one required permission, enforced by
 |---|---|---|
 | `GET /v1/me` | authenticated only | anyone with an id |
 | `PUT /v1/me/password` | authenticated only | anyone with an account row |
+| `GET /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
+| `PUT /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
 | `GET /v1/students/{id}` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/students/{id}/warnings` | same as above | teacher, admin / student (own) |
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
@@ -111,6 +113,15 @@ the account; a wrong one answers `401` (`users.err_invalid_credentials`),
 a weak new one `400` (`users.err_weak_password`), and an unknown account
 `404`. Tokens already issued stay valid until expiry — there is no
 denylist yet.
+
+`GET /v1/me/photo` / `PUT /v1/me/photo` are the account-level twins of
+the photo endpoints (auth only): the picture of the caller, resolved as
+the linked teacher photo when it exists, the login's own `users.photo`
+otherwise. The PUT accepts the same data URL/base64 payload, 2 MiB cap
+(`400` `teachers.err_photo_too_large` on teacher profiles,
+`users.err_photo_too_large` otherwise) and an empty `data` clears (back
+to an honest `404`). Student logins stay out until accounts link into
+students — there is no `StudentID` link yet.
 
 ### User accounts (admin only)
 
