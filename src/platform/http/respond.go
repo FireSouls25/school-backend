@@ -37,12 +37,26 @@ var statusByCode = map[string]int{
 	"users.err_duplicate_username":  http.StatusBadRequest,
 	"users.err_duplicate_email":     http.StatusBadRequest,
 	"users.err_invalid_credentials": http.StatusUnauthorized,
+	"users.err_invalid_teacher":     http.StatusBadRequest,
+	"http.err_rate_limited":         http.StatusTooManyRequests,
+
+	"auth.err_invalid_token":   http.StatusUnauthorized,
+	"auth.err_expired_token":   http.StatusUnauthorized,
+	"auth.err_invalid_subject": http.StatusBadRequest,
+	"auth.err_invalid_secret":  http.StatusInternalServerError,
+	"auth.err_invalid_ttl":     http.StatusInternalServerError,
+
+	"audit.err_invalid_subject":  http.StatusBadRequest,
+	"audit.err_invalid_action":   http.StatusBadRequest,
+	"audit.err_invalid_resource": http.StatusBadRequest,
+	"audit.err_invalid_status":   http.StatusBadRequest,
 
 	"students.err_not_found":            http.StatusNotFound,
 	"students.err_invalid_id":           http.StatusBadRequest,
 	"students.err_invalid_name":         http.StatusBadRequest,
 	"students.err_invalid_class":        http.StatusBadRequest,
 	"students.err_photo_too_large":      http.StatusRequestEntityTooLarge,
+	"students.err_photo_not_found":      http.StatusNotFound,
 	"students.err_invalid_document":     http.StatusBadRequest,
 	"students.err_invalid_birth":        http.StatusBadRequest,
 	"students.err_invalid_blood_type":   http.StatusBadRequest,
@@ -66,17 +80,22 @@ var statusByCode = map[string]int{
 	"incidents.err_empty_description": http.StatusBadRequest,
 	"incidents.err_not_found":         http.StatusNotFound,
 
-	"warnings.err_unknown_gravity":   http.StatusBadRequest,
-	"warnings.err_invalid_student":   http.StatusBadRequest,
-	"warnings.err_invalid_class":     http.StatusBadRequest,
-	"warnings.err_invalid_teacher":   http.StatusBadRequest,
-	"warnings.err_invalid_date":      http.StatusBadRequest,
-	"warnings.err_empty_title":       http.StatusBadRequest,
-	"warnings.err_empty_description": http.StatusBadRequest,
-	"warnings.err_invalid_snapshot":  http.StatusBadRequest,
-	"warnings.err_invalid_group":     http.StatusBadRequest,
-	"warnings.err_empty_batch":       http.StatusBadRequest,
-	"warnings.err_not_found":         http.StatusNotFound,
+	"warnings.err_unknown_gravity":    http.StatusBadRequest,
+	"warnings.err_invalid_student":    http.StatusBadRequest,
+	"warnings.err_invalid_class":      http.StatusBadRequest,
+	"warnings.err_invalid_teacher":    http.StatusBadRequest,
+	"warnings.err_invalid_date":       http.StatusBadRequest,
+	"warnings.err_empty_title":        http.StatusBadRequest,
+	"warnings.err_empty_description":  http.StatusBadRequest,
+	"warnings.err_invalid_snapshot":   http.StatusBadRequest,
+	"warnings.err_invalid_group":      http.StatusBadRequest,
+	"warnings.err_empty_batch":        http.StatusBadRequest,
+	"tattendance.err_unknown_status":  http.StatusBadRequest,
+	"tattendance.err_invalid_teacher": http.StatusBadRequest,
+	"tattendance.err_invalid_day":     http.StatusBadRequest,
+	"tattendance.err_empty_day":       http.StatusBadRequest,
+	"tattendance.err_invalid_range":   http.StatusBadRequest,
+	"warnings.err_not_found":          http.StatusNotFound,
 
 	"teachers.err_not_found":        http.StatusNotFound,
 	"teachers.err_invalid_id":       http.StatusBadRequest,
@@ -84,6 +103,8 @@ var statusByCode = map[string]int{
 	"teachers.err_invalid_document": http.StatusBadRequest,
 	"teachers.err_invalid_birth":    http.StatusBadRequest,
 	"teachers.err_invalid_email":    http.StatusBadRequest,
+	"teachers.err_photo_too_large":  http.StatusBadRequest,
+	"teachers.err_photo_not_found":  http.StatusNotFound,
 
 	"subjects.err_not_found":            http.StatusNotFound,
 	"subjects.err_assignment_not_found": http.StatusNotFound,
@@ -97,6 +118,9 @@ var statusByCode = map[string]int{
 	"subjects.err_already_assigned":     http.StatusBadRequest,
 	"subjects.err_already_ended":        http.StatusBadRequest,
 	"subjects.err_has_assignments":      http.StatusBadRequest,
+	"subjects.err_has_schedule":         http.StatusBadRequest,
+	"subjects.err_invalid_grades":       http.StatusBadRequest,
+	"subjects.err_invalid_color":        http.StatusBadRequest,
 
 	"schoolyears.err_not_found":       http.StatusNotFound,
 	"schoolyears.err_invalid_id":      http.StatusBadRequest,
@@ -134,6 +158,7 @@ var statusByCode = map[string]int{
 	"schedules.err_invalid_time":         http.StatusBadRequest,
 	"schedules.err_teacher_conflict":     http.StatusBadRequest,
 	"schedules.err_class_conflict":       http.StatusBadRequest,
+	"schedules.err_outside_school_hours": http.StatusBadRequest,
 	"schedules.err_not_teaching_subject": http.StatusBadRequest,
 
 	"sessions.err_not_found":           http.StatusNotFound,
@@ -165,6 +190,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// statusFor maps a coded error to its HTTP status (500 fallback). The
+// trail recorder reuses it so denied attempts keep their real outcome.
+func statusFor(code string) int {
+	if status := statusByCode[code]; status != 0 {
+		return status
+	}
+	return http.StatusInternalServerError
+}
+
+// statusForErr resolves err to its HTTP status without writing anything.
+func statusForErr(err error) int {
+	code := "http.err_internal"
+	if key, ok := i18n.MessageKey(err); ok {
+		code = key
+	}
+	return statusFor(code)
+}
+
 // WriteError writes a localized error envelope for err. Domain errors should
 // implement the i18n Coded contract so their message key is stable.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
@@ -179,9 +222,6 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		message = tr.Translate(code, nil)
 	}
 
-	status := statusByCode[code]
-	if status == 0 {
-		status = http.StatusInternalServerError
-	}
+	status := statusFor(code)
 	writeJSON(w, status, ErrorResponse{Error: ErrorBody{Code: code, Message: message}})
 }

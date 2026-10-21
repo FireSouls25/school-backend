@@ -20,9 +20,9 @@ type Store interface {
 	// ByEmail returns the user with the given email (case-insensitive)
 	// or ErrNotFound.
 	ByEmail(ctx context.Context, email string) (User, error)
-	// Update persists the username, email and active flag of the user
-	// with the given id. It never touches the password hash; use
-	// SetPasswordHash for that. Returns ErrNotFound when missing and
+	// Update persists the username, email, active flag and teacher link
+	// of the user with the given id. It never touches the password hash;
+	// use SetPasswordHash for that. Returns ErrNotFound when missing and
 	// the duplicate errors on collisions with other accounts.
 	Update(ctx context.Context, u User) (User, error)
 	// SetPasswordHash replaces the password hash of the user with the
@@ -31,4 +31,7 @@ type Store interface {
 	// Delete removes the user with the given id. Removing an unknown
 	// user is a no-op.
 	Delete(ctx context.Context, id string) error
+	// ForTeacher returns every login linked to the given teacher profile.
+	// It backs the "made by this teacher" history on the teacher file.
+	ForTeacher(ctx context.Context, teacherID string) ([]User, error)
 }

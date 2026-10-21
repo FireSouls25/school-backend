@@ -62,6 +62,25 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
+// PutPhoto validates size limits and stores the teacher photo.
+func (s *Service) PutPhoto(ctx context.Context, teacherID string, photo Photo) error {
+	if err := validateID(teacherID); err != nil {
+		return err
+	}
+	if len(photo.Data) > MaxPhotoSize {
+		return ErrPhotoTooLarge
+	}
+	return s.store.PutPhoto(ctx, teacherID, photo)
+}
+
+// Photo returns the stored photo of a teacher.
+func (s *Service) Photo(ctx context.Context, teacherID string) (Photo, error) {
+	if err := validateID(teacherID); err != nil {
+		return Photo{}, err
+	}
+	return s.store.Photo(ctx, teacherID)
+}
+
 // normalize trims every free-text field and lowercases the email so
 // validation and storage see a canonical form.
 func normalize(t Teacher) Teacher {

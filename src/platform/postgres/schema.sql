@@ -139,6 +139,52 @@ CREATE TABLE IF NOT EXISTS warnings (
 
 CREATE INDEX IF NOT EXISTS idx_warnings_student_id ON warnings (student_id);
 
+-- Append-only trail of llamado corrections: editing never rewrites.
+CREATE TABLE IF NOT EXISTS warning_revisions (
+    id          UUID PRIMARY KEY,
+    warning_id  UUID NOT NULL REFERENCES warnings (id) ON DELETE CASCADE,
+    student_id  TEXT NOT NULL DEFAULT '',
+    old_gravity TEXT NOT NULL DEFAULT '',
+    new_gravity TEXT NOT NULL,
+    old_title   TEXT NOT NULL DEFAULT '',
+    new_title   TEXT NOT NULL DEFAULT '',
+    old_detail  TEXT NOT NULL DEFAULT '',
+    new_detail  TEXT NOT NULL DEFAULT '',
+    changed_by  TEXT NOT NULL DEFAULT '',
+    changed_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_warning_revisions_warning_id ON warning_revisions (warning_id);
+
+-- Daily roll of teachers: one explicit mark per teacher per day.
+CREATE TABLE IF NOT EXISTS teacher_attendance (
+    teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
+    day         DATE NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late')),
+    note        TEXT NOT NULL DEFAULT '',
+    recorded_by TEXT NOT NULL DEFAULT '',
+    recorded_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (teacher_id, day)
+);
+
+CREATE INDEX IF NOT EXISTS idx_teacher_attendance_day ON teacher_attendance (day);
+
+-- Append-only trail of teacher mark changes: correcting a day never
+-- rewrites, it appends a revision with the status before and after.
+CREATE TABLE IF NOT EXISTS teacher_attendance_revisions (
+    id          UUID PRIMARY KEY,
+    teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
+    day         DATE NOT NULL,
+    old_status  TEXT NOT NULL DEFAULT '',
+    new_status  TEXT NOT NULL CHECK (new_status IN ('present', 'absent', 'late')),
+    note        TEXT NOT NULL DEFAULT '',
+    recorded_by TEXT NOT NULL DEFAULT '',
+    recorded_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_teacher_attendance_revisions_teacher_day
+    ON teacher_attendance_revisions (teacher_id, day);
+
 -- Correlate warnings issued in one batch against several students.
 ALTER TABLE warnings ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_warnings_group_id ON warnings (group_id);
@@ -162,6 +208,7 @@ CREATE TABLE IF NOT EXISTS teachers (
 
 -- Retiring a teacher flips active instead of deleting the profile.
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS photo BYTEA;
 
 CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
 
@@ -177,6 +224,10 @@ CREATE TABLE IF NOT EXISTS subjects (
 
 -- Subject names are unique, case-insensitively.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_subjects_lower_name ON subjects (lower(name));
+
+-- Catalog phase: which years a subject is taught in, and its console color.
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS grades INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS color TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS subject_assignments (
     id          UUID PRIMARY KEY,
@@ -262,6 +313,7 @@ CREATE TABLE IF NOT EXISTS schedule_entries (
 
 CREATE INDEX IF NOT EXISTS idx_schedule_teacher_id ON schedule_entries (teacher_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_group_id ON schedule_entries (class_group_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_subject_id ON schedule_entries (subject_id);
 
 CREATE TABLE IF NOT EXISTS sessions (
     id             UUID PRIMARY KEY,
@@ -326,3 +378,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique
 -- Emails are unique when present, case-insensitively.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
     ON users (lower(email)) WHERE email <> '';
+
+-- Account phase: link a login to its teacher profile, so "my schedule"
+-- resolves without a second login. Nullable; deleting the profile
+-- unlinks instead of deleting the account. Placed last so the teachers
+-- table always exists for the reference.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS teacher_id UUID NULL REFERENCES teachers (id) ON DELETE SET NULL;
+
+-- Role grants survive restarts (the memory store they replace does not).
+CREATE TABLE IF NOT EXISTS role_grants (
+    subject_id UUID NOT NULL,
+    role       TEXT NOT NULL,
+    PRIMARY KEY (subject_id, role)
+);
+
+-- Audit trail: who did what to which record, when, with what outcome.
+-- Append-only by convention (no updates or deletes anywhere in the
+-- codebase); student_id is null for non-student actions such as schedule
+-- and catalog writes.
+CREATE TABLE IF NOT EXISTS audit_entries (
+    id          UUID PRIMARY KEY,
+    subject_id  UUID        NOT NULL,
+    action      TEXT        NOT NULL,
+    resource    TEXT        NOT NULL,
+    resource_id UUID        NULL,
+    student_id  UUID        NULL,
+    status      INTEGER     NOT NULL,
+    happened_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_happened_at ON audit_entries (happened_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_student_id ON audit_entries (student_id) WHERE student_id IS NOT NULL;
+-- Failed writes have no resource to point at: their id travels empty.
+ALTER TABLE audit_entries ALTER COLUMN resource_id DROP NOT NULL;

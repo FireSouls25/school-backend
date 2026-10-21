@@ -36,4 +36,9 @@ var (
 	// (unknown identifier, wrong password or inactive account) so callers
 	// cannot enumerate which field failed.
 	ErrInvalidCredentials = newError("users.err_invalid_credentials", "users: invalid credentials")
+	// ErrInvalidTeacher is returned when a linked teacher id is missing or
+	// malformed. Profile existence is not checked here: the teachers
+	// capability owns profiles, and a dangling link resolves to no
+	// schedule rather than failing.
+	ErrInvalidTeacher = newError("users.err_invalid_teacher", "users: invalid teacher id")
 )

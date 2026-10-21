@@ -1,0 +1,16 @@
+# Copy only what the build needs: keeps the context small and prevents
+# local secrets (`.env`) from ever entering an image layer.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+docs
+*.md
+src/tests
+scripts
+compose.yaml
+Dockerfile
+README.md
+AGENTS.md
+lancedb

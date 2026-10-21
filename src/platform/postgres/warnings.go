@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"grade/src/core/warnings"
@@ -136,4 +137,136 @@ func (s *WarningsStore) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("postgres: delete warning: %w", err)
 	}
 	return nil
+}
+
+// Recent implements warnings.Store: every warning happened at or after
+// since, newest first. The WHERE clause keeps the dashboard window cheap;
+// no schema change was needed.
+func (s *WarningsStore) Recent(ctx context.Context, since time.Time) ([]warnings.Warning, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+warningColumns+`
+		FROM warnings
+		WHERE happened_at >= $1
+		ORDER BY happened_at DESC, id DESC`,
+		since)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list recent warnings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]warnings.Warning, 0)
+	for rows.Next() {
+		w, err := scanWarning(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan warning: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// ForAuthor implements warnings.Store.
+func (s *WarningsStore) ForAuthor(ctx context.Context, authorID string) ([]warnings.Warning, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+warningColumns+`
+		FROM warnings
+		WHERE teacher_id = $1
+		ORDER BY happened_at DESC, id DESC`,
+		authorID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list author warnings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]warnings.Warning, 0)
+	for rows.Next() {
+		w, err := scanWarning(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan warning: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// Fetch implements warnings.Store.
+func (s *WarningsStore) Fetch(ctx context.Context, id string) (warnings.Warning, error) {
+	row := s.db.pool.QueryRow(ctx, `SELECT `+warningColumns+` FROM warnings WHERE id = $1`, id)
+	out, err := scanWarning(row.Scan)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return warnings.Warning{}, warnings.ErrNotFound
+		}
+		return warnings.Warning{}, fmt.Errorf("postgres: fetch warning: %w", err)
+	}
+	return out, nil
+}
+
+// Update implements warnings.Store.
+func (s *WarningsStore) Update(ctx context.Context, w warnings.Warning) (warnings.Warning, error) {
+	row := s.db.pool.QueryRow(ctx, `
+		UPDATE warnings SET gravity = $2, title = $3, description = $4
+		WHERE id = $1
+		RETURNING `+warningColumns,
+		w.ID, string(w.Gravity), w.Title, w.Description)
+	out, err := scanWarning(row.Scan)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return warnings.Warning{}, warnings.ErrNotFound
+		}
+		return warnings.Warning{}, fmt.Errorf("postgres: update warning: %w", err)
+	}
+	return out, nil
+}
+
+// AddRevision implements warnings.Store.
+func (s *WarningsStore) AddRevision(ctx context.Context, r warnings.Revision) (warnings.Revision, error) {
+	if _, err := s.db.pool.Exec(ctx, `
+		INSERT INTO warning_revisions (id, warning_id, student_id, old_gravity, new_gravity, old_title, new_title, old_detail, new_detail, changed_by, changed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		uuid.NewString(), r.WarningID, r.StudentID, string(r.OldGravity), string(r.NewGravity),
+		r.OldTitle, r.NewTitle, r.OldDetail, r.NewDetail, r.ChangedBy, r.ChangedAt); err != nil {
+		return warnings.Revision{}, fmt.Errorf("postgres: add warning revision: %w", err)
+	}
+	return r, nil
+}
+
+const warningRevisionColumns = `warning_id, student_id, old_gravity, new_gravity, old_title, new_title, old_detail, new_detail, changed_by, changed_at`
+
+func scanWarningRevision(scan func(dest ...any) error) (warnings.Revision, error) {
+	var r warnings.Revision
+	var warningID, oldGravity, newGravity string
+	err := scan(&warningID, &r.StudentID, &oldGravity, &newGravity,
+		&r.OldTitle, &r.NewTitle, &r.OldDetail, &r.NewDetail, &r.ChangedBy, &r.ChangedAt)
+	if err != nil {
+		return warnings.Revision{}, err
+	}
+	r.WarningID = warningID
+	r.OldGravity = warnings.Gravity(oldGravity)
+	r.NewGravity = warnings.Gravity(newGravity)
+	return r, nil
+}
+
+// RevisionsForWarning implements warnings.Store.
+func (s *WarningsStore) RevisionsForWarning(ctx context.Context, warningID string) ([]warnings.Revision, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+warningRevisionColumns+`
+		FROM warning_revisions
+		WHERE warning_id = $1
+		ORDER BY changed_at DESC`,
+		warningID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list warning revisions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]warnings.Revision, 0)
+	for rows.Next() {
+		r, err := scanWarningRevision(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan warning revision: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

@@ -59,12 +59,26 @@ func MiddlewareCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 func routes(r *chi.Mux, deps Dependencies) {
 	r.Get("/healthz", handleHealthz)
 
+	r.Post("/v1/login", handleLogin(deps, newLoginLimiter(loginLimitPerMinute, loginWindow)))
+
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(MiddlewareSubject)
+		r.Use(func(next http.Handler) http.Handler {
+			return MiddlewareSubjectWith(next, deps.Tokens, deps.AllowDevIdentity)
+		})
 		r.Get("/me", handleMe(deps))
 
 		r.Get("/students/{id}", handleGetStudent(deps))
 		r.Get("/students/{id}/warnings", handleGetStudentWarnings(deps))
+		r.Get("/students/{id}/incidents", handleStudentIncidents(deps))
+
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/classes", handleListClasses(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/classes", handleCreateClass(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/classes/{groupID}/roster", handleClassRoster(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+			Get("/dashboard/summary", handleDashboardSummary(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/statistics/class/{groupID}", handleClassReport(deps))
@@ -73,16 +87,94 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
 			Post("/sessions/{sessionID}/marks", handleRecordMark(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
+			Post("/sessions/open", handleOpenSession(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/sessions/history", handleSessionsHistory(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/sessions/{id}", handleSessionDetail(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Post("/warnings/batch", handleIssueWarningBatch(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Put("/warnings/{id}", handleCorrectWarning(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Get("/warnings/{id}/revisions", handleWarningRevisions(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+			Get("/warnings/recent", handleWarningsRecent(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Post("/incidents", handleReportIncident(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+			Get("/incidents/recent", handleIncidentsRecent(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
 			Post("/students", handleCreateStudent(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
+			Put("/students/{id}", handleUpdateStudent(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
+			Put("/students/{id}/photo", handlePutPhoto(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewStudents)).
+			Get("/students/{id}/photo", handleGetPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/teachers", handleCreateTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers", handleListTeachers(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/teachers/me/schedule", handleMySchedule(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/teachers/{id}/photo", handlePutTeacherPhoto(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Get("/teachers/{id}/photo", handleGetTeacherPhoto(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Post("/teachers/attendance", handleRecordTeacherDay(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/attendance", handleTeacherDay(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/{id}/attendance", handleTeacherHistory(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/{id}/sessions", handleTeacherSessions(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/{id}/warnings-made", handleTeacherWarningsMade(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/roll", handleTeacherRoll(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/attendance/history", handleTeacherAttendanceRange(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
+			Get("/teachers/attendance/revisions", handleTeacherDayRevisions(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/subjects", handleListSubjects(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/subjects/{id}", handleGetSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/subjects", handleCreateSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/subjects/{id}", handleUpdateSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Delete("/subjects/{id}", handleDeleteSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/subjects/{id}/assignments", handleSubjectAssignments(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/assignments", handleAssignSubject(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/assignments/{id}/end", handleEndAssignment(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Delete("/assignments/{id}", handleRemoveAssignment(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Get("/teachers/{id}/assignments", handleTeacherAssignments(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/schedule", handleListSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/schedule", handleCreateSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/schedule/{id}", handleUpdateSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Delete("/schedule/{id}", handleDeleteSchedule(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+			Get("/audit", handleListAudit(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/users", handleCreateUser(deps))
 	})
 }

@@ -87,6 +87,9 @@ func TestServiceCreateValidation(t *testing.T) {
 		{"bad weekday", slot(groupA, teacherA, math, 7, "07:00", "08:00"), schedules.ErrInvalidWeekday},
 		{"inverted range", slot(groupA, teacherA, math, time.Monday, "08:00", "07:00"), schedules.ErrInvalidTime},
 		{"empty range", slot(groupA, teacherA, math, time.Monday, "08:00", "08:00"), schedules.ErrInvalidTime},
+		{"before school", slot(groupA, teacherA, math, time.Monday, "06:00", "07:00"), schedules.ErrOutsideSchoolHours},
+		{"after school", slot(groupA, teacherA, math, time.Monday, "13:00", "15:00"), schedules.ErrOutsideSchoolHours},
+		{"too short", slot(groupA, teacherA, math, time.Monday, "08:00", "08:30"), schedules.ErrOutsideSchoolHours},
 		{"not teaching", slot(groupA, teacherA, physics, time.Monday, "07:00", "08:00"), schedules.ErrNotTeachingSubject},
 	}
 
@@ -141,14 +144,15 @@ func TestConflicts(t *testing.T) {
 		t.Errorf("other day: %v", err)
 	}
 
-	// Updating the entry itself is stable (self excluded from conflicts).
-	base.End = schedules.MustClock("07:30")
+	// Updating the entry itself is stable (self excluded from conflicts):
+	// moving it to groupB touches but never overlaps the 08:00 slot.
+	base.ClassGroupID = groupB
 	upd, err := svc.Update(ctx, base)
 	if err != nil {
 		t.Fatalf("Update self: %v", err)
 	}
-	if upd.End != schedules.MustClock("07:30") {
-		t.Errorf("Update = %+v, want shortened slot", upd)
+	if upd.ClassGroupID != groupB {
+		t.Errorf("Update = %+v, want moved slot", upd)
 	}
 }
 
@@ -188,6 +192,30 @@ func TestDayViewAndGroupSchedule(t *testing.T) {
 
 	if _, err := svc.EntriesForTeacherOnDay(ctx, teacherA, 9); !errors.Is(err, schedules.ErrInvalidWeekday) {
 		t.Errorf("bad weekday error = %v, want ErrInvalidWeekday", err)
+	}
+}
+
+func TestEntriesForSubject(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	if _, err := svc.Create(ctx, slot(groupA, teacherA, math, time.Monday, "07:00", "08:00")); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.Create(ctx, slot(groupB, teacherA, math, time.Tuesday, "07:00", "08:00")); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := svc.EntriesForSubject(ctx, math)
+	if err != nil {
+		t.Fatalf("EntriesForSubject: %v", err)
+	}
+	if len(got) != 2 || got[0].Weekday != int(time.Monday) {
+		t.Errorf("entries = %+v, want monday first", got)
+	}
+
+	if _, err := svc.EntriesForSubject(ctx, "nope"); !errors.Is(err, schedules.ErrInvalidSubject) {
+		t.Errorf("bad subject error = %v, want ErrInvalidSubject", err)
 	}
 }
 

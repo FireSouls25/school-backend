@@ -11,6 +11,15 @@ import (
 // maxClock is the last valid minute of the day.
 const maxClock = Clock(24*60 - 1)
 
+// School hours bound every schedule entry: classes run from 07:00 and the
+// last slot ends at 14:00, with a one-hour minimum duration. Per-school
+// configuration may replace these constants later.
+const (
+	schoolDayStart = Clock(7 * 60)
+	schoolDayEnd   = Clock(14 * 60)
+	minDuration    = Clock(60)
+)
+
 // Service applies schedule policy and persists entries through a Store.
 // Teacher/subject pairing is verified through a Checker supplied by the
 // composition root.
@@ -80,6 +89,25 @@ func (s *Service) EntriesForGroup(ctx context.Context, classGroupID string) ([]E
 	return s.store.EntriesForGroup(ctx, strings.TrimSpace(classGroupID))
 }
 
+// EntriesForSubject returns every entry teaching a subject, ordered by
+// weekday, then start time. The catalog delete-guard counts these.
+func (s *Service) EntriesForSubject(ctx context.Context, subjectID string) ([]Entry, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(subjectID)); err != nil {
+		return nil, ErrInvalidSubject
+	}
+	return s.store.EntriesForSubject(ctx, strings.TrimSpace(subjectID))
+}
+
+// TeachersOnWeekday returns the distinct teacher ids expected on the
+// given weekday (at least one entry), sorted. Days without entries yield
+// an empty list: nobody is expected, nobody is listed.
+func (s *Service) TeachersOnWeekday(ctx context.Context, weekday time.Weekday) ([]string, error) {
+	if weekday < time.Sunday || weekday > time.Saturday {
+		return nil, ErrInvalidWeekday
+	}
+	return s.store.TeachersOnWeekday(ctx, weekday)
+}
+
 // Update replaces an existing entry, re-checking conflicts and pairing.
 func (s *Service) Update(ctx context.Context, e Entry) (Entry, error) {
 	e.ID = strings.TrimSpace(e.ID)
@@ -132,6 +160,9 @@ func validate(e Entry) error {
 	}
 	if e.Start < 0 || e.Start > maxClock || e.End < 0 || e.End > maxClock || e.Start >= e.End {
 		return ErrInvalidTime
+	}
+	if e.Start < schoolDayStart || e.End > schoolDayEnd || e.End-e.Start < minDuration {
+		return ErrOutsideSchoolHours
 	}
 	return nil
 }

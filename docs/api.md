@@ -43,11 +43,189 @@ Routes declare one required permission, enforced by
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
 | `GET /v1/statistics/student/{studentID}` | `manage-system` | admin only |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
+| `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
+| `POST /v1/classes` | `manage-users` | admin only |
+| `GET /v1/classes/{groupID}/roster` | `view-class-statistics` | teacher, admin |
+| `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
+| `POST /v1/sessions/open` | `record-attendance` | teacher, admin |
+| `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
+| `POST /v1/incidents` | `record-incidents` | teacher, admin |
+| `GET /v1/students/{id}/incidents` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
+| `GET /v1/dashboard/summary?year=AAAA` | `manage-system` | admin only |
+| `POST /v1/students` | `manage-students` | admin only |
+| `PUT /v1/students/{id}` | `manage-students` | admin only |
+| `POST /v1/teachers` | `manage-users` | admin only |
+| `GET /v1/teachers` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}` | `manage-users` | admin only |
+| `GET /v1/subjects` | `view-class-statistics` | teacher, admin |
+| `GET /v1/subjects/{id}` | `view-class-statistics` | teacher, admin |
+| `POST /v1/subjects` | `manage-users` | admin only |
+| `PUT /v1/subjects/{id}` | `manage-users` | admin only |
+| `DELETE /v1/subjects/{id}` | `manage-users` | admin only |
+| `GET /v1/subjects/{id}/assignments` | `view-class-statistics` | teacher, admin |
+| `POST /v1/assignments` | `manage-users` | admin only |
+| `POST /v1/assignments/{id}/end` | `manage-users` | admin only |
+| `DELETE /v1/assignments/{id}` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}/assignments` | `manage-users` | admin only |
+| `GET /v1/warnings/recent?limit=N` | `manage-system` | admin only |
+| `POST /v1/teachers/attendance` | `manage-teachers` | admin only |
+| `GET /v1/teachers/attendance?date=YYYY-MM-DD` | `manage-teachers` | admin only |
+| `GET /v1/teachers/{id}/attendance?from=&to=` | `manage-teachers` | admin only |
+| `GET /v1/teachers/roll?date=YYYY-MM-DD` | `manage-teachers` | admin only |
+| `GET /v1/teachers/attendance/history?from=&to=` | `manage-teachers` | admin only |
+| `PUT /v1/teachers/{id}/photo` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}/photo` | `manage-users` | admin only |
+| `GET /v1/teachers/{id}/sessions` | `manage-teachers` | admin only |
+| `GET /v1/teachers/{id}/warnings-made` | `manage-teachers` | admin only |
+| `GET /v1/sessions/history?classGroupID=&from=&to=` | `view-class-statistics` | teacher, admin |
+| `GET /v1/sessions/{id}` | `view-class-statistics` | teacher, admin |
+| `GET /v1/incidents/recent?limit=N` | `manage-system` | admin only |
+| `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
+| `POST /v1/schedule` | `manage-users` | admin only |
+| `PUT /v1/schedule/{id}` | `manage-users` | admin only |
+| `DELETE /v1/schedule/{id}` | `manage-users` | admin only |
+| `GET /v1/audit?limit=&studentID=` | `manage-system` | admin only |
+| `POST /v1/roles` | `manage-roles` | admin only |
 
 Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.
 Unknown subjects (valid UUID, no roles) are denied everywhere guarded.
 Authorizer failures fail closed: no data, `500` with no details.
+
+### User accounts (admin only)
+
+`POST /v1/users` (`manage-users`) creates a login account with an
+initial password: no self-registration. Body
+`{"username","email","password","role?"}`; `201` returns the sanitized
+account `{ID, Username, Email, Active, Roles}`. The optional `role`
+additionally requires `manage-roles`. Teachers get their account (and
+role) from this endpoint when the admin creates their profile; they only
+ever log in. Frontend flow in `docs/users.md`.
+
+## Class groups, rosters and schedules (teacher + admin)
+
+- `GET /v1/classes?year=AAAA` (`view-class-statistics`) lists the
+  salones of a calendar year. `year` is required and must fall between
+  2000 and 2100; unknown years answer `404`. The year number resolves
+  to the id the classes service asks for.
+- `GET /v1/classes/{groupID}/roster` (`view-class-statistics`)
+  returns the group nómina: enrolled students with their current
+  profiles, alphabetically by surnames then names (same criterion as
+  the class report). Enrollments pointing at removed profiles are
+  skipped, so a deleted profile never blocks the roll; unknown groups
+  answer `404`.
+- `GET /v1/teachers/me/schedule?weekday=N`
+  (`view-class-statistics`) returns the caller's slots for one day:
+  `weekday` is required, `0` (Sunday) to `6` (Saturday) as
+  `time.Weekday`. Anything else fails with `400`.
+- `POST /v1/schedule` and `PUT /v1/schedule/{id}` assign the
+  teacher-subject pairing automatically when no open pairing exists
+  (started today); overlaps and out-of-hours still fail.
+
+## Sessions, warnings and faults
+
+- `GET /v1/sessions/history?classGroupID=&from=&to=`
+  (`view-class-statistics`) returns the roll calls of one salon in a
+  range, newest first (capped at 50): date, group, period, subject
+  and teacher resolved, with present/absent/evasion/late counts folded
+  from the revision trail.
+- `GET /v1/sessions/{id}` (`view-class-statistics`) returns one roll
+  call with its current marks and full revision trail (student,
+  before/after, author, timestamp, note).
+
+- `POST /v1/teachers/attendance` (`manage-teachers`, admin only)
+  records the daily roll of teachers. Body
+  `{"day","marks":[{"teacherID","status?","note?"}]}`: `day` is
+  `YYYY-MM-DD` or RFC3339 (today or past, never future); an empty
+  `status` means present and Spanish terms parse
+  (`presente/ausente/atraso`). Unknown teachers fail the whole day
+  with `404`; recording again corrects the day (upsert) and each mark
+  is audited. `GET /v1/teachers/attendance?date=` returns the day with
+  display names; `GET /v1/teachers/{id}/attendance?from=&to=` returns
+  one teacher's history newest first with summary counts and the
+  revision trail (old/new status, who, when).
+- `GET /v1/teachers/attendance/history?from=&to=` (`manage-teachers`)
+  returns one card per recorded day, newest first: total, present,
+  absent and late counts. Powers the roll history feed.
+- `GET /v1/teachers/attendance/revisions?date=` (`manage-teachers`)
+  returns every change recorded one day, newest first: teacher,
+  old/new status, note, author and timestamp.
+- `GET /v1/teachers/roll?date=` (`manage-teachers`) returns the
+  teachers expected that weekday (from the weekly schedule) with
+  their recorded marks, if any. Unmarked teachers carry an empty
+  status: the roll screen shows nothing pre-selected.
+- `PUT /v1/teachers/{id}/photo` / `GET /v1/teachers/{id}/photo`
+  (`manage-users`) store and return the teacher picture (2 MiB max,
+  empty photo is an honest 404), same contract as students.
+- `GET /v1/teachers/{id}/sessions` (`manage-teachers`) returns the
+  roll calls taken by one teacher, newest first (capped at 20), with
+  absence counts folded from the revision trail.
+- `GET /v1/teachers/{id}/warnings-made` (`manage-teachers`) returns
+  the llamados issued from the logins linked to one teacher (capped
+  at 50), newest first with display names.
+
+- `POST /v1/sessions/open` (`record-attendance`) opens an attendance
+  call with its roster frozen as it is at that moment. Body
+  `{"classGroupID","period","date?","subjectID?"}`: `date` is
+  optional RFC3339 (defaults to now, UTC) and `subjectID` optional;
+  label, school year and teacher resolve server-side (the teacher is
+  always the caller). A group with nobody enrolled fails with `400`
+  (`sessions.err_empty_roster`); unknown groups answer `404`. `201`
+  returns the stored session.
+- `POST /v1/warnings/batch` (`record-incidents`) issues one event
+  against several students. Body
+  `{"classID","gravity","title","description","happenedAt?","studentIDs"}`:
+  `gravity` accepts the stable id and the Spanish term
+  (`leve/medio/moderado/grave`); `happenedAt` is optional RFC3339
+  (defaults to now, UTC). Snapshots freeze from the current profiles
+  and the teacher is always the caller. Every warning shares a fresh
+  group id while each student keeps its own history; profiles resolve
+  before anything persists, so an unknown student fails the whole
+  batch with `404` and an empty batch with `400`. `201` returns the
+  stored warnings.
+- `GET /v1/warnings/recent?limit=N` (`manage-system`, admin only)
+  returns the latest llamados newest first, each with the stored
+  warning plus `StudentName`, `ClassLabel` and `AuthorName` resolved
+  best-effort (live records win, the frozen snapshot stands in
+  otherwise; admins show their username, linked logins their teacher
+  name). Powers the admin history at `/admin/llamados`, where an
+  admin can also issue llamados through the same batch endpoint.
+  against several students. Body
+  `{"classID","gravity","title","description","happenedAt?","studentIDs"}`:
+  `gravity` accepts the stable id and the Spanish term
+  (`leve/medio/moderado/grave`); `happenedAt` is optional RFC3339
+  (defaults to now, UTC). Snapshots freeze from the current profiles
+  and the teacher is always the caller. Every warning shares a fresh
+  group id while each student keeps its own history; profiles resolve
+  before anything persists, so an unknown student fails the whole
+  batch with `404` and an empty batch with `400`. `201` returns the
+  stored warnings.
+- `POST /v1/incidents` (`record-incidents`) records one fault. Body
+  `{"studentID","classID","date?","severity","description"}`:
+  `severity` accepts the stable id and the Spanish term
+  (`leve/normal/grave`); `date` is optional RFC3339 (defaults to now,
+  UTC). `201` returns the stored fault.
+- `GET /v1/students/{id}/incidents` returns one student's fault
+  history, newest first: same readers as the warning history
+  (`view-students`, or `view-own-history` on self).
+
+## Admin dashboard
+
+- `GET /v1/dashboard/summary?year=AAAA` (`manage-system`, admin only)
+  returns the landing aggregate for a calendar year (`year` required,
+  same rules as `/v1/classes`): staff/student/group totals, llamados
+  and attendance marks of the last 7 days, the top inasistencia risk
+  ranking (max 8) and the latest llamados (max 6).
+
+Documented limits (pending, never invented):
+
+- `Totals.Teachers` counts every teacher on staff, not only those
+  teaching that year: no year-scoped staff list exists yet.
+- Attendance and top-risk fold at most 25 groups per year
+  (`GroupsTruncated: true` past the cap, first groups in grade/group
+  order). Totals still count every group. The full sweep stays
+  pending until a cheaper cross-group attendance source exists.
+- Anything else stays out of the summary rather than guessed.
 
 ## Denials and frontend navigation
 

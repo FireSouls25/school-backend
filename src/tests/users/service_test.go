@@ -244,3 +244,54 @@ func TestByIDAndDelete(t *testing.T) {
 		t.Errorf("second Delete: %v", err)
 	}
 }
+
+func TestLinkTeacher(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	u, err := svc.Create(ctx, "carlos.mendoza", "carlos@colegio.edu", "docente123*")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if u.TeacherID != "" {
+		t.Errorf("fresh TeacherID = %q, want empty", u.TeacherID)
+	}
+	teacher := "11111111-1111-4111-8111-111111111111"
+
+	if _, err := svc.LinkTeacher(ctx, "nope", teacher); !errors.Is(err, users.ErrInvalidID) {
+		t.Errorf("bad user error = %v, want ErrInvalidID", err)
+	}
+	if _, err := svc.LinkTeacher(ctx, u.ID, "nope"); !errors.Is(err, users.ErrInvalidTeacher) {
+		t.Errorf("bad teacher error = %v, want ErrInvalidTeacher", err)
+	}
+	if _, err := svc.LinkTeacher(ctx, "00000000-0000-4000-8000-000000000000", teacher); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("unknown user error = %v, want ErrNotFound", err)
+	}
+
+	linked, err := svc.LinkTeacher(ctx, u.ID, teacher)
+	if err != nil {
+		t.Fatalf("LinkTeacher: %v", err)
+	}
+	if linked.TeacherID != teacher {
+		t.Errorf("TeacherID = %q, want %q", linked.TeacherID, teacher)
+	}
+	if linked.PasswordHash != "" {
+		t.Error("linked user leaks password hash")
+	}
+
+	got, err := svc.ByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.TeacherID != teacher {
+		t.Errorf("persisted TeacherID = %q, want %q", got.TeacherID, teacher)
+	}
+
+	unlinked, err := svc.UnlinkTeacher(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("UnlinkTeacher: %v", err)
+	}
+	if unlinked.TeacherID != "" {
+		t.Errorf("TeacherID after unlink = %q, want empty", unlinked.TeacherID)
+	}
+}

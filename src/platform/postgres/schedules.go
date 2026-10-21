@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -89,6 +90,36 @@ func (s *SchedulesStore) EntriesForTeacher(ctx context.Context, teacherID string
 func (s *SchedulesStore) EntriesForGroup(ctx context.Context, classGroupID string) ([]schedules.Entry, error) {
 	return s.entriesWhere(ctx,
 		`WHERE class_group_id = $1 ORDER BY weekday, start_min, id`, classGroupID)
+}
+
+// TeachersOnWeekday implements schedules.Store.
+func (s *SchedulesStore) TeachersOnWeekday(ctx context.Context, weekday time.Weekday) ([]string, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT DISTINCT teacher_id
+		FROM schedule_entries
+		WHERE weekday = $1
+		ORDER BY teacher_id`,
+		int(weekday))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: teachers on weekday: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("postgres: scan teacher on weekday: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// EntriesForSubject implements schedules.Store.
+func (s *SchedulesStore) EntriesForSubject(ctx context.Context, subjectID string) ([]schedules.Entry, error) {
+	return s.entriesWhere(ctx,
+		`WHERE subject_id = $1 ORDER BY weekday, start_min, id`, subjectID)
 }
 
 func (s *SchedulesStore) entriesWhere(ctx context.Context, clause, arg string) ([]schedules.Entry, error) {

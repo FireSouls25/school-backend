@@ -54,7 +54,29 @@ type Input struct {
 	GroupID string
 }
 
-// BatchInput carries one event against several students: shared fields
+// Revision is one correction to a warning: the fields before and after,
+// who recorded it and when. Warnings never rewrite; correcting appends.
+type Revision struct {
+	WarningID  string
+	StudentID  string
+	OldGravity Gravity
+	NewGravity Gravity
+	OldTitle   string
+	NewTitle   string
+	OldDetail  string
+	NewDetail  string
+	ChangedBy  string
+	ChangedAt  time.Time
+}
+
+// Update carries the editable fields of a warning.
+type Update struct {
+	Gravity     Gravity
+	Title       string
+	Description string
+	ChangedBy   string
+}
+
 // plus one item per student. The Service assigns a single GroupID.
 type BatchInput struct {
 	ClassID     string
@@ -84,4 +106,20 @@ type Store interface {
 	Delete(ctx context.Context, id string) error
 	// ForGroup returns every warning sharing a batch id, oldest first.
 	ForGroup(ctx context.Context, groupID string) ([]Warning, error)
+	// Recent returns every warning happened at or after since, newest
+	// first. It feeds the admin dashboard window without sweeping the
+	// whole table; both adapters filter at the source.
+	Recent(ctx context.Context, since time.Time) ([]Warning, error)
+	// ForAuthor returns every warning issued by the given login subject,
+	// newest first.
+	ForAuthor(ctx context.Context, authorID string) ([]Warning, error)
+	// Fetch returns one warning by id or ErrNotFound.
+	Fetch(ctx context.Context, id string) (Warning, error)
+	// Update replaces the editable fields of a warning.
+	Update(ctx context.Context, w Warning) (Warning, error)
+	// AddRevision appends one correction to the trail.
+	AddRevision(ctx context.Context, r Revision) (Revision, error)
+	// RevisionsForWarning returns every correction of one warning,
+	// newest first.
+	RevisionsForWarning(ctx context.Context, warningID string) ([]Revision, error)
 }

@@ -61,6 +61,29 @@ func TestReportValidation(t *testing.T) {
 	})
 }
 
+func TestRecentSinceWindow(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+	sid := "33333333-3333-3333-3333-333333333333"
+
+	old := time.Now().AddDate(0, 0, -100)
+	fresh := time.Now().AddDate(0, 0, -2)
+	if _, err := svc.Report(ctx, sid, "7-3", old, incidents.SeverityMinor, "llega tarde"); err != nil {
+		t.Fatalf("Report old: %v", err)
+	}
+	if _, err := svc.Report(ctx, sid, "9-1", fresh, incidents.SeveritySevere, "pelea en el aula"); err != nil {
+		t.Fatalf("Report fresh: %v", err)
+	}
+
+	got, err := svc.Recent(ctx, time.Now().AddDate(0, 0, -90))
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(got) != 1 || got[0].Severity != incidents.SeveritySevere {
+		t.Errorf("Recent = %+v, want only the fresh fault", got)
+	}
+}
+
 func TestFaultHistoryNewestFirst(t *testing.T) {
 	ctx := context.Background()
 	svc := newService()

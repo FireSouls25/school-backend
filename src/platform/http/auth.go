@@ -4,16 +4,17 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
+	"grade/src/core/auth"
 	"grade/src/core/roles"
 )
 
-// SubjectHeader carries the caller identity until the auth token scheme
-// lands. The backend is agnostic to the request origin as long as the id
-// is valid; a real token scheme replaces this header without touching
-// handlers.
+// SubjectHeader carries the caller identity in development and tests.
+// Production callers use Authorization: Bearer <token>; the header is
+// ignored there, so a raw UUID never authenticates outside development.
 const SubjectHeader = "X-Subject-ID"
 
 // codedError is a transport-level error with a stable catalog key.
@@ -29,20 +30,69 @@ var (
 	errUnauthorized = codedError{"http.err_unauthorized"}
 	// errForbidden renders 403 when the subject lacks the permission.
 	errForbidden = codedError{"http.err_forbidden"}
+	// errInternal renders 500 for server misconfiguration the caller
+	// cannot fix (e.g. login wired without a token service).
+	errInternal = codedError{"http.err_internal"}
 )
 
-// MiddlewareSubject resolves the caller from the SubjectHeader (UUID) and
-// stores it in the request context. Requests without a valid id are
+// MiddlewareSubject resolves the caller from the Authorization bearer
+// token and stores the subject in the request context. Requests without
+// a valid token are rejected; in development (and tests) a valid
+// X-Subject-ID still authenticates when no bearer is present, so local
+// tooling keeps working without a login round-trip.
 // rejected with 401; nothing downstream ever sees an empty subject.
 func MiddlewareSubject(next http.Handler) http.Handler {
+	return MiddlewareSubjectWith(next, nil, true)
+}
+
+// TokenVerifier validates login tokens. It mirrors the method set the
+// middleware needs so tests can substitute fakes.
+type TokenVerifier interface {
+	Verify(token string, now time.Time) (auth.Claims, error)
+}
+
+// MiddlewareSubjectWith resolves the caller from the Authorization bearer
+// token. When no bearer is present and allowDevIdentity holds, a valid
+// X-Subject-ID still authenticates (development and tests only).
+func MiddlewareSubjectWith(next http.Handler, tokens TokenVerifier, allowDevIdentity bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimSpace(r.Header.Get(SubjectHeader))
-		if _, err := uuid.Parse(id); err != nil {
-			WriteError(w, r, errUnauthorized)
-			return
+		if tokens != nil {
+			if token, ok := bearerToken(r); ok {
+				claims, err := tokens.Verify(token, time.Now())
+				if err != nil {
+					WriteError(w, r, err)
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(WithSubject(r.Context(), claims.Subject)))
+				return
+			}
 		}
-		next.ServeHTTP(w, r.WithContext(WithSubject(r.Context(), id)))
+		if allowDevIdentity {
+			if id := strings.TrimSpace(r.Header.Get(SubjectHeader)); id != "" {
+				if _, err := uuid.Parse(id); err != nil {
+					WriteError(w, r, errUnauthorized)
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(WithSubject(r.Context(), id)))
+				return
+			}
+		}
+		WriteError(w, r, errUnauthorized)
 	})
+}
+
+// bearerToken extracts the token from `Authorization: Bearer <token>`.
+func bearerToken(r *http.Request) (string, bool) {
+	raw := strings.TrimSpace(r.Header.Get("Authorization"))
+	if raw == "" {
+		return "", false
+	}
+	parts := strings.SplitN(raw, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+		return "", false
+	}
+	token := strings.TrimSpace(parts[1])
+	return token, token != ""
 }
 
 // WithSubject stores a subject id in the context.

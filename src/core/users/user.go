@@ -28,6 +28,11 @@ type User struct {
 	// Active reports whether the user may log in. Disabling flips it to
 	// false instead of deleting the account, so history keeps resolving.
 	Active bool
+	// TeacherID links the login to a teacher profile, so "my schedule"
+	// and "my name" resolve without a second login. Empty means none
+	// (pure admins). The teachers capability owns the profile; a dangling
+	// id simply resolves to no schedule rather than failing.
+	TeacherID string
 	// CreatedAt is the account creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the last modification time.
