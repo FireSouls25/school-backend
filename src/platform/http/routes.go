@@ -65,6 +65,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 		r.Use(func(next http.Handler) http.Handler {
 			return MiddlewareSubjectWith(next, deps.Tokens, deps.AllowDevIdentity)
 		})
+		// Version-based revocation: rotated/disabled accounts fail closed.
+		r.Use(RequireTokenFresh(deps.Users))
 		r.Get("/me", handleMe(deps))
 		// Self-service password: auth only, the current password gates
 		// the swap, so permissions play no part here.

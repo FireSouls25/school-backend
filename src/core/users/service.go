@@ -191,7 +191,13 @@ func (s *Service) SetPassword(ctx context.Context, id, newPassword string) error
 	if err != nil {
 		return err
 	}
-	return s.store.SetPasswordHash(ctx, strings.TrimSpace(id), string(hash))
+	if err := s.store.SetPasswordHash(ctx, strings.TrimSpace(id), string(hash)); err != nil {
+		return err
+	}
+	if _, err := s.store.BumpTokenVersion(ctx, strings.TrimSpace(id)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ChangePassword verifies the current password before replacing the
@@ -216,7 +222,13 @@ func (s *Service) ChangePassword(ctx context.Context, id, currentPassword, newPa
 	if err != nil {
 		return err
 	}
-	return s.store.SetPasswordHash(ctx, strings.TrimSpace(id), string(hash))
+	if err := s.store.SetPasswordHash(ctx, strings.TrimSpace(id), string(hash)); err != nil {
+		return err
+	}
+	if _, err := s.store.BumpTokenVersion(ctx, strings.TrimSpace(id)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Photo returns the stored account picture: an empty Data when the
@@ -261,6 +273,11 @@ func (s *Service) SetActive(ctx context.Context, id string, active bool) (User, 
 	if err != nil {
 		return User{}, err
 	}
+	ver, err := s.store.BumpTokenVersion(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return User{}, err
+	}
+	u.TokenVersion = ver
 	return u.Sanitized(), nil
 }
 

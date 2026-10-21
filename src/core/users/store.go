@@ -38,6 +38,11 @@ type Store interface {
 	// SetPasswordHash replaces the password hash of the user with the
 	// given id. Returns ErrNotFound when missing.
 	SetPasswordHash(ctx context.Context, id, hash string) error
+	// BumpTokenVersion atomically increments the token version of the user
+	// with the given id and returns the new version. Returns ErrNotFound
+	// when missing. Callers bump after password changes and active flips
+	// so previously minted bearers stop validating.
+	BumpTokenVersion(ctx context.Context, id string) (int64, error)
 	// Delete removes the user with the given id. Removing an unknown
 	// user is a no-op.
 	Delete(ctx context.Context, id string) error

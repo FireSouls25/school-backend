@@ -1,9 +1,10 @@
 // Package auth mints and verifies the login tokens that replace the
 // development X-Subject-ID header. Tokens are HS256 JWTs signed with the
-// deployment secret: stateless, so no session table to operate, and short
-// lived, so a leaked token expires on its own. Revocation before expiry is
-// a future login-phase concern (denylist); logout today means the client
-// discards the token.
+// deployment secret: short lived, so a leaked token expires on its own.
+// Revocation is version-based: every token carries the account token
+// version (ver) and a unique id (jti); bumping the version (password
+// change, disable) invalidates previously minted bearers at the HTTP
+// layer, which compares claims against the stored user.
 package auth
 
 import (
@@ -15,6 +16,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Claims is the token payload: who it was minted for and until when it
@@ -25,6 +28,11 @@ type Claims struct {
 	Roles     []string `json:"roles"`
 	IssuedAt  int64    `json:"iat"`
 	ExpiresAt int64    `json:"exp"`
+	// Ver is the account token version at mint time. The HTTP layer
+	// rejects bearers whose version no longer matches the stored user.
+	Ver int64  `json:"ver"`
+	// Jti is the unique token id, for audit and future denylists.
+	Jti string `json:"jti"`
 }
 
 // Service mints and verifies tokens with one shared secret.
@@ -46,10 +54,15 @@ func NewService(secret string, ttl time.Duration) (*Service, error) {
 	return &Service{secret: []byte(secret), ttl: ttl}, nil
 }
 
-// Mint issues a token for subject with roles, valid for the service TTL.
-func (s *Service) Mint(subject string, roles []string, now time.Time) (token string, expiresAt time.Time, err error) {
+// Mint issues a token for subject with roles and token version, valid
+// for the service TTL. The version must be the current user TokenVersion;
+// rotation bumps it and older bearers stop validating.
+func (s *Service) Mint(subject string, roles []string, ver int64, now time.Time) (token string, expiresAt time.Time, err error) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
+		return "", time.Time{}, ErrInvalidSubject
+	}
+	if ver < 0 {
 		return "", time.Time{}, ErrInvalidSubject
 	}
 	expiresAt = now.UTC().Add(s.ttl)
@@ -59,6 +72,8 @@ func (s *Service) Mint(subject string, roles []string, now time.Time) (token str
 		Roles:     append([]string(nil), roles...),
 		IssuedAt:  now.UTC().Unix(),
 		ExpiresAt: expiresAt.Unix(),
+		Ver:       ver,
+		Jti:       uuid.NewString(),
 	})
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("auth: encode claims: %w", err)

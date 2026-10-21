@@ -21,7 +21,7 @@ func TestMintVerifyRoundTrip(t *testing.T) {
 	svc := newService(t)
 	now := time.Now()
 
-	token, expiresAt, err := svc.Mint("subject-1", []string{"admin", "teacher"}, now)
+	token, expiresAt, err := svc.Mint("subject-1", []string{"admin", "teacher"}, 0, now)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -36,13 +36,16 @@ func TestMintVerifyRoundTrip(t *testing.T) {
 	if claims.Subject != "subject-1" || len(claims.Roles) != 2 {
 		t.Errorf("claims = %+v, want subject and roles", claims)
 	}
+	if claims.Jti == "" {
+		t.Errorf("claims.Jti empty, want unique token id")
+	}
 }
 
 func TestVerifyRejects(t *testing.T) {
 	svc := newService(t)
 	now := time.Now()
 
-	token, _, err := svc.Mint("subject-1", nil, now)
+	token, _, err := svc.Mint("subject-1", nil, 0, now)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -79,7 +82,23 @@ func TestNewServiceRejectsWeakConfig(t *testing.T) {
 	if _, err := auth.NewService("s", 0); !errors.Is(err, auth.ErrInvalidTTL) {
 		t.Errorf("zero ttl error = %v, want ErrInvalidTTL", err)
 	}
-	if _, _, err := newService(t).Mint("  ", nil, time.Now()); !errors.Is(err, auth.ErrInvalidSubject) {
+	if _, _, err := newService(t).Mint("  ", nil, 0, time.Now()); !errors.Is(err, auth.ErrInvalidSubject) {
 		t.Errorf("blank subject error = %v, want ErrInvalidSubject", err)
+	}
+}
+
+func TestMintCarriesVersion(t *testing.T) {
+	svc := newService(t)
+	now := time.Now()
+	token, _, err := svc.Mint("subject-1", nil, 7, now)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	claims, err := svc.Verify(token, now)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if claims.Ver != 7 {
+		t.Errorf("claims.Ver = %d, want 7", claims.Ver)
 	}
 }

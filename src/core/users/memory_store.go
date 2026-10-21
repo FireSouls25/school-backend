@@ -100,6 +100,7 @@ func (s *MemoryStore) Update(_ context.Context, u User) (User, error) {
 		}
 	}
 	u.PasswordHash = stored.PasswordHash
+	u.TokenVersion = stored.TokenVersion
 	if u.CreatedAt.IsZero() {
 		u.CreatedAt = stored.CreatedAt
 	}
@@ -122,6 +123,20 @@ func (s *MemoryStore) SetPasswordHash(_ context.Context, id, hash string) error 
 	u.UpdatedAt = time.Now()
 	s.users[id] = u
 	return nil
+}
+
+// BumpTokenVersion implements Store.
+func (s *MemoryStore) BumpTokenVersion(_ context.Context, id string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[id]
+	if !ok {
+		return 0, ErrNotFound
+	}
+	u.TokenVersion++
+	u.UpdatedAt = time.Now()
+	s.users[id] = u
+	return u.TokenVersion, nil
 }
 
 // Delete implements Store.

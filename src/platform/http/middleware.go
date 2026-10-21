@@ -14,6 +14,7 @@ type contextKey int
 const (
 	contextKeyTranslator contextKey = iota
 	contextKeySubject
+	contextKeyClaims
 )
 
 // MiddlewareLocale resolves the request language from the Accept-Language

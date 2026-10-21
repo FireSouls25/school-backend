@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"grade/src/core/auth"
 	"grade/src/core/roles"
+	"grade/src/core/users"
 )
 
 // SubjectHeader carries the caller identity in development and tests.
@@ -63,7 +65,9 @@ func MiddlewareSubjectWith(next http.Handler, tokens TokenVerifier, allowDevIden
 					WriteError(w, r, err)
 					return
 				}
-				next.ServeHTTP(w, r.WithContext(WithSubject(r.Context(), claims.Subject)))
+				ctx := WithSubject(r.Context(), claims.Subject)
+				ctx = WithClaims(ctx, claims)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 		}
@@ -104,6 +108,53 @@ func WithSubject(ctx context.Context, subjectID string) context.Context {
 func SubjectFrom(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(contextKeySubject).(string)
 	return id, ok && id != ""
+}
+
+// WithClaims stores verified token claims in the context. Dev identities
+// (X-Subject-ID) carry no claims; version checks skip them.
+func WithClaims(ctx context.Context, claims auth.Claims) context.Context {
+	return context.WithValue(ctx, contextKeyClaims, claims)
+}
+
+// ClaimsFrom extracts verified token claims, reporting whether present.
+func ClaimsFrom(ctx context.Context) (auth.Claims, bool) {
+	claims, ok := ctx.Value(contextKeyClaims).(auth.Claims)
+	return claims, ok
+}
+
+// RequireTokenFresh rejects bearers whose version no longer matches the
+// stored account (password rotation, disable) or whose account is now
+// inactive. Dev identities without a users row pass through; unknown
+// subjects with a bearer fail closed. Missing Users service disables
+// the check (tests without auth setup).
+func RequireTokenFresh(usersSvc *users.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, hasClaims := ClaimsFrom(r.Context())
+			if !hasClaims {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if usersSvc == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			u, err := usersSvc.ByID(r.Context(), claims.Subject)
+			if err != nil {
+				if errors.Is(err, users.ErrNotFound) {
+					next.ServeHTTP(w, r)
+					return
+				}
+				WriteError(w, r, err)
+				return
+			}
+			if !u.Active || u.TokenVersion != claims.Ver {
+				WriteError(w, r, errUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // RequirePermission denies with 403 unless the subject holds p. Missing

@@ -24,14 +24,14 @@ func NewUsersStore(db *DB) *UsersStore { return &UsersStore{db: db} }
 var _ users.Store = (*UsersStore)(nil)
 
 // userColumns is the full column list used by every user SELECT.
-const userColumns = `id, username, email, password_hash, active, teacher_id, created_at, updated_at`
+const userColumns = `id, username, email, password_hash, active, teacher_id, token_version, created_at, updated_at`
 
 // scanUser maps the current row (in userColumns order) onto a User.
 func scanUser(scan func(dest ...any) error) (users.User, error) {
 	var u users.User
 	var teacherID *string
 	var created, updated time.Time
-	err := scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Active, &teacherID, &created, &updated)
+	err := scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Active, &teacherID, &u.TokenVersion, &created, &updated)
 	if err != nil {
 		return users.User{}, err
 	}
@@ -54,7 +54,7 @@ func teacherIDArg(u users.User) any {
 
 // userArgs flattens u into the INSERT argument order.
 func userArgs(u users.User) []any {
-	return []any{u.ID, u.Username, u.Email, u.PasswordHash, u.Active, teacherIDArg(u), u.CreatedAt, u.UpdatedAt}
+	return []any{u.ID, u.Username, u.Email, u.PasswordHash, u.Active, teacherIDArg(u), u.TokenVersion, u.CreatedAt, u.UpdatedAt}
 }
 
 // translateUserWrite maps unique violations on the username/email indexes
@@ -72,8 +72,8 @@ func translateUserWrite(err error, what string) error {
 // Create implements users.Store.
 func (s *UsersStore) Create(ctx context.Context, u users.User) (users.User, error) {
 	row := s.db.pool.QueryRow(ctx, `
-		INSERT INTO users (id, username, email, password_hash, active, teacher_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO users (id, username, email, password_hash, active, teacher_id, token_version, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING `+userColumns,
 		userArgs(u)...)
 	out, err := scanUser(row.Scan)
@@ -155,6 +155,20 @@ func (s *UsersStore) SetPasswordHash(ctx context.Context, id, hash string) error
 		return users.ErrNotFound
 	}
 	return nil
+}
+
+// BumpTokenVersion implements users.Store.
+func (s *UsersStore) BumpTokenVersion(ctx context.Context, id string) (int64, error) {
+	row := s.db.pool.QueryRow(ctx,
+		`UPDATE users SET token_version = token_version + 1, updated_at = now() WHERE id = $1 RETURNING token_version`, id)
+	var ver int64
+	if err := row.Scan(&ver); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, users.ErrNotFound
+		}
+		return 0, fmt.Errorf("postgres: bump user token version: %w", err)
+	}
+	return ver, nil
 }
 
 // Delete implements users.Store.

@@ -120,7 +120,7 @@ func handleLogin(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 		for _, role := range rs {
 			roleNames = append(roleNames, string(role))
 		}
-		token, expiresAt, err := deps.Tokens.Mint(u.ID, roleNames, time.Now())
+		token, expiresAt, err := deps.Tokens.Mint(u.ID, roleNames, u.TokenVersion, time.Now())
 		if err != nil {
 			WriteError(w, r, err)
 			return

@@ -371,6 +371,7 @@ CREATE TABLE IF NOT EXISTS users (
     email         TEXT        NOT NULL DEFAULT '',
     password_hash TEXT        NOT NULL DEFAULT '',
     active        BOOLEAN     NOT NULL DEFAULT TRUE,
+    token_version BIGINT      NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -392,6 +393,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS teacher_id UUID NULL REFERENCES teach
 -- (admins). Linked docentes keep theirs inside teachers.photo so every
 -- listing stays the single source of truth.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS photo BYTEA;
+
+-- Auth revocation: bumping invalidates previously minted bearers.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version BIGINT NOT NULL DEFAULT 0;
 
 -- Role grants survive restarts (the memory store they replace does not).
 CREATE TABLE IF NOT EXISTS role_grants (

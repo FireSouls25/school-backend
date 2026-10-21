@@ -33,6 +33,9 @@ type User struct {
 	// (pure admins). The teachers capability owns the profile; a dangling
 	// id simply resolves to no schedule rather than failing.
 	TeacherID string
+	// TokenVersion invalidates issued bearers. Bumps on password changes
+	// and active flips, so a stolen token dies on next rotation.
+	TokenVersion int64
 	// CreatedAt is the account creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the last modification time.
