@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -85,5 +86,38 @@ func TestTeacherAccountResolvesLogin(t *testing.T) {
 	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/"+tc.ID+"/account", "11111111-1111-4111-8111-111111111111", "")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("unprivileged code = %d, want 403", rec.Code)
+	}
+}
+
+func TestCreateUserLinksTeacher(t *testing.T) {
+	h, _, teachersSvc, adminID := accountStack(t)
+	ctx := context.Background()
+
+	tc, err := teachersSvc.Create(ctx, teachers.Teacher{
+		Names: "Ana", Surnames: "Ríos", DocumentID: "9988776655",
+	})
+	if err != nil {
+		t.Fatalf("create teacher: %v", err)
+	}
+	body, _ := json.Marshal(map[string]string{
+		"username": "ana.rios", "email": "ana@colegio.edu",
+		"password": "docente123*", "teacherID": tc.ID,
+	})
+	rec := doRequest(t, h, http.MethodPost, "/v1/users", adminID, string(body))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create code = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/"+tc.ID+"/account", adminID, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("linked code = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	unknown, _ := json.Marshal(map[string]string{
+		"username": "otro.user", "email": "otro@colegio.edu",
+		"password": "docente123*", "teacherID": "00000000-0000-4000-8000-000000000000",
+	})
+	rec = doRequest(t, h, http.MethodPost, "/v1/users", adminID, string(unknown))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown teacher code = %d, want 404", rec.Code)
 	}
 }

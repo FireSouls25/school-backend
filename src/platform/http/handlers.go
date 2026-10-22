@@ -1535,6 +1535,10 @@ type createUserRequest struct {
 	// Role is optional (e.g. "teacher"). Granting it additionally
 	// requires manage-roles; admins hold every permission.
 	Role string `json:"role"`
+	// TeacherID optionally links the login to a teacher profile, so the
+	// account resolves from the teacher file (lockout toggle) and the
+	// teacher resolves from the login (my schedule).
+	TeacherID string `json:"teacherID"`
 }
 
 // userAccount is the response after creating a login account. It never
@@ -1567,6 +1571,18 @@ func handleCreateUser(deps Dependencies) http.HandlerFunc {
 		if err != nil {
 			WriteError(w, r, err)
 			return
+		}
+		if teacherID := strings.TrimSpace(body.TeacherID); teacherID != "" {
+			if deps.Teachers != nil {
+				if _, err := deps.Teachers.ByID(r.Context(), teacherID); err != nil {
+					WriteError(w, r, err)
+					return
+				}
+			}
+			if _, err := deps.Users.LinkTeacher(r.Context(), u.ID, teacherID); err != nil {
+				WriteError(w, r, err)
+				return
+			}
 		}
 		if raw := strings.TrimSpace(body.Role); raw != "" {
 			role, err := roles.Parse(raw)
