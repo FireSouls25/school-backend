@@ -13,8 +13,11 @@ later phases.
   period count (1–6, usually 4) with one dated range per period
   (`PeriodRanges`, ordered and non-overlapping inside the year range),
   start/end dates, Colombian holidays (date-only, sorted, deduplicated,
-  all within range) and a `Closed` flag. Once a year grows class-groups,
-  periods, ranges and dates freeze (only holidays still move);
+  all within range), manually marked `NoClassDays` (locally moved
+  holidays, emergencies; same date rules, overlap allowed) and a
+  `Closed` flag. Once a year grows class-groups,
+  periods, ranges and dates freeze (only holidays and no-class days
+  still move);
   `Close` finishes it: no edits at all (the enrollment block lands
   with the enrollments HTTP endpoints).
   New years always date their periods; `List` newest-first feeds the
@@ -211,7 +214,8 @@ EXISTS`).
 ```
 school_years(id uuid PK, year UNIQUE, periods CHECK 1..6,
              start_date DATE NOT NULL, end_date DATE NOT NULL CHECK start < end,
-             holidays DATE[] NOT NULL DEFAULT '{}', closed,
+             holidays DATE[] NOT NULL DEFAULT '{}',
+             no_class_days DATE[] NOT NULL DEFAULT '{}', closed,
              created_at, updated_at)
 school_year_periods(year_id uuid FK->school_years CASCADE, n,
                     start_date DATE NOT NULL, end_date DATE NOT NULL,

@@ -101,6 +101,7 @@ func normalize(y SchoolYear) SchoolYear {
 	y.StartDate = toDate(y.StartDate)
 	y.EndDate = toDate(y.EndDate)
 	y.Holidays = normalizeHolidays(y.Holidays)
+	y.NoClassDays = normalizeHolidays(y.NoClassDays)
 	y.PeriodRanges = normalizeRanges(y.PeriodRanges)
 	return y
 }
@@ -129,6 +130,11 @@ func validate(y SchoolYear) error {
 		}
 	}
 	for _, h := range y.Holidays {
+		if !containsDate(h, y.StartDate, y.EndDate) {
+			return ErrInvalidHoliday
+		}
+	}
+	for _, h := range y.NoClassDays {
 		if !containsDate(h, y.StartDate, y.EndDate) {
 			return ErrInvalidHoliday
 		}

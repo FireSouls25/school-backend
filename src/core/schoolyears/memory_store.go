@@ -22,6 +22,7 @@ func NewMemoryStore() *MemoryStore {
 // clone returns a copy of y with its own holidays and ranges slices.
 func clone(y SchoolYear) SchoolYear {
 	y.Holidays = append([]time.Time(nil), y.Holidays...)
+	y.NoClassDays = append([]time.Time(nil), y.NoClassDays...)
 	y.PeriodRanges = append([]PeriodRange(nil), y.PeriodRanges...)
 	return y
 }

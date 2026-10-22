@@ -255,6 +255,7 @@ CREATE TABLE IF NOT EXISTS school_years (
     start_date  DATE        NOT NULL,
     end_date    DATE        NOT NULL,
     holidays    DATE[]      NOT NULL DEFAULT '{}',
+    no_class_days DATE[]  NOT NULL DEFAULT '{}',
     closed      BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -406,6 +407,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS photo BYTEA;
 
 -- Auth revocation: bumping invalidates previously minted bearers.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version BIGINT NOT NULL DEFAULT 0;
+
+-- Manual no-class days (locally moved holidays, emergencies).
+ALTER TABLE school_years ADD COLUMN IF NOT EXISTS no_class_days DATE[] NOT NULL DEFAULT '{}';
 
 -- Refresh rotation: only hashes persist, never usable bearers. Revoked
 -- rows stay until expiry for reuse detection, then DeleteExpired purges.

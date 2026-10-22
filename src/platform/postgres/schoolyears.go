@@ -23,21 +23,22 @@ func NewSchoolYearsStore(db *DB) *SchoolYearsStore { return &SchoolYearsStore{db
 var _ schoolyears.Store = (*SchoolYearsStore)(nil)
 
 // schoolYearColumns is the full column list used by every year SELECT.
-const schoolYearColumns = `id, year, periods, start_date, end_date, holidays, closed`
+const schoolYearColumns = `id, year, periods, start_date, end_date, holidays, no_class_days, closed`
 
 // scanSchoolYear maps the current row (in schoolYearColumns order) onto
 // a SchoolYear.
 func scanSchoolYear(scan func(dest ...any) error) (schoolyears.SchoolYear, error) {
 	var y schoolyears.SchoolYear
 	var start, end time.Time
-	var holidays []time.Time
-	err := scan(&y.ID, &y.Year, &y.Periods, &start, &end, &holidays, &y.Closed)
+	var holidays, noClass []time.Time
+	err := scan(&y.ID, &y.Year, &y.Periods, &start, &end, &holidays, &noClass, &y.Closed)
 	if err != nil {
 		return schoolyears.SchoolYear{}, err
 	}
 	y.StartDate = start
 	y.EndDate = end
 	y.Holidays = append([]time.Time(nil), holidays...)
+	y.NoClassDays = append([]time.Time(nil), noClass...)
 	return y, nil
 }
 
@@ -47,10 +48,14 @@ func schoolYearArgs(y schoolyears.SchoolYear) []any {
 	if holidays == nil {
 		holidays = []time.Time{}
 	}
+	noClass := append([]time.Time(nil), y.NoClassDays...)
+	if noClass == nil {
+		noClass = []time.Time{}
+	}
 	return []any{
 		y.ID, y.Year, y.Periods,
 		y.StartDate.Format("2006-01-02"), y.EndDate.Format("2006-01-02"),
-		holidays, y.Closed,
+		holidays, noClass, y.Closed,
 	}
 }
 
@@ -102,8 +107,8 @@ func (s *SchoolYearsStore) Create(ctx context.Context, y schoolyears.SchoolYear)
 	}
 	defer tx.Rollback(ctx)
 	row := tx.QueryRow(ctx, `
-		INSERT INTO school_years (id, year, periods, start_date, end_date, holidays, closed)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO school_years (id, year, periods, start_date, end_date, holidays, no_class_days, closed)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+schoolYearColumns,
 		schoolYearArgs(y)...)
 	out, err := scanSchoolYear(row.Scan)
@@ -197,7 +202,7 @@ func (s *SchoolYearsStore) Update(ctx context.Context, y schoolyears.SchoolYear)
 	row := tx.QueryRow(ctx, `
 		UPDATE school_years
 		SET year = $2, periods = $3, start_date = $4, end_date = $5,
-			holidays = $6, closed = $7, updated_at = now()
+			holidays = $6, no_class_days = $7, closed = $8, updated_at = now()
 		WHERE id = $1
 		RETURNING `+schoolYearColumns,
 		schoolYearArgs(y)...)

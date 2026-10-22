@@ -646,6 +646,8 @@ type teacherRollRow struct {
 // handleTeacherRoll returns the teachers expected on a day (from the
 // weekly schedule) with their recorded marks, if any. Unmarked teachers
 // carry an empty status: the roll screen shows nothing pre-selected.
+// On non-school days (festivos, marked no-class days) nobody is expected
+// — recorded marks stay visible, and explicit rolls remain allowed.
 func handleTeacherRoll(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		day, err := parseDayParam(r.URL.Query().Get("date"))
@@ -657,6 +659,11 @@ func handleTeacherRoll(deps Dependencies) http.HandlerFunc {
 		if err != nil {
 			WriteError(w, r, err)
 			return
+		}
+		if deps.Years != nil {
+			if y, err := deps.Years.ByYear(r.Context(), day.Year()); err == nil && !y.IsSchoolDay(day) {
+				expected = nil
+			}
 		}
 		marks, err := deps.TAttendance.Day(r.Context(), day)
 		if err != nil {

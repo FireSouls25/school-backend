@@ -49,6 +49,11 @@ type SchoolYear struct {
 	// Holidays lists non-school days (festivos) within the range,
 	// date-only, sorted, deduplicated.
 	Holidays []time.Time
+	// NoClassDays lists manually marked days without classes (locally
+	// moved holidays, emergencies): non-school days that are not
+	// official festivos. Date-only, sorted, deduplicated; may overlap
+	// Holidays (both badges show).
+	NoClassDays []time.Time
 	// Closed reports whether the year is finished. Closed years accept
 	// no new enrollments, schedules or sessions; promotion closes a year.
 	Closed bool
@@ -116,18 +121,35 @@ func validateRanges(ranges []PeriodRange, periods int, start, end time.Time) err
 	return nil
 }
 
+// DayKind reports whether t is an official holiday and/or a manually
+// marked no-class day. Both can hold at once (locally moved festivos).
+func (y SchoolYear) DayKind(t time.Time) (holiday, noClass bool) {
+	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	for _, h := range y.Holidays {
+		if d.Equal(h) {
+			holiday = true
+			break
+		}
+	}
+	for _, h := range y.NoClassDays {
+		if d.Equal(h) {
+			noClass = true
+			break
+		}
+	}
+	return holiday, noClass
+}
+
 // IsSchoolDay reports whether t is a school day in the year: inside the
-// date range and not a holiday. Weekday filtering composes on top using
-// schedule entries, since some schools teach on Saturdays.
+// date range and neither a holiday nor a marked no-class day. Weekday
+// filtering composes on top using schedule entries, since some schools
+// teach on Saturdays. Explicit roll calls stay allowed on non-school
+// days: the call is deliberate, so it records and counts.
 func (y SchoolYear) IsSchoolDay(t time.Time) bool {
 	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 	if y.StartDate.IsZero() || y.EndDate.IsZero() || !containsDate(d, y.StartDate, y.EndDate) {
 		return false
 	}
-	for _, h := range y.Holidays {
-		if d.Equal(h) {
-			return false
-		}
-	}
-	return true
+	holiday, noClass := y.DayKind(d)
+	return !holiday && !noClass
 }

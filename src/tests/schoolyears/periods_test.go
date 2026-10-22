@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"grade/src/core/schoolyears"
 )
@@ -90,5 +91,42 @@ func TestCloseIsIdempotent(t *testing.T) {
 	}
 	if _, err := svc.Close(ctx, "00000000-0000-4000-8000-000000000000"); !errors.Is(err, schoolyears.ErrNotFound) {
 		t.Fatalf("unknown Close error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestNoClassDaysValidationAndKind(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	y := rangedYear()
+	y.Year = 2031
+	y.NoClassDays = []time.Time{date(2026, 5, 4)}
+	if _, err := svc.Create(ctx, y); err != nil {
+		t.Fatalf("Create with no-class day: %v", err)
+	}
+	holiday, noClass := y.DayKind(date(2026, 5, 4))
+	if holiday || !noClass {
+		t.Fatalf("DayKind = %v,%v; want false,true", holiday, noClass)
+	}
+	if y.IsSchoolDay(date(2026, 5, 4)) {
+		t.Fatal("IsSchoolDay true on no-class day, want false")
+	}
+	// Overlap with an official holiday reports both.
+	y2 := rangedYear()
+	y2.Year = 2032
+	y2.Holidays = []time.Time{date(2026, 5, 4)}
+	y2.NoClassDays = []time.Time{date(2026, 5, 4)}
+	if _, err := svc.Create(ctx, y2); err != nil {
+		t.Fatalf("Create with overlap: %v", err)
+	}
+	if h, n := y2.DayKind(date(2026, 5, 4)); !h || !n {
+		t.Fatalf("DayKind overlap = %v,%v; want true,true", h, n)
+	}
+	// Out-of-range no-class day fails like a bad holiday.
+	bad := rangedYear()
+	bad.Year = 2033
+	bad.NoClassDays = []time.Time{date(2027, 1, 5)}
+	if _, err := svc.Create(ctx, bad); !errors.Is(err, schoolyears.ErrInvalidHoliday) {
+		t.Fatalf("Create error = %v, want ErrInvalidHoliday", err)
 	}
 }

@@ -84,6 +84,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/classes` | `manage-users` | admin only |
 | `GET /v1/schoolyears` | `view-class-statistics` | teacher, admin |
 | `GET /v1/schoolyears/{id}` | `view-class-statistics` | teacher, admin |
+| `GET /v1/holidays?year=AAAA` | `view-class-statistics` | teacher, admin |
 | `POST /v1/schoolyears` | `manage-users` | admin only |
 | `PUT /v1/schoolyears/{id}` | `manage-users` | admin only |
 | `POST /v1/schoolyears/{id}/close` | `manage-users` | admin only |
@@ -190,10 +191,21 @@ ever log in. Frontend flow in `docs/users.md`.
   `schoolyears.err_invalid_period_ranges`). `201` returns the stored year.
 - `PUT /v1/schoolyears/{id}` (`manage-users`) replaces the year. Once it
   grew class-groups, periods, ranges and dates freeze
-  (`schoolyears.err_year_started`); only holidays still move. Closed
-  years accept no edits (`schoolyears.err_year_closed`).
+  (`schoolyears.err_year_started`); only holidays and no-class days still
+  move. Closed years accept no edits (`schoolyears.err_year_closed`).
 - `POST /v1/schoolyears/{id}/close` (`manage-users`) finishes the year
   (idempotent): afterwards it takes no enrollments and no edits.
+- `GET /v1/holidays?year=AAAA` (`view-class-statistics`) returns the
+  official Colombian holidays (Ley 51 de 1983) as `{"year","holidays"}`
+  with `YYYY-MM-DD` days: the editable seed for the year form.
+- `GET /v1/teachers/roll?date=` returns nobody expected on non-school
+  days (festivos, marked no-class days); recorded marks stay visible and
+  explicit rolls remain allowed: the call is deliberate, so it records.
+- `GET /v1/schoolyears` entries carry `holidays` plus `noClassDays`
+  (manually marked days without classes: locally moved holidays,
+  emergencies). Both are date-only, sorted, deduplicated, inside the
+  range; overlap is allowed and both badges show. `IsSchoolDay` is false
+  for either; explicit roll calls always record.
 
 ## Enrollments and promotions (admin only)
 

@@ -27,6 +27,7 @@ type yearRequest struct {
 	StartDate    time.Time            `json:"startDate"`
 	EndDate      time.Time            `json:"endDate"`
 	Holidays     []time.Time          `json:"holidays"`
+	NoClassDays  []time.Time          `json:"noClassDays"`
 	PeriodRanges []periodRangeRequest `json:"periodRanges"`
 }
 
@@ -42,6 +43,7 @@ func (b yearRequest) toYear(id string) schoolyears.SchoolYear {
 		StartDate:    b.StartDate,
 		EndDate:      b.EndDate,
 		Holidays:     append([]time.Time(nil), b.Holidays...),
+		NoClassDays:  append([]time.Time(nil), b.NoClassDays...),
 		PeriodRanges: ranges,
 	}
 }
@@ -181,4 +183,22 @@ func yearQueryYear(r *http.Request) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// officialHolidays are the Colombian public holidays (Ley 51 de 1983)
+// the year form can preload as an editable seed.
+func handleHolidays(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		year, ok := yearQueryYear(r)
+		if !ok {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		days := schoolyears.ColombianHolidays(year)
+		out := make([]string, 0, len(days))
+		for _, d := range days {
+			out = append(out, d.Format("2006-01-02"))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"year": year, "holidays": out})
+	}
 }
