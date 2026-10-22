@@ -69,6 +69,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/logout` | refresh token, or access bearer for `all:true` | session holder |
 | `POST /v1/recover/request` | public (throttled 5/min) | anyone (always 204, no enumeration) |
 | `POST /v1/recover/reset` | reset token (throttled 5/min) | password-forgotten holder |
+| `GET /v1/teachers/{id}/account` | `manage-users` | admin only (login or honest 404) |
 | `PUT /v1/users/{id}/active` | `manage-users` | admin only (lockout response) |
 | `GET /v1/me` | authenticated only | anyone with an id |
 | `PUT /v1/me/password` | authenticated only | anyone with an account row |

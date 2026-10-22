@@ -1603,6 +1603,51 @@ func handleCreateUser(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// teacherAccount is the login behind a teacher profile: enough to show
+// state and flip access, never the password hash.
+type teacherAccount struct {
+	ID       string `json:"ID"`
+	Username string `json:"Username"`
+	Email    string `json:"Email"`
+	Active   bool   `json:"Active"`
+}
+
+// handleGetTeacherAccount resolves the login linked to a teacher profile.
+// Teachers without an account answer 404 (honest empty, the admin creates
+// it from the list); when several logins share the profile, the first by
+// username wins and stays stable across stores.
+func handleGetTeacherAccount(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(chi.URLParam(r, "id"))
+		if id == "" {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		if deps.Teachers == nil || deps.Users == nil {
+			WriteError(w, r, errInternal)
+			return
+		}
+		if _, err := deps.Teachers.ByID(r.Context(), id); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		logins, err := deps.Users.ForTeacher(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if len(logins) == 0 {
+			WriteError(w, r, users.ErrNotFound)
+			return
+		}
+		sort.Slice(logins, func(i, j int) bool { return logins[i].Username < logins[j].Username })
+		u := logins[0]
+		writeJSON(w, http.StatusOK, teacherAccount{
+			ID: u.ID, Username: u.Username, Email: u.Email, Active: u.Active,
+		})
+	}
+}
+
 // roleAssignment is the body for granting a role to a subject.
 type roleAssignment struct {
 	SubjectID string `json:"subjectID"`

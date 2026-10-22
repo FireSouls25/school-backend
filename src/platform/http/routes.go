@@ -147,6 +147,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 		r.Put("/me/photo", handlePutMyPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
+		// Lockout UI: which login (if any) fronts a teacher profile.
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Get("/teachers/{id}/account", handleGetTeacherAccount(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Put("/teachers/{id}/photo", handlePutTeacherPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
