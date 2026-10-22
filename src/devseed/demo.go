@@ -158,11 +158,12 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 
 	start, end := date(year, 2, 2), date(year, 11, 27)
 	schoolYear, err := deps.Years.Create(ctx, schoolyears.SchoolYear{
-		Year:      year,
-		Periods:   3,
-		StartDate: start,
-		EndDate:   end,
-		Holidays:  holidaysWithin(year, start, end),
+		Year:         year,
+		Periods:      3,
+		StartDate:    start,
+		EndDate:      end,
+		Holidays:     holidaysWithin(year, start, end),
+		PeriodRanges: splitRange(start, end, 3),
 	})
 	if err != nil {
 		return sum, fmt.Errorf("devseed: school year: %w", err)
@@ -450,6 +451,25 @@ func birthYear(year, grade int) int {
 // calendar. ColombianHolidays returns the whole year (including 1 January
 // and the December feasts), which a February-to-November school year
 // cannot hold: the domain requires every holiday to be within the range.
+// splitRange cuts [start, end] into n even date ranges (last takes the
+// remainder): the demo periods, editable afterwards like any other year.
+func splitRange(start, end time.Time, n int) []schoolyears.PeriodRange {
+	total := int(end.Sub(start).Hours()/24) + 1
+	per := total / n
+	out := make([]schoolyears.PeriodRange, 0, n)
+	cursor := start
+	for i := 0; i < n; i++ {
+		s := cursor
+		e := cursor.AddDate(0, 0, per-1)
+		if i == n-1 || e.After(end) {
+			e = end
+		}
+		out = append(out, schoolyears.PeriodRange{Start: s, End: e})
+		cursor = e.AddDate(0, 0, 1)
+	}
+	return out
+}
+
 func holidaysWithin(year int, start, end time.Time) []time.Time {
 	all := schoolyears.ColombianHolidays(year)
 	out := make([]time.Time, 0, len(all))
