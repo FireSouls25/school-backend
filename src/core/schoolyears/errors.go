@@ -34,4 +34,12 @@ var (
 	ErrDuplicateYear = newError("schoolyears.err_duplicate_year", "schoolyears: duplicate year")
 	// ErrHasClasses is returned when deleting a year that keeps class-groups.
 	ErrHasClasses = newError("schoolyears.err_has_classes", "schoolyears: year has classes")
+	// ErrInvalidPeriodRanges is returned when period date ranges are
+	// missing, miscounted, out of the year range, unordered or overlapping.
+	ErrInvalidPeriodRanges = newError("schoolyears.err_invalid_period_ranges", "schoolyears: invalid period ranges")
+	// ErrYearStarted is returned when periods or dates change after the
+	// year grew class-groups: the calendar is frozen, only holidays move.
+	ErrYearStarted = newError("schoolyears.err_year_started", "schoolyears: year already started")
+	// ErrYearClosed is returned when any write targets a closed year.
+	ErrYearClosed = newError("schoolyears.err_year_closed", "schoolyears: year is closed")
 )

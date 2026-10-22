@@ -82,6 +82,11 @@ Routes declare one required permission, enforced by
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
 | `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
 | `POST /v1/classes` | `manage-users` | admin only |
+| `GET /v1/schoolyears` | `view-class-statistics` | teacher, admin |
+| `GET /v1/schoolyears/{id}` | `view-class-statistics` | teacher, admin |
+| `POST /v1/schoolyears` | `manage-users` | admin only |
+| `PUT /v1/schoolyears/{id}` | `manage-users` | admin only |
+| `POST /v1/schoolyears/{id}/close` | `manage-users` | admin only |
 | `GET /v1/classes/{groupID}/roster` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
@@ -166,6 +171,24 @@ account `{ID, Username, Email, Active, Roles}`. The optional `role`
 additionally requires `manage-roles`. Teachers get their account (and
 role) from this endpoint when the admin creates their profile; they only
 ever log in. Frontend flow in `docs/users.md`.
+
+## School years (teacher reads, admin writes)
+
+- `GET /v1/schoolyears` (`view-class-statistics`) lists every year with
+  its dated periods, newest first — the admin year picker and the
+  "suggest last period count" default read it.
+- `GET /v1/schoolyears/{id}` (`view-class-statistics`) returns one year.
+- `POST /v1/schoolyears` (`manage-users`) creates the year: `year`,
+  `periods` (1–6), `startDate`/`endDate` (RFC3339), `holidays`
+  and `periodRanges` (one `{start,end}` per period, in range, ordered,
+  non-overlapping; empty ranges fail with
+  `schoolyears.err_invalid_period_ranges`). `201` returns the stored year.
+- `PUT /v1/schoolyears/{id}` (`manage-users`) replaces the year. Once it
+  grew class-groups, periods, ranges and dates freeze
+  (`schoolyears.err_year_started`); only holidays still move. Closed
+  years accept no edits (`schoolyears.err_year_closed`).
+- `POST /v1/schoolyears/{id}/close` (`manage-users`) finishes the year
+  (idempotent): afterwards it takes no enrollments and no edits.
 
 ## Class groups, rosters and schedules (teacher + admin)
 

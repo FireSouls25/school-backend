@@ -10,9 +10,15 @@ later phases.
 ## Overview
 
 - **SchoolYear**: one academic year. Calendar year (unique), customizable
-  period count (1–6, usually 3), start/end dates, Colombian holidays
-  (date-only, sorted, deduplicated, all within range) and a `Closed` flag.
-  Closing a year freezes it: no new enrollments, schedules or sessions.
+  period count (1–6, usually 4) with one dated range per period
+  (`PeriodRanges`, ordered and non-overlapping inside the year range),
+  start/end dates, Colombian holidays (date-only, sorted, deduplicated,
+  all within range) and a `Closed` flag. Once a year grows class-groups,
+  periods, ranges and dates freeze (only holidays still move);
+  `Close` finishes it: no edits at all (the enrollment block lands
+  with the enrollments HTTP endpoints).
+  New years always date their periods; `List` newest-first feeds the
+  "suggest last count" default in the admin UI.
 - **ClassGroup**: one classroom within one year: grade (1–11) + group
   number. The display label (`Label()`, e.g. `"7-1"`) derives from both,
   never stored. Groups are per-year rows: `7-1/2026` and `7-1/2025` are
@@ -206,6 +212,9 @@ school_years(id uuid PK, year UNIQUE, periods CHECK 1..6,
              start_date DATE NOT NULL, end_date DATE NOT NULL CHECK start < end,
              holidays DATE[] NOT NULL DEFAULT '{}', closed,
              created_at, updated_at)
+school_year_periods(year_id uuid FK->school_years CASCADE, n,
+                    start_date DATE NOT NULL, end_date DATE NOT NULL,
+                    PK(year_id, n))  -- one row per period, atomic with the year
 class_groups(id uuid PK,
              school_year_id uuid FK->school_years ON DELETE RESTRICT,
              grade CHECK 1..11, group_no CHECK >= 1,
@@ -259,6 +268,7 @@ explicitly once empty.
 | Code | HTTP |
 |---|---|
 | `schoolyears.err_not_found` | 404 |
+| `schoolyears.err_invalid_period_ranges` / `err_year_started` / `err_year_closed` | 400 |
 | `schoolyears.err_invalid_id` / `err_invalid_year` / `err_invalid_periods` / `err_invalid_dates` / `err_invalid_holiday` / `err_duplicate_year` / `err_has_classes` | 400 |
 | `classes.err_not_found` | 404 |
 | `classes.err_invalid_id` / `err_invalid_school_year` / `err_invalid_grade` / `err_invalid_group` / `err_duplicate_class` / `err_has_enrollments` | 400 |
@@ -275,9 +285,14 @@ All messages are localized through `src/platform/i18n/catalogs/es.json`
 
 ## What's next (later phases)
 
-- **Promotion flow**: suggestions + per-student destination choice write
-  next-year enrollments, update `Student.ClassID` and record `Promotion`
-  rows; graduating from grade 11 calls `Student.Graduate`.
+- **Years HTTP**: `GET /v1/schoolyears`, `GET /v1/schoolyears/{id}`,
+  `POST /v1/schoolyears`, `PUT /v1/schoolyears/{id}` (holidays-only once
+  started), `POST /v1/schoolyears/{id}/close`. Reads are teacher-visible
+  (period resolution); writes are admin-only.
+- **Promotion flow**: per-student destination choice (`POST
+  /v1/promotions`) writes next-year enrollments and records `Promotion`
+  rows; graduating from grade 11 calls `students.Graduate`, repeating
+  bumps `RepeatCount`.
 - **Graphs**: chart-ready endpoints over the statistics reports.
 - **Remaining roadmap**: `auth` (login tokens on top of `users`), WhatsApp `notifications`, HTTP
   endpoints with role gating, audit logging.

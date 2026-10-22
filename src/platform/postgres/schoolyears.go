@@ -54,9 +54,54 @@ func schoolYearArgs(y schoolyears.SchoolYear) []any {
 	}
 }
 
-// Create implements schoolyears.Store.
+// saveRanges replaces every dated period of a year inside tx.
+func saveRanges(ctx context.Context, tx pgx.Tx, y schoolyears.SchoolYear) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM school_year_periods WHERE year_id = $1`, y.ID); err != nil {
+		return fmt.Errorf("postgres: replace school year periods: %w", err)
+	}
+	for i, r := range y.PeriodRanges {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO school_year_periods (year_id, n, start_date, end_date)
+			VALUES ($1, $2, $3, $4)`,
+			y.ID, i+1, r.Start.Format("2006-01-02"), r.End.Format("2006-01-02")); err != nil {
+			return fmt.Errorf("postgres: save school year period: %w", err)
+		}
+	}
+	return nil
+}
+
+// loadRanges attaches dated periods (ordered) to y.
+func (s *SchoolYearsStore) loadRanges(ctx context.Context, y *schoolyears.SchoolYear) error {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT start_date, end_date FROM school_year_periods
+		WHERE year_id = $1 ORDER BY n`, y.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: list school year periods: %w", err)
+	}
+	defer rows.Close()
+	ranges := make([]schoolyears.PeriodRange, 0)
+	for rows.Next() {
+		var start, end time.Time
+		if err := rows.Scan(&start, &end); err != nil {
+			return fmt.Errorf("postgres: scan school year period: %w", err)
+		}
+		ranges = append(ranges, schoolyears.PeriodRange{Start: start, End: end})
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("postgres: list school year periods: %w", err)
+	}
+	y.PeriodRanges = ranges
+	return nil
+}
+
+// Create implements schoolyears.Store. Year and periods persist atomically.
 func (s *SchoolYearsStore) Create(ctx context.Context, y schoolyears.SchoolYear) (schoolyears.SchoolYear, error) {
-	row := s.db.pool.QueryRow(ctx, `
+	tx, err := s.db.pool.Begin(ctx)
+	if err != nil {
+		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: begin school year: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	row := tx.QueryRow(ctx, `
 		INSERT INTO school_years (id, year, periods, start_date, end_date, holidays, closed)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+schoolYearColumns,
@@ -68,6 +113,13 @@ func (s *SchoolYearsStore) Create(ctx context.Context, y schoolyears.SchoolYear)
 		}
 		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: create school year: %w", err)
 	}
+	if err := saveRanges(ctx, tx, y); err != nil {
+		return schoolyears.SchoolYear{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: commit school year: %w", err)
+	}
+	out.PeriodRanges = append([]schoolyears.PeriodRange(nil), y.PeriodRanges...)
 	return out, nil
 }
 
@@ -82,6 +134,9 @@ func (s *SchoolYearsStore) ByID(ctx context.Context, id string) (schoolyears.Sch
 	if err != nil {
 		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: get school year: %w", err)
 	}
+	if err := s.loadRanges(ctx, &out); err != nil {
+		return schoolyears.SchoolYear{}, err
+	}
 	return out, nil
 }
 
@@ -95,6 +150,9 @@ func (s *SchoolYearsStore) ByYear(ctx context.Context, year int) (schoolyears.Sc
 	}
 	if err != nil {
 		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: get school year: %w", err)
+	}
+	if err := s.loadRanges(ctx, &out); err != nil {
+		return schoolyears.SchoolYear{}, err
 	}
 	return out, nil
 }
@@ -118,12 +176,25 @@ func (s *SchoolYearsStore) List(ctx context.Context) ([]schoolyears.SchoolYear, 
 		}
 		out = append(out, y)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if err := s.loadRanges(ctx, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
-// Update implements schoolyears.Store.
+// Update implements schoolyears.Store. Year and periods persist atomically.
 func (s *SchoolYearsStore) Update(ctx context.Context, y schoolyears.SchoolYear) (schoolyears.SchoolYear, error) {
-	row := s.db.pool.QueryRow(ctx, `
+	tx, err := s.db.pool.Begin(ctx)
+	if err != nil {
+		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: begin school year: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	row := tx.QueryRow(ctx, `
 		UPDATE school_years
 		SET year = $2, periods = $3, start_date = $4, end_date = $5,
 			holidays = $6, closed = $7, updated_at = now()
@@ -140,6 +211,13 @@ func (s *SchoolYearsStore) Update(ctx context.Context, y schoolyears.SchoolYear)
 		}
 		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: update school year: %w", err)
 	}
+	if err := saveRanges(ctx, tx, y); err != nil {
+		return schoolyears.SchoolYear{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return schoolyears.SchoolYear{}, fmt.Errorf("postgres: commit school year: %w", err)
+	}
+	out.PeriodRanges = append([]schoolyears.PeriodRange(nil), y.PeriodRanges...)
 	return out, nil
 }
 

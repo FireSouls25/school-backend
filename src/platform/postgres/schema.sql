@@ -262,6 +262,16 @@ CREATE TABLE IF NOT EXISTS school_years (
     CHECK (start_date < end_date)
 );
 
+-- Dated periods of a school year: one row per period (1-based n).
+-- Periods move with the year: deleting it cascades.
+CREATE TABLE IF NOT EXISTS school_year_periods (
+    year_id    UUID NOT NULL REFERENCES school_years (id) ON DELETE CASCADE,
+    n          INTEGER NOT NULL,
+    start_date DATE NOT NULL,
+    end_date   DATE NOT NULL,
+    PRIMARY KEY (year_id, n)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_school_years_year ON school_years (year);
 
 CREATE TABLE IF NOT EXISTS class_groups (

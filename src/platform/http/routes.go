@@ -89,6 +89,17 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/classes", handleListClasses(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/classes", handleCreateClass(deps))
+		// School years: dated periods, frozen calendars, close.
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/schoolyears", handleListYears(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/schoolyears/{id}", handleGetYear(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/schoolyears", handleCreateYear(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Put("/schoolyears/{id}", handleUpdateYear(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/schoolyears/{id}/close", handleCloseYear(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/classes/{groupID}/roster", handleClassRoster(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).

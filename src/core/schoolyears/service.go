@@ -72,6 +72,24 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
+// Close finishes a school year: no new enrollments, schedules or
+// sessions afterwards, and no edits at all. Closing twice is a no-op
+// returning the stored year.
+func (s *Service) Close(ctx context.Context, id string) (SchoolYear, error) {
+	if err := validateID(id); err != nil {
+		return SchoolYear{}, err
+	}
+	y, err := s.store.ByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return SchoolYear{}, err
+	}
+	if y.Closed {
+		return y, nil
+	}
+	y.Closed = true
+	return s.store.Update(ctx, y)
+}
+
 // normalize truncates dates to UTC midnight and canonicalizes holidays.
 func normalize(y SchoolYear) SchoolYear {
 	toDate := func(t time.Time) time.Time {
@@ -83,6 +101,7 @@ func normalize(y SchoolYear) SchoolYear {
 	y.StartDate = toDate(y.StartDate)
 	y.EndDate = toDate(y.EndDate)
 	y.Holidays = normalizeHolidays(y.Holidays)
+	y.PeriodRanges = normalizeRanges(y.PeriodRanges)
 	return y
 }
 
@@ -101,6 +120,13 @@ func validate(y SchoolYear) error {
 	}
 	if y.StartDate.IsZero() || y.EndDate.IsZero() || !y.StartDate.Before(y.EndDate) {
 		return ErrInvalidDates
+	}
+	// Empty ranges mean a legacy year without dated periods; new years
+	// always carry one range per period (enforced at the HTTP layer).
+	if len(y.PeriodRanges) > 0 {
+		if err := validateRanges(y.PeriodRanges, y.Periods, y.StartDate, y.EndDate); err != nil {
+			return err
+		}
 	}
 	for _, h := range y.Holidays {
 		if !containsDate(h, y.StartDate, y.EndDate) {

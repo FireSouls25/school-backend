@@ -19,9 +19,10 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{years: make(map[string]SchoolYear)}
 }
 
-// clone returns a copy of y with its own holidays slice.
+// clone returns a copy of y with its own holidays and ranges slices.
 func clone(y SchoolYear) SchoolYear {
 	y.Holidays = append([]time.Time(nil), y.Holidays...)
+	y.PeriodRanges = append([]PeriodRange(nil), y.PeriodRanges...)
 	return y
 }
 

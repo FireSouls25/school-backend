@@ -20,6 +20,17 @@ const MinPeriods = 1
 
 const MaxPeriods = 6
 
+// PeriodRange bounds one academic period (evaluative term): its start
+// and end dates, date-only UTC. Ranges must sit inside the school year,
+// run in order and never overlap; exact borders belong to a single
+// period, so the next range must start strictly after the previous end.
+type PeriodRange struct {
+	// Start is the first day of the period.
+	Start time.Time
+	// End is the last day of the period.
+	End time.Time
+}
+
 // SchoolYear is one academic year.
 type SchoolYear struct {
 	// ID is the unique, immutable UUID of the school year.
@@ -28,6 +39,9 @@ type SchoolYear struct {
 	Year int
 	// Periods is how many academic periods the year has.
 	Periods int
+	// PeriodRanges dates each period. Empty means a legacy year without
+	// dated periods; new years always carry one range per period.
+	PeriodRanges []PeriodRange
 	// StartDate is the first school day.
 	StartDate time.Time
 	// EndDate is the last school day.
@@ -60,6 +74,46 @@ func normalizeHolidays(in []time.Time) []time.Time {
 // containsDate reports whether d (date-only) falls within [start, end].
 func containsDate(d, start, end time.Time) bool {
 	return !d.Before(start) && !d.After(end)
+}
+
+// normalizeRanges truncates every range to date-only UTC.
+func normalizeRanges(in []PeriodRange) []PeriodRange {
+	out := make([]PeriodRange, 0, len(in))
+	for _, r := range in {
+		out = append(out, PeriodRange{
+			Start: toDate(r.Start),
+			End:   toDate(r.End),
+		})
+	}
+	return out
+}
+
+// toDate truncates t to UTC midnight, preserving zero.
+func toDate(t time.Time) time.Time {
+	if t.IsZero() {
+		return t
+	}
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// validateRanges checks dated periods against the year range: one range
+// per period, each inside [start, end], ordered and non-overlapping.
+func validateRanges(ranges []PeriodRange, periods int, start, end time.Time) error {
+	if len(ranges) != periods {
+		return ErrInvalidPeriodRanges
+	}
+	for i, r := range ranges {
+		if r.Start.IsZero() || r.End.IsZero() || !r.Start.Before(r.End) {
+			return ErrInvalidPeriodRanges
+		}
+		if !containsDate(r.Start, start, end) || !containsDate(r.End, start, end) {
+			return ErrInvalidPeriodRanges
+		}
+		if i > 0 && !r.Start.After(ranges[i-1].End) {
+			return ErrInvalidPeriodRanges
+		}
+	}
+	return nil
 }
 
 // IsSchoolDay reports whether t is a school day in the year: inside the
