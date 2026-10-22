@@ -87,8 +87,9 @@ so feature handlers depend on the port, never on the concrete store.
 
 `subjectID` is intentionally opaque: roles does not know about users. The
 users capability produces real identifiers (`User.ID` is the subject) and
-verifies passwords; the token scheme that replaces the `X-Subject-ID`
-header is still pending (see `docs/users.md`).
+verifies passwords; the token scheme (`src/core/auth`: HS256 access +
+rotating refresh, version-based revocation) replaces the `X-Subject-ID`
+header everywhere except development (see `docs/api.md`).
 
 ## Users (`src/core/users`)
 
@@ -305,9 +306,8 @@ header is still pending (see `docs/users.md`).
 
 - Versioned routes under `/v1` (`/healthz` stays public). Handlers depend
   on core services; only `cmd/server` builds the `Dependencies`.
-- Identity is a UUID `X-Subject-ID` header until the `auth` token scheme
-  lands (the `users` table already stores real accounts; see
-  `docs/users.md`)
+- Identity is `Authorization: Bearer <token>` (HS256 access, 15m) with
+  version-checked revocation; `X-Subject-ID` survives only in development
   (missing/invalid → `401 http.err_unauthorized`). `RequirePermission`
   enforces one permission per route against `roles.Authorizer`
   (denied → `403 http.err_forbidden`); self-scoped student reads also
@@ -330,9 +330,8 @@ header is still pending (see `docs/users.md`).
 - Error responses use a fixed envelope: `{"error": {"code", "message"}}`.
   `code` is the stable key; `message` is localized. Status codes are mapped
   from known codes in `src/platform/http/respond.go`.
-- A per-user language preference is not implemented yet; it belongs to
-  the future `auth` phase. Non-HTTP consumers (WhatsApp notifications)
-  will pass an explicit language.
+- A per-user language preference is not implemented yet. Non-HTTP
+  consumers (WhatsApp notifications) will pass an explicit language.
 
 ## Colombian data law (Ley 1581 de 2012)
 
@@ -347,7 +346,6 @@ consequences:
 
 ## Roadmap (future `src/core/` capabilities)
 
-- `auth` - login/logout/refresh tokens on top of `users`, per-user language pref
 - `classes` - grades 1-11, groups (9-1, 9-2, ...), years, periods
 - `notifications` - WhatsApp delivery to guardians
 - `statistics` - per-class and per-student aggregations

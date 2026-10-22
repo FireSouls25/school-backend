@@ -94,6 +94,11 @@ cp .env.example .env
 | `BOOTSTRAP_ADMIN_EMAIL` | — | Optional email for that account. |
 | `BOOTSTRAP_ADMIN_PASSWORD` | — | Password for that account. |
 | `BOOTSTRAP_ADMIN_PASSWORD_FILE` | — | Read the password from a file instead. Wins over the value above. |
+| `AUTH_SECRET` | random per boot | Signs login tokens. Required in production. |
+| `AUTH_ACCESS_TTL` | `15m` | Access bearer lifetime (`AUTH_TTL` legacy fallback). |
+| `AUTH_REFRESH_TTL` | `168h` | Rotation token lifetime. |
+| `AUTH_RECOVERY_TTL` | `1h` | Password-reset token lifetime. |
+| `TRUSTED_PROXIES` | — | IPs/CIDRs whose `X-Forwarded-For` the throttle trusts. |
 | `SEED_ADMINS`, `SEED_TEACHERS` | — | Legacy: grant roles to raw UUIDs (see below). |
 
 A malformed value is a startup error, never a silent default: an unknown

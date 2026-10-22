@@ -2,9 +2,9 @@
 
 This document covers the `users` capability: the real login-account table
 with username and bcrypt password hash, plus its PostgreSQL persistence.
-Token/session endpoints (`POST /v1/login`, …) are the next phase; this
-phase ships storage, password policy and server-side verification only,
-so no HTTP contract changes yet.
+Token/session endpoints live in `src/core/auth` and `src/platform/http`
+(login, refresh rotation, recovery, lockout); the full HTTP contract is
+in `docs/api.md`.
 
 ## Overview
 
