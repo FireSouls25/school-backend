@@ -145,9 +145,22 @@ func handleUpdateYear(deps Dependencies) http.HandlerFunc {
 				WriteError(w, r, err)
 				return
 			}
-			if len(groups) > 0 && frozenFields(stored, next) {
-				WriteError(w, r, schoolyears.ErrYearStarted)
-				return
+			if len(groups) > 0 {
+				// Completing empty ranges is allowed once: legacy years
+				// gain their dated periods; changing them afterwards is
+				// frozen like the rest of the calendar.
+				completing := len(stored.PeriodRanges) == 0 && len(next.PeriodRanges) > 0
+				if completing {
+					bare := stored
+					bare.PeriodRanges = next.PeriodRanges
+					if frozenFields(bare, next) {
+						WriteError(w, r, schoolyears.ErrYearStarted)
+						return
+					}
+				} else if frozenFields(stored, next) {
+					WriteError(w, r, schoolyears.ErrYearStarted)
+					return
+				}
 			}
 		}
 		updated, err := deps.Years.Update(r.Context(), next)

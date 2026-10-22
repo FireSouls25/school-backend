@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"grade/src/core/classes"
 	"grade/src/core/roles"
@@ -142,5 +143,36 @@ func TestSchoolYearValidationCodes(t *testing.T) {
 				t.Errorf("code = %q, want %q", got, tc.code)
 			}
 		})
+	}
+}
+
+func TestCompleteEmptyRangesOnceStarted(t *testing.T) {
+	h, yearsSvc, classesSvc, _ := enrollStack(t)
+	ctx := context.Background()
+
+	// Legacy year without ranges, already started.
+	y, err := yearsSvc.Create(ctx, schoolyears.SchoolYear{
+		Year: 2026, Periods: 2,
+		StartDate: time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2026, 11, 27, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := classesSvc.Create(ctx, classes.ClassGroup{SchoolYearID: y.ID, Grade: 9, GroupNo: 1}); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+	fill := `{"year":2026,"periods":2,"startDate":"2026-02-02T00:00:00Z","endDate":"2026-11-27T00:00:00Z",` +
+		`"periodRanges":[{"start":"2026-02-02T00:00:00Z","end":"2026-06-12T00:00:00Z"},` +
+		`{"start":"2026-07-06T00:00:00Z","end":"2026-11-27T00:00:00Z"}]}`
+	if rec := doRequest(t, h, http.MethodPut, "/v1/schoolyears/"+y.ID, adminSubject, fill); rec.Code != http.StatusOK {
+		t.Fatalf("complete = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	// Changing them afterwards is frozen again.
+	swap := `{"year":2026,"periods":2,"startDate":"2026-02-02T00:00:00Z","endDate":"2026-11-27T00:00:00Z",` +
+		`"periodRanges":[{"start":"2026-02-02T00:00:00Z","end":"2026-05-30T00:00:00Z"},` +
+		`{"start":"2026-07-06T00:00:00Z","end":"2026-11-27T00:00:00Z"}]}`
+	if rec := doRequest(t, h, http.MethodPut, "/v1/schoolyears/"+y.ID, adminSubject, swap); rec.Code != http.StatusBadRequest {
+		t.Fatalf("re-change = %d, want 400", rec.Code)
 	}
 }

@@ -192,7 +192,8 @@ ever log in. Frontend flow in `docs/users.md`.
 - `PUT /v1/schoolyears/{id}` (`manage-users`) replaces the year. Once it
   grew class-groups, periods, ranges and dates freeze
   (`schoolyears.err_year_started`); only holidays and no-class days still
-  move. Closed years accept no edits (`schoolyears.err_year_closed`).
+  move — plus completing empty ranges once for legacy years. Closed
+  years accept no edits (`schoolyears.err_year_closed`).
 - `POST /v1/schoolyears/{id}/close` (`manage-users`) finishes the year
   (idempotent): afterwards it takes no enrollments and no edits.
 - `GET /v1/holidays?year=AAAA` (`view-class-statistics`) returns the
