@@ -24,4 +24,7 @@ type Store interface {
 	// PromotionsForStudent returns every promotion record of a student
 	// in decision order (oldest first).
 	PromotionsForStudent(ctx context.Context, studentID string) ([]Promotion, error)
+	// PromotionsForGroup returns every promotion record decided from a
+	// class-group in decision order (oldest first): the year-end review.
+	PromotionsForGroup(ctx context.Context, classGroupID string) ([]Promotion, error)
 }

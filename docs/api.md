@@ -87,6 +87,11 @@ Routes declare one required permission, enforced by
 | `POST /v1/schoolyears` | `manage-users` | admin only |
 | `PUT /v1/schoolyears/{id}` | `manage-users` | admin only |
 | `POST /v1/schoolyears/{id}/close` | `manage-users` | admin only |
+| `POST /v1/enrollments` | `manage-students` | admin only |
+| `GET /v1/enrollments?groupID=&studentID=` | `manage-students` | admin only (exactly one filter) |
+| `DELETE /v1/enrollments/{id}` | `manage-students` | admin only |
+| `POST /v1/promotions` | `manage-students` | admin only |
+| `GET /v1/promotions?studentID=&groupID=` | `manage-students` | admin only (exactly one filter) |
 | `GET /v1/classes/{groupID}/roster` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
@@ -189,6 +194,24 @@ ever log in. Frontend flow in `docs/users.md`.
   years accept no edits (`schoolyears.err_year_closed`).
 - `POST /v1/schoolyears/{id}/close` (`manage-users`) finishes the year
   (idempotent): afterwards it takes no enrollments and no edits.
+
+## Enrollments and promotions (admin only)
+
+- `POST /v1/enrollments {studentID, classGroupID}` (`manage-students`)
+  matriculates: unknown student/group answer `404`, duplicates `400`,
+  closed years `400 schoolyears.err_closed`. `201` returns the enrollment.
+- `GET /v1/enrollments` lists by `groupID` (roster source) or `studentID`
+  (placement history); exactly one filter is required.
+- `DELETE /v1/enrollments/{id}` removes one enrollment (corrections).
+- `POST /v1/promotions {studentID, fromGroupID, toGroupID?, decision}`
+  records the audited year-end decision and applies it: promote/repeat
+  enroll the destination (already-placed is tolerated, so retries never
+  fail), repeat bumps `RepeatCount`, graduate ends the lifecycle
+  (`students.Graduate`). Grade 11 only graduates or repeats; graduation
+  needs no destination and rejects one. `DecidedBy`/`DecidedAt` come from
+  the server. `201` returns the promotion record.
+- `GET /v1/promotions` lists by `studentID` (history) or `groupID`
+  (the year-end review: decided vs pending per salon).
 
 ## Class groups, rosters and schedules (teacher + admin)
 

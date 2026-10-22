@@ -85,6 +85,7 @@ EnrollmentsForStudent(ctx, studentID) ([]Enrollment, error)    // enrollment ord
 RemoveEnrollment(ctx, id string) error           // no-op when absent, corrections only
 RecordPromotion(ctx, Promotion) (Promotion, error) // append-only
 PromotionsForStudent(ctx, studentID) ([]Promotion, error)      // oldest first
+PromotionsForGroup(ctx, classGroupID) ([]Promotion, error)     // oldest first, year-end review
 
 // schedules.Store
 Create(ctx, Entry) (Entry, error)
@@ -285,14 +286,11 @@ All messages are localized through `src/platform/i18n/catalogs/es.json`
 
 ## What's next (later phases)
 
-- **Years HTTP**: `GET /v1/schoolyears`, `GET /v1/schoolyears/{id}`,
-  `POST /v1/schoolyears`, `PUT /v1/schoolyears/{id}` (holidays-only once
-  started), `POST /v1/schoolyears/{id}/close`. Reads are teacher-visible
-  (period resolution); writes are admin-only.
+- **Years**: done over HTTP (list/get/create/update-holidays/close).
 - **Promotion flow**: per-student destination choice (`POST
   /v1/promotions`) writes next-year enrollments and records `Promotion`
   rows; graduating from grade 11 calls `students.Graduate`, repeating
-  bumps `RepeatCount`.
+  bumps `RepeatCount`. Enrollments ride `POST/GET/DELETE /v1/enrollments`.
 - **Graphs**: chart-ready endpoints over the statistics reports.
 - **Remaining roadmap**: `auth` (login tokens on top of `users`), WhatsApp `notifications`, HTTP
   endpoints with role gating, audit logging.

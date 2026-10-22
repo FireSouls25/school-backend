@@ -105,6 +105,19 @@ func (s *MemoryStore) PromotionsForStudent(_ context.Context, studentID string) 
 	return out, nil
 }
 
+// PromotionsForGroup implements Store.
+func (s *MemoryStore) PromotionsForGroup(_ context.Context, classGroupID string) ([]Promotion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Promotion, 0)
+	for _, p := range s.promotions {
+		if p.FromGroupID == classGroupID {
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].DecidedAt.Before(out[j].DecidedAt) })
+	return out, nil
+}
 func (s *MemoryStore) sortByAddedLocked(out []Enrollment) {
 	seqByID := make(map[string]int, len(out))
 	for _, row := range s.enrollments {

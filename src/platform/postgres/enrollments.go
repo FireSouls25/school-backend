@@ -133,6 +133,30 @@ func (s *EnrollmentsStore) RecordPromotion(ctx context.Context, p enrollments.Pr
 	return out, nil
 }
 
+// PromotionsForGroup implements enrollments.Store.
+func (s *EnrollmentsStore) PromotionsForGroup(ctx context.Context, classGroupID string) ([]enrollments.Promotion, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT `+promotionColumns+`
+		FROM promotions
+		WHERE from_group_id = $1
+		ORDER BY decided_at, id`,
+		classGroupID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list group promotions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]enrollments.Promotion, 0)
+	for rows.Next() {
+		p, err := scanPromotion(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: scan group promotion: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // PromotionsForStudent implements enrollments.Store.
 func (s *EnrollmentsStore) PromotionsForStudent(ctx context.Context, studentID string) ([]enrollments.Promotion, error) {
 	rows, err := s.db.pool.Query(ctx, `

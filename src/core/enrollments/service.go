@@ -82,6 +82,15 @@ func (s *Service) PromotionsForStudent(ctx context.Context, studentID string) ([
 	return s.store.PromotionsForStudent(ctx, strings.TrimSpace(studentID))
 }
 
+// PromotionsForGroup returns every promotion record decided from a
+// class-group, oldest first.
+func (s *Service) PromotionsForGroup(ctx context.Context, classGroupID string) ([]Promotion, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(classGroupID)); err != nil {
+		return nil, ErrInvalidClassGroup
+	}
+	return s.store.PromotionsForGroup(ctx, strings.TrimSpace(classGroupID))
+}
+
 // validateRefs checks the opaque student and group references.
 func validateRefs(studentID, classGroupID string) error {
 	if _, err := uuid.Parse(studentID); err != nil {
