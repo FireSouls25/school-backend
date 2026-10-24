@@ -462,6 +462,59 @@ func handleUpdateTeacher(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// myTeacherUpdate is the self-service subset of a teacher profile: contact
+// and health fields the caller may change on their own record. Identity
+// (names, document), homeroom assignment and active state stay
+// admin-managed through PUT /v1/teachers/{id}; unknown fields are
+// rejected by the decoder, so sending them answers 400, never silent.
+type myTeacherUpdate struct {
+	Phone             *string    `json:"Phone"`
+	Address           *string    `json:"Address"`
+	Birthplace        *string    `json:"Birthplace"`
+	Birthdate         *time.Time `json:"Birthdate"`
+	Email             *string    `json:"Email"`
+	Sex               *string    `json:"Sex"`
+	MedicalConditions *string    `json:"MedicalConditions"`
+}
+
+// handleUpdateMyTeacher applies the self-service update to the caller's
+// own teacher profile. Auth only, no permission: it resolves strictly to
+// the caller's own id, so one teacher can never touch another profile.
+func handleUpdateMyTeacher(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body myTeacherUpdate
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		teacherID, ok := myTeacherID(r.Context(), deps, subject)
+		if !ok {
+			WriteError(w, r, errForbidden)
+			return
+		}
+		current, err := deps.Teachers.ByID(r.Context(), teacherID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		applyIfSet(&current.Phone, body.Phone)
+		applyIfSet(&current.Address, body.Address)
+		applyIfSet(&current.Birthplace, body.Birthplace)
+		if body.Birthdate != nil {
+			current.Birthdate = *body.Birthdate
+		}
+		applyIfSet(&current.Email, body.Email)
+		applyIfSet(&current.Sex, body.Sex)
+		applyIfSet(&current.MedicalConditions, body.MedicalConditions)
+		updated, err := deps.Teachers.Update(r.Context(), current)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
 // applyIfSet copies a pointer field into target when the body provided it.
 func applyIfSet(target *string, value *string) {
 	if value != nil {

@@ -97,6 +97,7 @@ Routes declare one required permission, enforced by
 | `GET /v1/teachers/me/schedule?weekday=N` | `view-class-statistics` | teacher, admin |
 | `GET /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
 | `PUT /v1/teachers/me/photo` | authenticated only | anyone with a linked teacher profile |
+| `PUT /v1/teachers/me` | authenticated only | own contact/health ficha (identity, homeroom and active stay admin-only) |
 | `POST /v1/sessions/open` | `record-attendance` | teacher, admin |
 | `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
 | `POST /v1/incidents` | `record-incidents` | teacher, admin |
