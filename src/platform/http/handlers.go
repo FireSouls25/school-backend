@@ -119,18 +119,22 @@ type meResponse struct {
 }
 
 // meTeacher is the personal summary of the teacher linked to the login.
-// Address, medical conditions and other sensitive fields stay out: the
-// profile panel only shows identity and contact data.
+// It carries the full ficha: this payload only ever reaches the owner,
+// so nothing here leaks to another caller.
 type meTeacher struct {
-	ID         string `json:"id"`
-	Names      string `json:"names"`
-	Surnames   string `json:"surnames"`
-	DocumentID string `json:"documentID"`
-	Phone      string `json:"phone"`
-	Email      string `json:"email"`
-	Birthdate  string `json:"birthdate"`
-	Sex        string `json:"sex"`
-	Active     bool   `json:"active"`
+	ID                string `json:"id"`
+	Names             string `json:"names"`
+	Surnames          string `json:"surnames"`
+	DocumentID        string `json:"documentID"`
+	Phone             string `json:"phone"`
+	Email             string `json:"email"`
+	Address           string `json:"address"`
+	Birthplace        string `json:"birthplace"`
+	Birthdate         string `json:"birthdate"`
+	Sex               string `json:"sex"`
+	MedicalConditions string `json:"medicalConditions"`
+	HomeroomClassID   string `json:"homeroomClassID"`
+	Active            bool   `json:"active"`
 }
 
 // meTeacherFrom maps a teacher profile onto the /me summary.
@@ -142,6 +146,8 @@ func meTeacherFrom(t teachers.Teacher) *meTeacher {
 	return &meTeacher{
 		ID: t.ID, Names: t.Names, Surnames: t.Surnames,
 		DocumentID: t.DocumentID, Phone: t.Phone, Email: t.Email,
+		Address: t.Address, Birthplace: t.Birthplace,
+		MedicalConditions: t.MedicalConditions, HomeroomClassID: t.HomeroomClassID,
 		Birthdate: birth, Sex: t.Sex, Active: t.Active,
 	}
 }

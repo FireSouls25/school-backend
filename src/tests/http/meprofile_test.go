@@ -48,6 +48,8 @@ func seedLinkedTeacher(t *testing.T, usersSvc *users.Service, teachersSvc *teach
 	tc, err := teachersSvc.Create(ctx, teachers.Teacher{
 		Names: "Carlos", Surnames: "Mendoza", DocumentID: "1122334455",
 		Phone: "3001234567", Email: "carlos@colegio.edu",
+		Address: "Calle 10 # 5-20", Birthplace: "Medellín",
+		MedicalConditions: "Ninguna",
 		Birthdate: time.Date(1990, 5, 20, 0, 0, 0, 0, time.UTC),
 		Sex:       teachers.SexMale,
 	})
@@ -85,14 +87,17 @@ func TestMeCarriesAccountAndTeacherProfile(t *testing.T) {
 		CreatedAt string   `json:"createdAt"`
 		TeacherID string   `json:"teacherID"`
 		Teacher   struct {
-			ID         string `json:"id"`
-			Names      string `json:"names"`
-			Surnames   string `json:"surnames"`
-			DocumentID string `json:"documentID"`
-			Phone      string `json:"phone"`
-			Email      string `json:"email"`
-			Birthdate  string `json:"birthdate"`
-			Sex        string `json:"sex"`
+			ID                string `json:"id"`
+			Names             string `json:"names"`
+			Surnames          string `json:"surnames"`
+			DocumentID        string `json:"documentID"`
+			Phone             string `json:"phone"`
+			Email             string `json:"email"`
+			Address           string `json:"address"`
+			Birthplace        string `json:"birthplace"`
+			MedicalConditions string `json:"medicalConditions"`
+			Birthdate         string `json:"birthdate"`
+			Sex               string `json:"sex"`
 		} `json:"teacher"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
@@ -118,6 +123,9 @@ func TestMeCarriesAccountAndTeacherProfile(t *testing.T) {
 	}
 	if body.Teacher.Birthdate != "1990-05-20" || body.Teacher.Sex != "male" {
 		t.Errorf("teacher birth/sex = %q/%q", body.Teacher.Birthdate, body.Teacher.Sex)
+	}
+	if body.Teacher.Address != "Calle 10 # 5-20" || body.Teacher.Birthplace != "Medellín" || body.Teacher.MedicalConditions != "Ninguna" {
+		t.Errorf("teacher ficha = %+v, want full own record", body.Teacher)
 	}
 }
 
