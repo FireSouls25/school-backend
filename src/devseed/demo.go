@@ -23,6 +23,7 @@ import (
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
+	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
 	"grade/src/core/students"
@@ -88,6 +89,7 @@ type Deps struct {
 	Classes     *classes.Service
 	Enrollments *enrollments.Service
 	Students    *students.Service
+	Schedules   *schedules.Service
 	Sessions    *sessions.Service
 	Warnings    *warnings.Service
 	Incidents   *incidents.Service
@@ -106,6 +108,7 @@ type Summary struct {
 	Classes       int
 	Students      int
 	Enrollments   int
+	Schedules     int
 	Sessions      int
 	Marks         int
 	Warnings      int
@@ -115,7 +118,7 @@ type Summary struct {
 // Total returns the number of domain records created.
 func (s Summary) Total() int {
 	return s.Accounts + s.Roles + s.Teachers + s.Subjects + s.Classes +
-		s.Students + s.Enrollments + s.Sessions + s.Marks + s.Warnings + s.Faults
+		s.Students + s.Enrollments + s.Schedules + s.Sessions + s.Marks + s.Warnings + s.Faults
 }
 
 // String renders a compact human-readable report (startup logs).
@@ -262,6 +265,43 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 			subjectCatalog[a.subject].ID, date(year, 2, 2)); err != nil {
 			return sum, fmt.Errorf("devseed: assign %s: %w", a.subject, err)
 		}
+	}
+
+	// Weekly slots for the demo teacher across several salones, created
+	// through the schedules service: the same validation (conflicts,
+	// teaching assignments, hours) a real schedule creation goes through.
+	mathID := subjectCatalog["Matemáticas"].ID
+	scienceID := subjectCatalog["Ciencias Naturales"].ID
+	for _, slot := range []struct {
+		group   string
+		subject string
+		weekday int
+		start   string
+		end     string
+	}{
+		{"9-1", "Matemáticas", 1, "07:00", "09:00"},
+		{"7-1", "Matemáticas", 2, "07:00", "08:00"},
+		{"8-1", "Ciencias Naturales", 2, "09:00", "10:00"},
+		{"9-1", "Ciencias Naturales", 3, "07:00", "08:00"},
+		{"9-1", "Matemáticas", 3, "10:00", "11:00"},
+		{"7-1", "Ciencias Naturales", 4, "08:00", "09:00"},
+		{"8-1", "Matemáticas", 5, "07:00", "08:00"},
+	} {
+		subID := mathID
+		if slot.subject == "Ciencias Naturales" {
+			subID = scienceID
+		}
+		if _, err := deps.Schedules.Create(ctx, schedules.Entry{
+			ClassGroupID: groups[slot.group].ID,
+			TeacherID:    teacherProfiles[0].ID,
+			SubjectID:    subID,
+			Weekday:      slot.weekday,
+			Start:        schedules.MustClock(slot.start),
+			End:          schedules.MustClock(slot.end),
+		}); err != nil {
+			return sum, fmt.Errorf("devseed: schedule %s: %w", slot.group, err)
+		}
+		sum.Schedules++
 	}
 
 	// The demo teacher logs in as docente but teaches as the Carlos

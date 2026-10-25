@@ -9,6 +9,7 @@ import (
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
+	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
 	"grade/src/core/students"
@@ -19,6 +20,25 @@ import (
 	"grade/src/devseed"
 	pg "grade/src/platform/postgres"
 )
+
+// pgTeachChecker mirrors the production checker on top of the subjects
+// service so seeded slots exercise the teaching-pair validation.
+type pgTeachChecker struct {
+	subjects *subjects.Service
+}
+
+func (c pgTeachChecker) Teaches(ctx context.Context, teacherID, subjectID string) (bool, error) {
+	timeline, err := c.subjects.AssignmentsForTeacher(ctx, teacherID)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range timeline {
+		if a.SubjectID == subjectID && a.IsOpen() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 // TestDevseedRoundTrip runs the demo seeder against the real schema and
 // then re-runs it, covering the parts memory stores cannot check: foreign
@@ -40,6 +60,7 @@ func TestDevseedRoundTrip(t *testing.T) {
 		Classes:     classes.NewService(pg.NewClassesStore(db)),
 		Enrollments: enrollments.NewService(pg.NewEnrollmentsStore(db)),
 		Students:    students.NewService(pg.NewStudentsStore(db)),
+		Schedules:   schedules.NewService(pg.NewSchedulesStore(db), pgTeachChecker{subjects.NewService(pg.NewSubjectsStore(db))}),
 		Sessions:    sessions.NewService(pg.NewSessionsStore(db)),
 		Warnings:    warnings.NewService(pg.NewWarningsStore(db)),
 		Incidents:   incidents.NewService(pg.NewIncidentsStore(db)),

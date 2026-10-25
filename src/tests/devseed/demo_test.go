@@ -10,6 +10,7 @@ import (
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
+	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
 	"grade/src/core/sessions"
 	"grade/src/core/students"
@@ -19,6 +20,25 @@ import (
 	"grade/src/core/warnings"
 	"grade/src/devseed"
 )
+
+// teachChecker resolves the teaching-pair check through the subjects
+// service, mirroring the production wiring.
+type teachChecker struct {
+	subjects *subjects.Service
+}
+
+func (c teachChecker) Teaches(ctx context.Context, teacherID, subjectID string) (bool, error) {
+	timeline, err := c.subjects.AssignmentsForTeacher(ctx, teacherID)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range timeline {
+		if a.SubjectID == subjectID && a.IsOpen() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 // memoryDeps wires every port the seeder needs to in-memory stores, so
 // the suite exercises the real services and their validation.
@@ -30,6 +50,7 @@ type memoryDeps struct {
 
 	teacherStore  teachers.Store
 	subjectStore  subjects.Store
+	scheduleStore schedules.Store
 	yearStore     schoolyears.Store
 	classStore    classes.Store
 	enrollStore   enrollments.Store
@@ -45,6 +66,7 @@ func newMemoryDeps() *memoryDeps {
 		roleStore:     roles.NewMemoryStore(),
 		teacherStore:  teachers.NewMemoryStore(),
 		subjectStore:  subjects.NewMemoryStore(),
+		scheduleStore: schedules.NewMemoryStore(),
 		yearStore:     schoolyears.NewMemoryStore(),
 		classStore:    classes.NewMemoryStore(),
 		enrollStore:   enrollments.NewMemoryStore(),
@@ -53,11 +75,13 @@ func newMemoryDeps() *memoryDeps {
 		warningStore:  warnings.NewMemoryStore(),
 		incidentStore: incidents.NewMemoryStore(),
 	}
+	subjectsSvc := subjects.NewService(d.subjectStore)
 	d.deps = devseed.Deps{
 		Users:       d.userStore,
 		Roles:       d.roleStore,
 		Teachers:    teachers.NewService(d.teacherStore),
-		Subjects:    subjects.NewService(d.subjectStore),
+		Subjects:    subjectsSvc,
+		Schedules:   schedules.NewService(d.scheduleStore, teachChecker{subjectsSvc}),
 		Years:       schoolyears.NewService(d.yearStore),
 		Classes:     classes.NewService(d.classStore),
 		Enrollments: enrollments.NewService(d.enrollStore),
