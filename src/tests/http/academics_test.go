@@ -7,10 +7,11 @@ import (
 )
 
 type academicAlertJSON struct {
-	ID        string `json:"ID"`
-	StudentID string `json:"StudentID"`
-	Reason    string `json:"Reason"`
-	Status    string `json:"Status"`
+	ID          string `json:"ID"`
+	StudentID   string `json:"StudentID"`
+	StudentName string `json:"StudentName"`
+	Reason      string `json:"Reason"`
+	Status      string `json:"Status"`
 }
 
 func raiseAlert(t *testing.T, h http.Handler, subject, target, reason string) (int, []academicAlertJSON) {
@@ -83,6 +84,9 @@ func TestAcademicAlertReviewFlow(t *testing.T) {
 		}
 		if len(list) != 1 || list[0].ID != id {
 			t.Errorf("list = %+v, want the open alert", list)
+		}
+		if list[0].StudentName == "" {
+			t.Error("list item lacks the resolved student name")
 		}
 	}
 

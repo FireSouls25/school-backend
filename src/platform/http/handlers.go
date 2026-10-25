@@ -1502,6 +1502,13 @@ func handleRaiseAcademicAlert(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// academicAlertRow is an alert with the student name resolved
+// best-effort for display; unknown profiles fall back to the id.
+type academicAlertRow struct {
+	academics.Alert
+	StudentName string `json:"StudentName"`
+}
+
 // handleListAcademicAlerts returns open alerts, newest first, optionally
 // filtered by student. Same readers as the warnings history.
 func handleListAcademicAlerts(deps Dependencies) http.HandlerFunc {
@@ -1516,10 +1523,20 @@ func handleListAcademicAlerts(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		if list == nil {
-			list = []academics.Alert{}
+		out := make([]academicAlertRow, 0, len(list))
+		for _, a := range list {
+			name := a.StudentID
+			if len(name) > 8 {
+				name = name[:8]
+			}
+			if deps.Students != nil {
+				if st, err := deps.Students.ByID(r.Context(), a.StudentID); err == nil {
+					name = strings.TrimSpace(st.Surnames + " " + st.Names)
+				}
+			}
+			out = append(out, academicAlertRow{Alert: a, StudentName: name})
 		}
-		writeJSON(w, http.StatusOK, list)
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 
