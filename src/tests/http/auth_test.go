@@ -752,15 +752,21 @@ func TestClassRosterAlphabetical(t *testing.T) {
 		t.Fatalf("teacher status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	var roster []struct {
-		ID       string `json:"ID"`
-		Surnames string `json:"Surnames"`
-		Names    string `json:"Names"`
+		StudentID  string `json:"StudentID"`
+		Surnames   string `json:"Surnames"`
+		Names      string `json:"Names"`
+		DocumentID string `json:"DocumentID"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &roster); err != nil {
 		t.Fatalf("decode roster: %v", err)
 	}
 	if len(roster) != 2 {
 		t.Fatalf("len(roster) = %d, want 2", len(roster))
+	}
+	for _, r := range roster {
+		if r.StudentID == "" || r.DocumentID == "" {
+			t.Errorf("roster entry = %+v, want stable ids", r)
+		}
 	}
 	for i := 1; i < len(roster); i++ {
 		prev := roster[i-1].Surnames + " " + roster[i-1].Names

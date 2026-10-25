@@ -2510,6 +2510,15 @@ func resolveRoster(ctx context.Context, deps Dependencies, groupID string) ([]se
 	return roster, nil
 }
 
+// rosterEntry is one enrolled student as the roll-call screens consume
+// it: the stable student id plus display names, alphabetically.
+type rosterEntry struct {
+	StudentID  string `json:"StudentID"`
+	Names      string `json:"Names"`
+	Surnames   string `json:"Surnames"`
+	DocumentID string `json:"DocumentID"`
+}
+
 // handleClassRoster returns the group nómina: enrolled students with
 // their current profiles, alphabetically.
 func handleClassRoster(deps Dependencies) http.HandlerFunc {
@@ -2524,7 +2533,7 @@ func handleClassRoster(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		roster := make([]students.Student, 0, len(ens))
+		var roster []students.Student
 		for _, e := range ens {
 			st, err := deps.Students.ByID(r.Context(), e.StudentID)
 			if err != nil {
@@ -2537,7 +2546,16 @@ func handleClassRoster(deps Dependencies) http.HandlerFunc {
 			roster = append(roster, st)
 		}
 		sortRoster(roster)
-		writeJSON(w, http.StatusOK, roster)
+		out := make([]rosterEntry, 0, len(roster))
+		for _, st := range roster {
+			out = append(out, rosterEntry{
+				StudentID:  st.ID,
+				Names:      st.Names,
+				Surnames:   st.Surnames,
+				DocumentID: st.DocumentID,
+			})
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 
