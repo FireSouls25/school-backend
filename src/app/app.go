@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"grade/src/core/attendance"
+	"grade/src/core/academics"
 	"grade/src/core/audit"
 	"grade/src/core/auth"
 	"grade/src/core/classes"
@@ -42,6 +43,7 @@ type Stores struct {
 	Students    students.Store
 	Attendance  attendance.Store
 	Incidents   incidents.Store
+	Academics   academics.Store
 	Warnings    warnings.Store
 	Audit       audit.Store
 	Teachers    teachers.Store
@@ -69,6 +71,7 @@ type Services struct {
 	Students    *students.Service
 	Attendance  *attendance.Service
 	Incidents   *incidents.Service
+	Academics   *academics.Service
 	Warnings    *warnings.Service
 	Audit       *audit.Service
 	Teachers    *teachers.Service
@@ -108,6 +111,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Students:      students.NewMemoryStore(),
 		Attendance:    attendance.NewMemoryStore(),
 		Incidents:     incidents.NewMemoryStore(),
+		Academics:     academics.NewMemoryStore(),
 		Warnings:      warnings.NewMemoryStore(),
 		Audit:         audit.NewMemoryStore(),
 		Teachers:      teachers.NewMemoryStore(),
@@ -135,6 +139,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Students = pg.NewStudentsStore(db)
 		s.Attendance = pg.NewAttendanceStore(db)
 		s.Incidents = pg.NewIncidentsStore(db)
+		s.Academics = pg.NewAcademicsStore(db)
 		s.Warnings = pg.NewWarningsStore(db)
 		s.Audit = pg.NewAuditStore(db)
 		s.Teachers = pg.NewTeachersStore(db)
@@ -168,6 +173,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	tattendanceSvc := tattendance.NewService(s.TAttendance)
 	warningsSvc := warnings.NewService(s.Warnings)
 	incidentsSvc := incidents.NewService(s.Incidents)
+	academicsSvc := academics.NewService(s.Academics)
 	teachersSvc := teachers.NewService(s.Teachers)
 	yearsSvc := schoolyears.NewService(s.Years)
 	classesSvc := classes.NewService(s.Classes)
@@ -198,6 +204,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Students:    students.NewService(s.Students),
 			Attendance:  attendance.NewService(s.Attendance),
 			Incidents:   incidentsSvc,
+			Academics:   academicsSvc,
 			Warnings:    warningsSvc,
 			Audit:       auditSvc,
 			Teachers:    teachersSvc,

@@ -101,6 +101,12 @@ var statusByCode = map[string]int{
 	"tattendance.err_invalid_range":   http.StatusBadRequest,
 	"warnings.err_not_found":          http.StatusNotFound,
 
+	"academics.err_invalid_student":  http.StatusBadRequest,
+	"academics.err_invalid_teacher":  http.StatusBadRequest,
+	"academics.err_empty_reason":     http.StatusBadRequest,
+	"academics.err_not_found":        http.StatusNotFound,
+	"academics.err_already_reviewed": http.StatusConflict,
+
 	"teachers.err_not_found":        http.StatusNotFound,
 	"teachers.err_invalid_id":       http.StatusBadRequest,
 	"teachers.err_invalid_name":     http.StatusBadRequest,

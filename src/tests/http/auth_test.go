@@ -13,6 +13,7 @@ import (
 
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
+	"grade/src/core/academics"
 	"grade/src/core/incidents"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
@@ -223,6 +224,7 @@ func testStack(t *testing.T) http.Handler {
 	enrollmentsSvc := enrollments.NewService(enrollments.NewMemoryStore())
 	schedulesSvc := schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{})
 	incidentsSvc := incidents.NewService(incidents.NewMemoryStore())
+	academicsSvc := academics.NewService(academics.NewMemoryStore())
 	sessViews := testSessions{svc: sessionsSvc}
 	statsSvc := statistics.NewService(sessViews, testWarnings{warningsSvc}, testFaults{incidentsSvc})
 	dashSvc := statistics.NewDashboardService(sessViews, testWarnings{warningsSvc}, testFaults{incidentsSvc}, testDash{
@@ -319,6 +321,7 @@ func testStack(t *testing.T) http.Handler {
 		Enrollments:      enrollmentsSvc,
 		Schedules:        schedulesSvc,
 		Incidents:        incidentsSvc,
+		Academics:        academicsSvc,
 	}, newI18n(t))
 }
 

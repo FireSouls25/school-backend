@@ -42,6 +42,9 @@ const (
 	// ResourceUser marks a login account (lockout): the audit row says
 	// who pressed the block button.
 	ResourceUser Resource = "user"
+	// ResourceAcademicAlert marks academic alerts: who raised them and who
+	// reviewed them.
+	ResourceAcademicAlert Resource = "academic-alert"
 )
 
 // Entry is one trail row. StudentID is empty when the action concerns

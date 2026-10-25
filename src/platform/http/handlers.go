@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"grade/src/core/academics"
 	"grade/src/core/audit"
 	"grade/src/core/auth"
 	"grade/src/core/classes"
@@ -67,6 +68,7 @@ type Dependencies struct {
 	Enrollments      *enrollments.Service
 	Schedules        *schedules.Service
 	Incidents        *incidents.Service
+	Academics        *academics.Service
 	// AllowedOrigins lists browser origins accepted by CORS.
 	AllowedOrigins []string
 	// Throttle caps login/refresh guesses persistently. Nil means a
@@ -1451,6 +1453,111 @@ type warningRevisionRow struct {
 	NewDetail  string `json:"NewDetail"`
 	Author     string `json:"Author"`
 	ChangedAt  string `json:"ChangedAt"`
+}
+
+// raiseAlertRequest raises one academic alert per student with a shared
+// reason. Unknown students fail the whole batch, like warnings.
+type raiseAlertRequest struct {
+	StudentIDs []string `json:"studentIDs"`
+	Reason     string   `json:"reason"`
+}
+
+// handleRaiseAcademicAlert raises academic alerts for admin review.
+// Teachers and admins reach it (record-incidents); the alert carries no
+// gravity, only the reason, and stays open until reviewed.
+func handleRaiseAcademicAlert(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body raiseAlertRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if len(body.StudentIDs) == 0 {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		reason := strings.TrimSpace(body.Reason)
+		if reason == "" {
+			WriteError(w, r, academics.ErrEmptyReason)
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		out := make([]academics.Alert, 0, len(body.StudentIDs))
+		for _, id := range body.StudentIDs {
+			st, err := deps.Students.ByID(r.Context(), strings.TrimSpace(id))
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			a, err := deps.Academics.Raise(r.Context(), academics.Input{
+				StudentID: st.ID, TeacherID: subject, Reason: reason,
+			})
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceAcademicAlert, a.ID, a.StudentID, http.StatusCreated)
+			out = append(out, a)
+		}
+		writeJSON(w, http.StatusCreated, out)
+	}
+}
+
+// handleListAcademicAlerts returns open alerts, newest first, optionally
+// filtered by student. Same readers as the warnings history.
+func handleListAcademicAlerts(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if status := strings.TrimSpace(r.URL.Query().Get("status")); status != "" && status != "open" {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		studentID := strings.TrimSpace(r.URL.Query().Get("studentID"))
+		list, err := deps.Academics.Open(r.Context(), studentID)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []academics.Alert{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// handleStudentAcademicAlerts returns every alert of one student, newest
+// first: same readers as the warning history.
+func handleStudentAcademicAlerts(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		id := chi.URLParam(r, "id")
+		if !allowStudentView(r.Context(), deps.Auth, subject, id) {
+			WriteError(w, r, errForbidden)
+			return
+		}
+		list, err := deps.Academics.ForStudent(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []academics.Alert{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
+// handleReviewAcademicAlert marks an open alert as checked. Admins only:
+// reviewing closes the pending, it never edits the alert itself.
+func handleReviewAcademicAlert(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		updated, err := deps.Academics.Review(r.Context(), chi.URLParam(r, "id"), subject)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceAcademicAlert, updated.ID, updated.StudentID, http.StatusOK)
+		writeJSON(w, http.StatusOK, updated)
+	}
 }
 
 // handleWarningRevisions returns every correction of one llamado,

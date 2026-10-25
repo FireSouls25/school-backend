@@ -116,6 +116,22 @@ CREATE TABLE IF NOT EXISTS incident_faults (
     description TEXT        NOT NULL
 );
 
+-- Academic alerts: a teacher flags students for admin review. Open until
+-- an admin reviews them; history stays per student.
+CREATE TABLE IF NOT EXISTS academic_alerts (
+    id          UUID PRIMARY KEY,
+    student_id  UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    teacher_id  TEXT        NOT NULL,
+    reason      TEXT        NOT NULL DEFAULT '',
+    status      TEXT        NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'reviewed')),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_academic_alerts_open ON academic_alerts (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_academic_alerts_student ON academic_alerts (student_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_incident_faults_student_id ON incident_faults (student_id);
 
 CREATE TABLE IF NOT EXISTS warnings (

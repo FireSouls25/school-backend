@@ -83,6 +83,7 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 		r.Get("/students/{id}", handleGetStudent(deps))
 		r.Get("/students/{id}/warnings", handleGetStudentWarnings(deps))
+		r.Get("/students/{id}/alerts", handleStudentAcademicAlerts(deps))
 		r.Get("/students/{id}/incidents", handleStudentIncidents(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
@@ -137,6 +138,14 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Post("/warnings/batch", handleIssueWarningBatch(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Put("/warnings/{id}", handleCorrectWarning(deps))
+		// Academic alerts: teachers raise, admins and secretaries read,
+		// admins review.
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Post("/academic-alerts", handleRaiseAcademicAlert(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewWarnings)).
+			Get("/academic-alerts", handleListAcademicAlerts(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+			Post("/academic-alerts/{id}/review", handleReviewAcademicAlert(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewWarnings)).
 			Get("/warnings/{id}/revisions", handleWarningRevisions(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewWarnings)).
