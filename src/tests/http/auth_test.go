@@ -792,14 +792,18 @@ func TestMyScheduleDayView(t *testing.T) {
 		t.Fatalf("teacher status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	var entries []struct {
-		TeacherID string `json:"TeacherID"`
-		Weekday   int    `json:"Weekday"`
+		GroupID     string `json:"GroupID"`
+		ClassLabel  string `json:"ClassLabel"`
+		SubjectName string `json:"SubjectName"`
+		Weekday     int    `json:"Weekday"`
+		Start       string `json:"Start"`
+		End         string `json:"End"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
 		t.Fatalf("decode schedule: %v", err)
 	}
-	if len(entries) != 1 || entries[0].TeacherID != teacherSubject || entries[0].Weekday != 1 {
-		t.Errorf("entries = %+v, want the Monday slot", entries)
+	if len(entries) != 1 || entries[0].Weekday != 1 || entries[0].Start != "07:00" || entries[0].End != "09:00" {
+		t.Errorf("entries = %+v, want the Monday slot with HH:MM times", entries)
 	}
 
 	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/me/schedule?weekday=3", teacherSubject, "")

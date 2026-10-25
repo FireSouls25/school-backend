@@ -2541,6 +2541,19 @@ func handleClassRoster(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// teacherDayEntry is one schedule slot as the teacher day view consumes
+// it: resolved group and subject names with zero-padded times. Stacks
+// without the catalog fall back to sliced ids, never to invented names.
+type teacherDayEntry struct {
+	GroupID     string `json:"GroupID"`
+	ClassLabel  string `json:"ClassLabel"`
+	SubjectID   string `json:"SubjectID"`
+	SubjectName string `json:"SubjectName"`
+	Weekday     int    `json:"Weekday"`
+	Start       string `json:"Start"`
+	End         string `json:"End"`
+}
+
 // handleMySchedule returns the caller's slots for ?weekday=N (0=Sunday
 // to 6=Saturday, as time.Weekday): the teacher day view. The caller is a
 // login, not a profile: when the account links to a teacher, the link
@@ -2556,18 +2569,43 @@ func handleMySchedule(deps Dependencies) http.HandlerFunc {
 		}
 		subject, _ := SubjectFrom(r.Context())
 		teacherID := subject
-		if u, err := deps.Users.ByID(r.Context(), subject); err == nil && u.TeacherID != "" {
-			teacherID = u.TeacherID
+		if deps.Users != nil {
+			if u, err := deps.Users.ByID(r.Context(), subject); err == nil && u.TeacherID != "" {
+				teacherID = u.TeacherID
+			}
 		}
 		entries, err := deps.Schedules.EntriesForTeacherOnDay(r.Context(), teacherID, time.Weekday(n))
 		if err != nil {
 			WriteError(w, r, err)
 			return
 		}
-		if entries == nil {
-			entries = []schedules.Entry{}
+		out := make([]teacherDayEntry, 0, len(entries))
+		for _, e := range entries {
+			label := e.ClassGroupID
+			if len(label) > 8 {
+				label = label[:8]
+			}
+			if deps.Classes != nil {
+				if g, err := deps.Classes.ByID(r.Context(), e.ClassGroupID); err == nil {
+					label = g.Label()
+				}
+			}
+			name := e.SubjectID
+			if len(name) > 8 {
+				name = name[:8]
+			}
+			if deps.Subjects != nil {
+				if s, err := deps.Subjects.SubjectByID(r.Context(), e.SubjectID); err == nil {
+					name = s.Name
+				}
+			}
+			out = append(out, teacherDayEntry{
+				GroupID: e.ClassGroupID, ClassLabel: label,
+				SubjectID: e.SubjectID, SubjectName: name,
+				Weekday: e.Weekday, Start: e.Start.String(), End: e.End.String(),
+			})
 		}
-		writeJSON(w, http.StatusOK, entries)
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 
