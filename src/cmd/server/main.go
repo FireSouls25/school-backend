@@ -69,6 +69,7 @@ func main() {
 		Enrollments:       application.Services.Enrollments,
 		Schedules:         application.Services.Schedules,
 		Incidents:         application.Services.Incidents,
+		Academics:         application.Services.Academics,
 		Audit:             application.Services.Audit,
 		Tokens:            application.Services.Auth,
 		Throttle:          application.Services.Throttle,
