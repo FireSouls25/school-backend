@@ -156,6 +156,32 @@ CREATE TABLE IF NOT EXISTS warning_revisions (
 
 CREATE INDEX IF NOT EXISTS idx_warning_revisions_warning_id ON warning_revisions (warning_id);
 
+CREATE TABLE IF NOT EXISTS teachers (
+    id                  UUID PRIMARY KEY,
+    names               TEXT        NOT NULL,
+    surnames            TEXT        NOT NULL,
+    document_id         TEXT        NOT NULL DEFAULT '',
+    phone               TEXT        NOT NULL DEFAULT '',
+    address             TEXT        NOT NULL DEFAULT '',
+    birthplace          TEXT        NOT NULL DEFAULT '',
+    birthdate           DATE,
+    email               TEXT        NOT NULL DEFAULT '',
+    sex                 TEXT        NOT NULL DEFAULT '',
+    medical_conditions  TEXT        NOT NULL DEFAULT '',
+    homeroom_class_id   TEXT        NOT NULL DEFAULT '',
+    active              BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Retiring a teacher flips active instead of deleting the profile.
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS photo BYTEA;
+-- Sex as recorded by the school: 'female', 'male' or empty when not declared.
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS sex TEXT NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
+
 -- Daily roll of teachers: one explicit mark per teacher per day.
 CREATE TABLE IF NOT EXISTS teacher_attendance (
     teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
@@ -189,31 +215,6 @@ CREATE INDEX IF NOT EXISTS idx_teacher_attendance_revisions_teacher_day
 ALTER TABLE warnings ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_warnings_group_id ON warnings (group_id);
 
-CREATE TABLE IF NOT EXISTS teachers (
-    id                  UUID PRIMARY KEY,
-    names               TEXT        NOT NULL,
-    surnames            TEXT        NOT NULL,
-    document_id         TEXT        NOT NULL DEFAULT '',
-    phone               TEXT        NOT NULL DEFAULT '',
-    address             TEXT        NOT NULL DEFAULT '',
-    birthplace          TEXT        NOT NULL DEFAULT '',
-    birthdate           DATE,
-    email               TEXT        NOT NULL DEFAULT '',
-    sex                 TEXT        NOT NULL DEFAULT '',
-    medical_conditions  TEXT        NOT NULL DEFAULT '',
-    homeroom_class_id   TEXT        NOT NULL DEFAULT '',
-    active              BOOLEAN     NOT NULL DEFAULT TRUE,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Retiring a teacher flips active instead of deleting the profile.
-ALTER TABLE teachers ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE teachers ADD COLUMN IF NOT EXISTS photo BYTEA;
--- Sex as recorded by the school: 'female', 'male' or empty when not declared.
-ALTER TABLE teachers ADD COLUMN IF NOT EXISTS sex TEXT NOT NULL DEFAULT '';
-
-CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
 
 CREATE TABLE IF NOT EXISTS subjects (
     id          UUID PRIMARY KEY,
