@@ -6,7 +6,7 @@
 //	go run ./src/cmd/devseed            # seed DATABASE_URL
 //	SEED_DEMO=0 go run ./src/cmd/server # the server seeds on boot too
 //
-// Demo logins: admin / admin123* and carlos.mendoza / docente123*.
+// Demo logins use username = role, password = role + "123*".
 // These are development-only: APP_ENV=production refuses demo data and
 // refuses these passwords for the bootstrap account.
 package main

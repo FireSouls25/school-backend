@@ -44,7 +44,9 @@ Demo logins (development only, the SPA dev build uses the same pair):
 | User | Password | Role |
 |---|---|---|
 | `admin` | `admin123*` | admin |
-| `carlos.mendoza` | `docente123*` | teacher |
+| `docente` | `docente123*` | teacher |
+| `secretaria` | `secretaria123*` | secretary |
+| `estudiante` | `estudiante123*` | student |
 
 The seeded school: one school year with the Colombian holidays, seven
 class-groups (7-1 … 11-1), five teachers with subject assignments, five

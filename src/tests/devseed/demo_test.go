@@ -80,7 +80,7 @@ func TestRunCreatesUsableSchool(t *testing.T) {
 	if sum.AlreadySeeded {
 		t.Fatal("AlreadySeeded on a fresh store")
 	}
-	if sum.Accounts != 3 || sum.Teachers == 0 || sum.Subjects == 0 || sum.Classes == 0 {
+	if sum.Accounts != 4 || sum.Teachers == 0 || sum.Subjects == 0 || sum.Classes == 0 {
 		t.Fatalf("summary = %+v, want a populated school", sum)
 	}
 	if sum.Students == 0 || sum.Enrollments != sum.Students {
@@ -104,8 +104,8 @@ func TestDemoLoginsMatchTheSPAAccounts(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// The SPA dev login resolves these two identifiers to fixed ids, so
-	// the seeded roles must sit exactly there.
+	// The mock logins resolve each identifier to a fixed id, so the
+	// seeded roles must sit exactly there (username = role).
 	for _, tc := range []struct {
 		username string
 		password string
@@ -114,6 +114,7 @@ func TestDemoLoginsMatchTheSPAAccounts(t *testing.T) {
 	}{
 		{devseed.AdminUsername, devseed.AdminPassword, devseed.AdminSubject, roles.RoleAdmin},
 		{devseed.TeacherUsername, devseed.TeacherPassword, devseed.TeacherSubject, roles.RoleTeacher},
+		{devseed.SecretaryUsername, devseed.SecretaryPassword, devseed.SecretarySubject, roles.RoleSecretary},
 	} {
 		account, err := d.userStore.ByUsername(ctx, tc.username)
 		if err != nil {
@@ -137,6 +138,29 @@ func TestDemoLoginsMatchTheSPAAccounts(t *testing.T) {
 	}
 }
 
+func TestDemoStudentLoginSeesOwnRecord(t *testing.T) {
+	ctx := context.Background()
+	d := newMemoryDeps()
+	if _, err := devseed.Run(ctx, d.deps); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	account, err := d.userStore.ByUsername(ctx, devseed.StudentUsername)
+	if err != nil {
+		t.Fatalf("ByUsername(estudiante): %v", err)
+	}
+	granted, err := d.roleStore.RolesFor(ctx, account.ID)
+	if err != nil {
+		t.Fatalf("RolesFor: %v", err)
+	}
+	if len(granted) != 1 || granted[0] != roles.RoleStudent {
+		t.Errorf("estudiante roles = %v, want [student]", granted)
+	}
+	// The account id doubles as the student record id.
+	if _, err := d.studentStore.ByID(ctx, account.ID); err != nil {
+		t.Errorf("student record for login id: %v", err)
+	}
+}
+
 func TestDemoPasswordsAreUsable(t *testing.T) {
 	ctx := context.Background()
 	d := newMemoryDeps()
@@ -150,6 +174,8 @@ func TestDemoPasswordsAreUsable(t *testing.T) {
 	for _, tc := range []struct{ username, password string }{
 		{devseed.AdminUsername, devseed.AdminPassword},
 		{devseed.TeacherUsername, devseed.TeacherPassword},
+		{devseed.SecretaryUsername, devseed.SecretaryPassword},
+		{devseed.StudentUsername, devseed.StudentPassword},
 	} {
 		if _, err := svc.Authenticate(ctx, tc.username, tc.password); err != nil {
 			t.Errorf("Authenticate(%q): %v", tc.username, err)

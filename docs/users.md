@@ -16,7 +16,7 @@ root wires both.
 
 The account keeps:
 
-- **Identity**: unique `Username` (e.g. `admin`, `carlos.mendoza`),
+- **Identity**: unique `Username` (e.g. `admin`, `docente`),
   stored lowercase; optional unique `Email` (empty = none).
 - **Credential**: `PasswordHash`, a bcrypt hash. Plaintext passwords only
   cross the `Service` boundary (`Create` / `Authenticate` / `SetPassword`)
@@ -167,7 +167,9 @@ developer can sign in without setting anything by hand:
 | User | Password | Role |
 |---|---|---|
 | `admin` | `admin123*` | admin |
-| `carlos.mendoza` | `docente123*` | teacher |
+| `docente` | `docente123*` | teacher |
+| `secretaria` | `secretaria123*` | secretary |
+| `estudiante` | `estudiante123*` | student |
 
 Both carry the fixed UUIDs the SPA dev login mock sends. Seeding is
 idempotent, and an account that already exists (say a bootstrap admin named

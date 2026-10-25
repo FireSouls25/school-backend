@@ -53,7 +53,7 @@ default, `AUTH_REFRESH_TTL`):
 
 ## Test accounts (dev only)
 
-Demo school seeds `admin / admin123*` and `carlos.mendoza / docente123*`
+Demo school seeds mock logins with username = role and password = role + `123*`: `admin`, `docente`, `secretaria` and `estudiante`
 (`go run ./src/cmd/devseed`, `SEED_DEMO`). Never set these in production;
 `APP_ENV=production` rejects them and requires `AUTH_SECRET`.
 

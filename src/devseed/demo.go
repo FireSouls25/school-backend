@@ -42,9 +42,10 @@ const (
 	// TeacherSubject is the demo teacher's user id.
 	TeacherSubject = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
-	// AdminUsername and TeacherUsername are the demo logins.
+	// Demo logins follow username = role, password = role + "123*":
+	// admin, docente, secretaria and estudiante.
 	AdminUsername   = "admin"
-	TeacherUsername = "carlos.mendoza"
+	TeacherUsername = "docente"
 
 	// AdminPassword and TeacherPassword are the demo passwords. They
 	// satisfy the users password policy and are rejected by
@@ -59,6 +60,12 @@ const (
 	// the secretary role: same console as the admin, fewer permissions.
 	SecretaryUsername = "secretaria"
 	SecretaryPassword = "secretaria123*"
+
+	// StudentUsername and StudentPassword are the demo login with the
+	// student role. The account id doubles as the student record id so
+	// "view own history" resolves (same pattern as the test stacks).
+	StudentUsername = "estudiante"
+	StudentPassword = "estudiante123*"
 
 	// MarkerSubject and MarkerUsername are the account that proves the
 	// demo data is already present. It is not a login anybody uses.
@@ -150,7 +157,7 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 		return sum, err
 	}
 	teacherAccount, err := deps.ensureAccount(ctx, TeacherSubject, TeacherUsername,
-		"carlos.mendoza@observador.edu.co", TeacherPassword)
+		"docente@observador.edu.co", TeacherPassword)
 	if err != nil {
 		return sum, err
 	}
@@ -159,7 +166,7 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 	if err != nil {
 		return sum, err
 	}
-	sum.Accounts = 3
+	sum.Accounts = 4
 	sum.Roles += deps.grant(ctx, AdminSubject, roles.RoleAdmin)
 	sum.Roles += deps.grant(ctx, TeacherSubject, roles.RoleTeacher)
 	sum.Roles += deps.grant(ctx, SecretarySubject, roles.RoleSecretary)
@@ -257,7 +264,7 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 		}
 	}
 
-	// The demo teacher logs in as carlos.mendoza but teaches as the Carlos
+	// The demo teacher logs in as docente but teaches as the Carlos
 	// profile: link both records so "my schedule" resolves. Idempotent.
 	teacherAccount.TeacherID = teacherProfiles[0].ID
 	if _, err := deps.Users.Update(ctx, teacherAccount); err != nil {
@@ -327,6 +334,43 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 			sum.Students++
 			sum.Enrollments++
 		}
+	}
+
+	// Demo student behind the estudiante login: the account id doubles
+	// as the student record id, so the login sees its own history.
+	demoStudent, err := deps.Students.Create(ctx, students.Student{
+		Names: "Demo", Surnames: "Estudiante", ClassID: groups["9-1"].Label(), DocumentID: "10204021",
+		Birthplace: "Medellín",
+		Birthdate:  date(birthYear(year, 9), 3, 2),
+		Phone:      "3110204021",
+		Address:    "Calle 10 # 5-20",
+		Caregiver: students.Guardian{
+			Names:      "Estudiante (acudiente)",
+			Phone:      "3210204021",
+			Occupation: "Docente",
+			Address:    "Calle 10 # 5-20",
+		},
+		LivesWith: "Padres",
+	})
+	if err != nil {
+		return sum, fmt.Errorf("devseed: demo student: %w", err)
+	}
+	if _, err := deps.Enrollments.Enroll(ctx, enrollments.Enrollment{
+		StudentID: demoStudent.ID, ClassGroupID: groups["9-1"].ID,
+	}); err != nil {
+		return sum, fmt.Errorf("devseed: enroll demo student: %w", err)
+	}
+	byGroup["9-1"] = append(byGroup["9-1"], demoStudent)
+	sum.Students++
+	sum.Enrollments++
+	studentAccount, err := deps.ensureAccount(ctx, demoStudent.ID, StudentUsername,
+		"estudiante@observador.edu.co", StudentPassword)
+	if err != nil {
+		return sum, err
+	}
+	sum.Roles += deps.grant(ctx, demoStudent.ID, roles.RoleStudent)
+	if studentAccount.ID != demoStudent.ID {
+		sum.Roles += deps.grant(ctx, studentAccount.ID, roles.RoleStudent)
 	}
 
 	// Roll calls for 9-1 with a few marks, so class statistics, the
