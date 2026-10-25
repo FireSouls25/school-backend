@@ -164,6 +164,8 @@ func homeFor(rs []roles.Role) string {
 		return "/admin"
 	case set[roles.RoleTeacher]:
 		return "/docente"
+	case set[roles.RoleSecretary]:
+		return "/admin"
 	case set[roles.RoleStudent]:
 		return "/estudiante"
 	default:

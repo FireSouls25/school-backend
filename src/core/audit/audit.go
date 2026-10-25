@@ -39,6 +39,9 @@ const (
 	ResourceGroup      Resource = "group"
 	// ResourceTeacherAttendance marks the daily roll of teachers.
 	ResourceTeacherAttendance Resource = "teacher-attendance"
+	// ResourceUser marks a login account (lockout): the audit row says
+	// who pressed the block button.
+	ResourceUser Resource = "user"
 )
 
 // Entry is one trail row. StudentID is empty when the action concerns

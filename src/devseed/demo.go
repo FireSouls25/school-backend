@@ -52,6 +52,14 @@ const (
 	AdminPassword   = "admin123*"
 	TeacherPassword = "docente123*"
 
+	// SecretarySubject is the demo secretary's user id.
+	SecretarySubject = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+
+	// SecretaryUsername and SecretaryPassword are the demo login with
+	// the secretary role: same console as the admin, fewer permissions.
+	SecretaryUsername = "secretaria"
+	SecretaryPassword = "secretaria123*"
+
 	// MarkerSubject and MarkerUsername are the account that proves the
 	// demo data is already present. It is not a login anybody uses.
 	MarkerSubject  = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
@@ -146,14 +154,23 @@ func Run(ctx context.Context, deps Deps) (Summary, error) {
 	if err != nil {
 		return sum, err
 	}
-	sum.Accounts = 2
+	secretaryAccount, err := deps.ensureAccount(ctx, SecretarySubject, SecretaryUsername,
+		"secretaria@observador.edu.co", SecretaryPassword)
+	if err != nil {
+		return sum, err
+	}
+	sum.Accounts = 3
 	sum.Roles += deps.grant(ctx, AdminSubject, roles.RoleAdmin)
 	sum.Roles += deps.grant(ctx, TeacherSubject, roles.RoleTeacher)
+	sum.Roles += deps.grant(ctx, SecretarySubject, roles.RoleSecretary)
 	if adminAccount.ID != AdminSubject {
 		sum.Roles += deps.grant(ctx, adminAccount.ID, roles.RoleAdmin)
 	}
 	if teacherAccount.ID != TeacherSubject {
 		sum.Roles += deps.grant(ctx, teacherAccount.ID, roles.RoleTeacher)
+	}
+	if secretaryAccount.ID != SecretarySubject {
+		sum.Roles += deps.grant(ctx, secretaryAccount.ID, roles.RoleSecretary)
 	}
 
 	start, end := date(year, 2, 2), date(year, 11, 27)

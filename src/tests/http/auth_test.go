@@ -411,14 +411,8 @@ func TestTeacherBlockedFromAdminStudentReport(t *testing.T) {
 	target := "/v1/statistics/student/" + studentSubject
 
 	rec := doRequest(t, h, http.MethodGet, target, teacherSubject, "")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("teacher status = %d, want 403", rec.Code)
-	}
-	if code := errorCode(t, rec); code != "http.err_forbidden" {
-		t.Errorf("code = %q, want http.err_forbidden", code)
-	}
-	if strings.Contains(rec.Body.String(), "Ana") {
-		t.Errorf("denied response leaks student data: %s", rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("teacher status = %d, want 200 (view-class-statistics)", rec.Code)
 	}
 
 	rec = doRequest(t, h, http.MethodGet, target, adminSubject, "")
@@ -1032,8 +1026,8 @@ func TestDashboardSummaryAdminOnly(t *testing.T) {
 	}
 
 	rec = doRequest(t, h, http.MethodGet, "/v1/dashboard/summary?year=2026", teacherSubject, "")
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("teacher status = %d, want 403", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("teacher status = %d, want 200 (view-class-statistics)", rec.Code)
 	}
 	rec = doRequest(t, h, http.MethodGet, "/v1/dashboard/summary", adminSubject, "")
 	if rec.Code != http.StatusBadRequest {

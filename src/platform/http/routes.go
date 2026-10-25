@@ -90,15 +90,15 @@ func routes(r *chi.Mux, deps Dependencies) {
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/classes", handleCreateClass(deps))
 		// Enrollments and promotion decisions (manage-students).
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/enrollments", handleCreateEnrollment(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/enrollments", handleListEnrollments(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Delete("/enrollments/{id}", handleDeleteEnrollment(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/promotions", handleRecordPromotion(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageStudents)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Get("/promotions", handleListPromotions(deps))
 		// School years: dated periods, frozen calendars, close.
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
@@ -116,12 +116,12 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/holidays", handleHolidays(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/classes/{groupID}/roster", handleClassRoster(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/dashboard/summary", handleDashboardSummary(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/statistics/class/{groupID}", handleClassReport(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/statistics/student/{studentID}", handleStudentReport(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
@@ -136,9 +136,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Post("/warnings/batch", handleIssueWarningBatch(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Put("/warnings/{id}", handleCorrectWarning(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewWarnings)).
 			Get("/warnings/{id}/revisions", handleWarningRevisions(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewWarnings)).
 			Get("/warnings/recent", handleWarningsRecent(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Post("/incidents", handleReportIncident(deps))
@@ -157,7 +157,7 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Post("/teachers", handleCreateTeacher(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Put("/teachers/{id}", handleUpdateTeacher(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewTeachers)).
 			Get("/teachers", handleListTeachers(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/teachers/me/schedule", handleMySchedule(deps))
@@ -173,14 +173,14 @@ func routes(r *chi.Mux, deps Dependencies) {
 		// own account row. Auth only, no permission.
 		r.Get("/me/photo", handleGetMyPhoto(deps))
 		r.Put("/me/photo", handlePutMyPhoto(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewTeachers)).
 			Get("/teachers/{id}", handleGetTeacher(deps))
 		// Lockout UI: which login (if any) fronts a teacher profile.
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewTeachers)).
 			Get("/teachers/{id}/account", handleGetTeacherAccount(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Put("/teachers/{id}/photo", handlePutTeacherPhoto(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewTeachers)).
 			Get("/teachers/{id}/photo", handleGetTeacherPhoto(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageTeachers)).
 			Post("/teachers/attendance", handleRecordTeacherDay(deps))
@@ -202,29 +202,29 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/subjects", handleListSubjects(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/subjects/{id}", handleGetSubject(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Post("/subjects", handleCreateSubject(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Put("/subjects/{id}", handleUpdateSubject(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Delete("/subjects/{id}", handleDeleteSubject(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/subjects/{id}/assignments", handleSubjectAssignments(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Post("/assignments", handleAssignSubject(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Post("/assignments/{id}/end", handleEndAssignment(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Delete("/assignments/{id}", handleRemoveAssignment(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Get("/teachers/{id}/assignments", handleTeacherAssignments(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/schedule", handleListSchedule(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Post("/schedule", handleCreateSchedule(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Put("/schedule/{id}", handleUpdateSchedule(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageSchedules)).
 			Delete("/schedule/{id}", handleDeleteSchedule(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageSystem)).
 			Get("/audit", handleListAudit(deps))
@@ -234,7 +234,7 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Post("/users", handleCreateUser(deps))
 		// Lockout response: disable/enable a login without deleting it.
 		// The version bump kills bearers; refresh is rejected on Active.
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionBlockAccess)).
 			Put("/users/{id}/active", handleSetUserActive(deps))
 	})
 }

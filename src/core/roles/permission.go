@@ -28,6 +28,18 @@ const (
 	PermissionManageRoles Permission = "manage-roles"
 	// PermissionManageSystem lets an admin manage the whole system.
 	PermissionManageSystem Permission = "manage-system"
+	// PermissionViewTeachers lets a secretary see teacher records in
+	// order to locate the lockout switch. It grants no edit.
+	PermissionViewTeachers Permission = "view-teachers"
+	// PermissionBlockAccess lets a secretary disable or re-enable a
+	// login. Admin accounts stay out: only manage-users touches them.
+	PermissionBlockAccess Permission = "block-access"
+	// PermissionManageSchedules covers the timetable, its subjects and
+	// their assignments, the same for admins and secretaries.
+	PermissionManageSchedules Permission = "manage-schedules"
+	// PermissionViewWarnings lets a secretary read the incident history
+	// without registering or correcting anything.
+	PermissionViewWarnings Permission = "view-warnings"
 )
 
 // permissionCatalog is the complete set of permissions the system knows.
@@ -42,6 +54,10 @@ var permissionCatalog = []Permission{
 	PermissionManageUsers,
 	PermissionManageRoles,
 	PermissionManageSystem,
+	PermissionViewTeachers,
+	PermissionBlockAccess,
+	PermissionManageSchedules,
+	PermissionViewWarnings,
 }
 
 // rolePermissions maps each role to the permissions it grants.
@@ -57,6 +73,17 @@ var rolePermissions = func() map[Role][]Permission {
 			PermissionRecordAttendance,
 			PermissionViewClassStats,
 		},
+	}
+	base[RoleSecretary] = []Permission{
+		PermissionViewStudents,
+		PermissionManageStudents,
+		PermissionViewClassStats,
+		PermissionRecordAttendance,
+		PermissionManageTeachers,
+		PermissionViewTeachers,
+		PermissionBlockAccess,
+		PermissionManageSchedules,
+		PermissionViewWarnings,
 	}
 	base[RoleAdmin] = append([]Permission(nil), permissionCatalog...)
 	return base

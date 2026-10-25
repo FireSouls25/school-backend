@@ -17,10 +17,13 @@ const (
 	RoleTeacher Role = "teacher"
 	// RoleAdmin manages the system and its users.
 	RoleAdmin Role = "admin"
+	// RoleSecretary assists with records, schedules and lockout, without
+	// user management, school years or incident registration.
+	RoleSecretary Role = "secretary"
 )
 
 // knownRoles is the canonical, alphabetically sorted list of roles.
-var knownRoles = [...]Role{RoleAdmin, RoleStudent, RoleTeacher}
+var knownRoles = [...]Role{RoleAdmin, RoleSecretary, RoleStudent, RoleTeacher}
 
 // Parse converts a case-insensitive, whitespace-trimmed string into a Role.
 func Parse(s string) (Role, error) {
@@ -34,7 +37,7 @@ func Parse(s string) (Role, error) {
 // IsValid reports whether r is one of the known roles.
 func (r Role) IsValid() bool {
 	switch r {
-	case RoleStudent, RoleTeacher, RoleAdmin:
+	case RoleStudent, RoleTeacher, RoleAdmin, RoleSecretary:
 		return true
 	}
 	return false

@@ -102,13 +102,13 @@ Routes declare one required permission, enforced by
 | `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
 | `POST /v1/incidents` | `record-incidents` | teacher, admin |
 | `GET /v1/students/{id}/incidents` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
-| `GET /v1/dashboard/summary?year=AAAA` | `manage-system` | admin only |
+| `GET /v1/dashboard/summary?year=AAAA` | `view-class-statistics` | teacher, admin, secretary |
 | `POST /v1/students` | `manage-students` | admin only |
 | `PUT /v1/students/{id}` | `manage-students` | admin only |
 | `POST /v1/teachers` | `manage-users` | admin only |
 | `PUT /v1/teachers/{id}` | `manage-users` | admin only |
-| `GET /v1/teachers` | `manage-users` | admin only |
-| `GET /v1/teachers/{id}` | `manage-users` | admin only |
+| `GET /v1/teachers` | `view-teachers` | admin + secretary |
+| `GET /v1/teachers/{id}` | `view-teachers` | admin + secretary |
 | `GET /v1/subjects` | `view-class-statistics` | teacher, admin |
 | `GET /v1/subjects/{id}` | `view-class-statistics` | teacher, admin |
 | `POST /v1/subjects` | `manage-users` | admin only |
@@ -133,8 +133,8 @@ Routes declare one required permission, enforced by
 | `GET /v1/sessions/{id}` | `view-class-statistics` | teacher, admin |
 | `GET /v1/incidents/recent?limit=N` | `manage-system` | admin only |
 | `GET /v1/schedule?teacherID=&classGroupID=&weekday=` | `view-class-statistics` | teacher, admin |
-| `POST /v1/schedule` | `manage-users` | admin only |
-| `PUT /v1/schedule/{id}` | `manage-users` | admin only |
+| `POST /v1/schedule` | `manage-schedules` | admin + secretary |
+| `PUT /v1/schedule/{id}` | `manage-schedules` | admin + secretary |
 | `DELETE /v1/schedule/{id}` | `manage-users` | admin only |
 | `GET /v1/audit?limit=&studentID=` | `manage-system` | admin only |
 | `POST /v1/roles` | `manage-roles` | admin only |

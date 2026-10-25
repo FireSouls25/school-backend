@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"grade/src/core/audit"
+	"grade/src/core/roles"
 )
 
 // recoverRequest carries the identifier (username or email) that forgot
@@ -108,8 +111,10 @@ func handleRecoverReset(deps Dependencies, limit *loginLimiter) http.HandlerFunc
 }
 
 // handleSetUserActive enables or disables a login (lockout response).
-// Only admins reach it (manage-users); the version bump kills bearers
-// and the Active check rejects refreshes, so the cut is immediate.
+// Block-access reaches it (secretaries included); admin accounts stay
+// out unless the caller manages users, so a secretary can never close
+// an admin. The attempt is trailed with its subject: the audit row says
+// who pressed the button.
 func handleSetUserActive(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body setActiveRequest
@@ -121,11 +126,30 @@ func handleSetUserActive(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, errBadRequest)
 			return
 		}
+		subject, _ := SubjectFrom(r.Context())
+		if targetRoles, err := deps.Roles.Roles(r.Context(), id); err == nil {
+			for _, targetRole := range targetRoles {
+				if targetRole != roles.RoleAdmin {
+					continue
+				}
+				allowed, err := deps.Auth.Can(r.Context(), subject, roles.PermissionManageUsers)
+				if err != nil {
+					WriteError(w, r, err)
+					return
+				}
+				if !allowed {
+					WriteError(w, r, errForbidden)
+					return
+				}
+				break
+			}
+		}
 		u, err := deps.Users.SetActive(r.Context(), id, body.Active)
 		if err != nil {
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceUser, u.ID, "", http.StatusOK)
 		writeJSON(w, http.StatusOK, userAccount{
 			ID: u.ID, Username: u.Username, Email: u.Email, Active: u.Active,
 		})

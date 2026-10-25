@@ -80,7 +80,7 @@ func TestRunCreatesUsableSchool(t *testing.T) {
 	if sum.AlreadySeeded {
 		t.Fatal("AlreadySeeded on a fresh store")
 	}
-	if sum.Accounts != 2 || sum.Teachers == 0 || sum.Subjects == 0 || sum.Classes == 0 {
+	if sum.Accounts != 3 || sum.Teachers == 0 || sum.Subjects == 0 || sum.Classes == 0 {
 		t.Fatalf("summary = %+v, want a populated school", sum)
 	}
 	if sum.Students == 0 || sum.Enrollments != sum.Students {
