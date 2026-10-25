@@ -70,7 +70,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/recover/request` | public (throttled 5/min) | anyone (always 204, no enumeration) |
 | `POST /v1/recover/reset` | reset token (throttled 5/min) | password-forgotten holder |
 | `GET /v1/teachers/{id}/account` | `manage-users` | admin only (login or honest 404) |
-| `PUT /v1/users/{id}/active` | `manage-users` | admin only (lockout response) |
+| `PUT /v1/users/{id}/active` | `block-access` | admin + secretary (never admin targets without manage-users; trailed with subject) |
 | `GET /v1/me` | authenticated only | anyone with an id |
 | `PUT /v1/me/password` | authenticated only | anyone with an account row |
 | `GET /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
@@ -119,7 +119,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/assignments/{id}/end` | `manage-users` | admin only |
 | `DELETE /v1/assignments/{id}` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/assignments` | `manage-users` | admin only |
-| `GET /v1/warnings/recent?limit=N` | `manage-system` | admin only |
+| `GET /v1/warnings/recent?limit=N` | `view-warnings` | admin + secretary |
 | `POST /v1/teachers/attendance` | `manage-teachers` | admin only |
 | `GET /v1/teachers/attendance?date=YYYY-MM-DD` | `manage-teachers` | admin only |
 | `GET /v1/teachers/{id}/attendance?from=&to=` | `manage-teachers` | admin only |
@@ -322,7 +322,7 @@ ever log in. Frontend flow in `docs/users.md`.
   before anything persists, so an unknown student fails the whole
   batch with `404` and an empty batch with `400`. `201` returns the
   stored warnings.
-- `GET /v1/warnings/recent?limit=N` (`manage-system`, admin only)
+- `GET /v1/warnings/recent?limit=N` (`view-warnings`, admin + secretary)
   returns the latest llamados newest first, each with the stored
   warning plus `StudentName`, `ClassLabel` and `AuthorName` resolved
   best-effort (live records win, the frozen snapshot stands in
