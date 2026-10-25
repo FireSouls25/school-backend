@@ -1493,9 +1493,18 @@ func handleClassReport(deps Dependencies) http.HandlerFunc {
 }
 
 // handleStudentReport returns the full cross-year student report.
+// Staff with class statistics plus the student themself (own history).
 func handleStudentReport(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		report, err := deps.Statistics.StudentReport(r.Context(), chi.URLParam(r, "studentID"))
+		subject, _ := SubjectFrom(r.Context())
+		id := strings.TrimSpace(chi.URLParam(r, "studentID"))
+		if !allowStudentView(r.Context(), deps.Auth, subject, id) {
+			if ok, err := deps.Auth.Can(r.Context(), subject, roles.PermissionViewClassStats); err != nil || !ok {
+				WriteError(w, r, errForbidden)
+				return
+			}
+		}
+		report, err := deps.Statistics.StudentReport(r.Context(), id)
 		if err != nil {
 			WriteError(w, r, err)
 			return

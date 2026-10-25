@@ -121,8 +121,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/statistics/class/{groupID}", handleClassReport(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
-			Get("/statistics/student/{studentID}", handleStudentReport(deps))
+		// Own report included: staff with class statistics plus the
+		// student themself, checked inside the handler.
+		r.Get("/statistics/student/{studentID}", handleStudentReport(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
 			Post("/sessions/{sessionID}/marks", handleRecordMark(deps))
