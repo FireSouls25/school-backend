@@ -99,7 +99,7 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatalf("admin me = %d, want 200 admin: %v", code, me)
 	}
 
-	code, doc := login(t, h, "carlos.mendoza", "docente123*")
+	code, doc := login(t, h, "docente", "docente123*")
 	if code != http.StatusOK {
 		t.Fatalf("docente login = %d, want 200", code)
 	}
@@ -126,14 +126,14 @@ func TestAuthFlow(t *testing.T) {
 	if code, _ := do(t, h, http.MethodPost, "/v1/refresh", "", `{"refreshToken":"`+pair["refreshToken"].(string)+`"}`); code != http.StatusUnauthorized {
 		t.Fatalf("refresh tras rotación = %d, want 401", code)
 	}
-	if code, _ := login(t, h, "carlos.mendoza", "Docente99x"); code != http.StatusOK {
+	if code, _ := login(t, h, "docente", "Docente99x"); code != http.StatusOK {
 		t.Fatalf("login nueva clave = %d, want 200", code)
 	}
 
 	if code, _ := do(t, h, http.MethodPost, "/v1/recover/request", "", `{"identifier":"nadie.existe"}`); code != http.StatusNoContent {
 		t.Fatalf("recover desconocido = %d, want 204", code)
 	}
-	if code, _ := login(t, h, "carlos.mendoza", "Docente99x"); code != http.StatusOK {
+	if code, _ := login(t, h, "docente", "Docente99x"); code != http.StatusOK {
 		t.Fatalf("re-login = %d, want 200", code)
 	}
 }
