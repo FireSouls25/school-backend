@@ -100,6 +100,10 @@ Routes declare one required permission, enforced by
 | `PUT /v1/teachers/me` | authenticated only | own contact/health ficha (identity, homeroom and active stay admin-only) |
 | `POST /v1/sessions/open` | `record-attendance` | teacher, admin |
 | `POST /v1/warnings/batch` | `record-incidents` | teacher, admin |
+| `POST /v1/academic-alerts` | `record-incidents` | teacher raises, admin + secretary read |
+| `GET /v1/academic-alerts` | `view-warnings` | open alerts, newest first |
+| `GET /v1/students/{id}/alerts` | auth + own history | teacher, admin / student (own) |
+| `POST /v1/academic-alerts/{id}/review` | `manage-system` | admin only; closes the pending |
 | `POST /v1/incidents` | `record-incidents` | teacher, admin |
 | `GET /v1/students/{id}/incidents` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/dashboard/summary?year=AAAA` | `view-class-statistics` | teacher, admin, secretary |
