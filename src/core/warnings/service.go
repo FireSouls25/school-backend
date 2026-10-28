@@ -108,6 +108,14 @@ func (s *Service) ForAuthor(ctx context.Context, authorID string) ([]Warning, er
 }
 
 // Remove deletes a warning record.
+// WarningByID returns one warning for closed-year checks.
+func (s *Service) WarningByID(ctx context.Context, id string) (Warning, error) {
+	if strings.TrimSpace(id) == "" {
+		return Warning{}, ErrNotFound
+	}
+	return s.store.Fetch(ctx, strings.TrimSpace(id))
+}
+
 func (s *Service) Remove(ctx context.Context, id string) error {
 	if strings.TrimSpace(id) == "" {
 		return ErrNotFound

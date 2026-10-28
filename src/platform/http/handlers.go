@@ -583,6 +583,12 @@ func handleRecordTeacherDay(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		if deps.Years != nil {
+			if y, err := deps.Years.ByYear(r.Context(), day.Year()); err == nil && y.Closed {
+				WriteError(w, r, schoolyears.ErrYearClosed)
+				return
+			}
+		}
 		subject, _ := SubjectFrom(r.Context())
 		marks := make([]tattendance.DayMark, 0, len(body.Marks))
 		for _, m := range body.Marks {
@@ -1426,6 +1432,11 @@ func handleCorrectWarning(deps Dependencies) http.HandlerFunc {
 			}
 		}
 		subject, _ := SubjectFrom(r.Context())
+		if w_, ferr := deps.Warnings.WarningByID(r.Context(), id); ferr == nil {
+			if rejectClosedYearForGroup(r, w, deps, w_.ClassID) {
+				return
+			}
+		}
 		updated, err := deps.Warnings.Correct(r.Context(), id, warnings.Update{
 			Gravity:     gravity,
 			Title:       body.Title,
@@ -1660,6 +1671,29 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
+// rejectClosedYear answers true (after writing 400) when the school year
+// owning the class-group is already closed. Writes to closed years are
+// refused everywhere: roll calls, marks and warnings freeze with the year.
+// Stacks without the catalog services skip the check.
+func rejectClosedYearForGroup(r *http.Request, w http.ResponseWriter, deps Dependencies, groupID string) bool {
+	if deps.Classes == nil || deps.Years == nil {
+		return false
+	}
+	g, err := deps.Classes.ByID(r.Context(), strings.TrimSpace(groupID))
+	if err != nil {
+		return false
+	}
+	y, err := deps.Years.ByID(r.Context(), g.SchoolYearID)
+	if err != nil {
+		return false
+	}
+	if y.Closed {
+		WriteError(w, r, schoolyears.ErrYearClosed)
+		return true
+	}
+	return false
+}
+
 // handleRecordMark records one roll-call mark; the author is always the
 // authenticated caller, never a body field.
 func handleRecordMark(deps Dependencies) http.HandlerFunc {
@@ -1679,8 +1713,16 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 			mark = m
 		}
 		subject, _ := SubjectFrom(r.Context())
+		sessionID := chi.URLParam(r, "sessionID")
+		if deps.Sessions != nil {
+			if sess, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
+				if rejectClosedYearForGroup(r, w, deps, sess.ClassGroupID) {
+					return
+				}
+			}
+		}
 		rev, err := deps.Sessions.RecordMark(
-			r.Context(), chi.URLParam(r, "sessionID"),
+			r.Context(), sessionID,
 			strings.TrimSpace(body.StudentID), mark, subject,
 			strings.TrimSpace(body.Note),
 		)
@@ -2346,14 +2388,16 @@ func parseScheduleBody(w http.ResponseWriter, r *http.Request, id string) (sched
 }
 
 // handleListSchedule returns schedule entries filtered by teacher and/or
-// class-group, optionally narrowed to one weekday. At least one of
-// ?teacherID= / ?classGroupID= is required: no unfiltered full dump.
+// class-group, optionally narrowed to one weekday. A bare ?weekday= lists
+// the whole day across groups (day-wide views); a fully unfiltered call
+// is still rejected.
 func handleListSchedule(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		teacherID := strings.TrimSpace(q.Get("teacherID"))
 		classGroupID := strings.TrimSpace(q.Get("classGroupID"))
-		if teacherID == "" && classGroupID == "" {
+		weekdayOnly := teacherID == "" && classGroupID == "" && strings.TrimSpace(q.Get("weekday")) != ""
+		if teacherID == "" && classGroupID == "" && !weekdayOnly {
 			WriteError(w, r, errBadRequest)
 			return
 		}
@@ -2367,6 +2411,14 @@ func handleListSchedule(deps Dependencies) http.HandlerFunc {
 			weekday = &n
 		}
 		var list []schedules.Entry
+		if weekdayOnly {
+			entries, err := deps.Schedules.EntriesForDay(r.Context(), time.Weekday(*weekday))
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			list = append(list, entries...)
+		}
 		if teacherID != "" {
 			entries, err := deps.Schedules.EntriesForTeacher(r.Context(), teacherID)
 			if err != nil {
@@ -2779,6 +2831,10 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		if sy.Closed {
+			WriteError(w, r, schoolyears.ErrYearClosed)
+			return
+		}
 		roster, err := resolveRoster(r.Context(), deps, group.ID)
 		if err != nil {
 			WriteError(w, r, err)
@@ -2872,6 +2928,9 @@ func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
 			items = append(items, warnings.BatchItem{StudentID: st.ID, Snapshot: snapshotFor(st)})
 		}
 		subject, _ := SubjectFrom(r.Context())
+		if rejectClosedYearForGroup(r, w, deps, body.ClassID) {
+			return
+		}
 		out, err := deps.Warnings.IssueBatch(r.Context(), warnings.BatchInput{
 			ClassID:     strings.TrimSpace(body.ClassID),
 			TeacherID:   subject,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -84,6 +85,13 @@ func (s *SchedulesStore) ByID(ctx context.Context, id string) (schedules.Entry, 
 func (s *SchedulesStore) EntriesForTeacher(ctx context.Context, teacherID string) ([]schedules.Entry, error) {
 	return s.entriesWhere(ctx,
 		`WHERE teacher_id = $1 ORDER BY weekday, start_min, id`, teacherID)
+}
+
+// EntriesForGroup implements schedules.Store.
+// EntriesForDay implements schedules.Store.
+func (s *SchedulesStore) EntriesForDay(ctx context.Context, weekday time.Weekday) ([]schedules.Entry, error) {
+	return s.entriesWhere(ctx,
+		`WHERE weekday = $1 ORDER BY start_min, id`, strconv.Itoa(int(weekday)))
 }
 
 // EntriesForGroup implements schedules.Store.

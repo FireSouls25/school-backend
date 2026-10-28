@@ -38,6 +38,20 @@ func (s *MemoryStore) ByID(_ context.Context, id string) (Entry, error) {
 	return e, nil
 }
 
+// EntriesForDay implements Store.
+func (s *MemoryStore) EntriesForDay(_ context.Context, weekday time.Weekday) ([]Entry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Entry, 0)
+	for _, e := range s.entries {
+		if e.Weekday == int(weekday) {
+			out = append(out, e)
+		}
+	}
+	sortEntries(out)
+	return out, nil
+}
+
 // EntriesForTeacher implements Store.
 func (s *MemoryStore) EntriesForTeacher(_ context.Context, teacherID string) ([]Entry, error) {
 	s.mu.Lock()

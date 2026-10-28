@@ -67,6 +67,15 @@ func (s *Service) EntriesForTeacher(ctx context.Context, teacherID string) ([]En
 	return s.store.EntriesForTeacher(ctx, strings.TrimSpace(teacherID))
 }
 
+// EntriesForDay returns every entry on the given weekday across all
+// groups, ordered by start time.
+func (s *Service) EntriesForDay(ctx context.Context, day time.Weekday) ([]Entry, error) {
+	if err := validateWeekday(int(day)); err != nil {
+		return nil, err
+	}
+	return s.store.EntriesForDay(ctx, day)
+}
+
 // EntriesForTeacherOnDay returns a teacher's slots for one weekday: the
 // day view. Holiday skipping composes on top using the year's list.
 func (s *Service) EntriesForTeacherOnDay(ctx context.Context, teacherID string, day time.Weekday) ([]Entry, error) {

@@ -30,6 +30,9 @@ type Store interface {
 	// EntriesForSubject returns every entry teaching a subject, ordered by
 	// weekday, then start time. It backs the catalog delete-guard.
 	EntriesForSubject(ctx context.Context, subjectID string) ([]Entry, error)
+	// EntriesForDay returns every entry on the given weekday across all
+	// groups, ordered by start time. It backs day-wide views.
+	EntriesForDay(ctx context.Context, weekday time.Weekday) ([]Entry, error)
 	// TeachersOnWeekday returns the distinct teacher ids with at least one
 	// entry on the given weekday, sorted. It backs the daily teacher roll:
 	// only teachers expected that day are listed.
