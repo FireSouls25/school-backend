@@ -155,14 +155,18 @@ func handleRecordPromotion(deps Dependencies) http.HandlerFunc {
 				WriteError(w, r, enrollments.ErrInvalidPromotion)
 				return
 			}
-			if _, err := deps.Classes.ByID(r.Context(), toID); err != nil {
-				WriteError(w, r, err)
-				return
+			// Sin destino todavia: la decision queda registrada y la
+			// distribucion la completa despues (tablero de cierre).
+			if toID != "" {
+				if _, err := deps.Classes.ByID(r.Context(), toID); err != nil {
+					WriteError(w, r, err)
+					return
+				}
 			}
 		}
 		subject, _ := SubjectFrom(r.Context())
 		now := time.Now().UTC()
-		if decision != enrollments.DecisionGraduate {
+		if decision != enrollments.DecisionGraduate && toID != "" {
 			if _, err := deps.Enrollments.Enroll(r.Context(), enrollments.Enrollment{
 				StudentID:    student.ID,
 				ClassGroupID: toID,

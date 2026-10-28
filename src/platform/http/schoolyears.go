@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"grade/src/core/audit"
 	"grade/src/core/schoolyears"
 )
 
@@ -169,6 +170,21 @@ func handleUpdateYear(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
+// handleReopenYear reverts a closed year back to open. Emergency path
+// only: the console asks for explicit confirmation, as it re-enables
+// writes on a frozen year.
+func handleReopenYear(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		y, err := deps.Years.Reopen(r.Context(), strings.TrimSpace(chi.URLParam(r, "id")))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceYear, y.ID, "", http.StatusOK)
+		writeJSON(w, http.StatusOK, y)
 	}
 }
 

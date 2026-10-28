@@ -121,3 +121,74 @@ func TestScheduleWeekdayOnlyListsDay(t *testing.T) {
 		t.Error("entries = [], want the Monday fixture slot")
 	}
 }
+
+// A decision can be recorded without destination: distribution assigns
+// it later. Graduating still forbids one.
+func TestPromotionWithoutDestination(t *testing.T) {
+	h := testStack(t)
+
+	rec := doRequest(t, h, http.MethodPost, "/v1/promotions", adminSubject,
+		`{"studentID":"`+studentSubject+`","fromGroupID":"`+realGroupID+`","decision":"repeat"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("pending repeat status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(t, h, http.MethodPost, "/v1/promotions", adminSubject,
+		`{"studentID":"`+studentSubject+`","fromGroupID":"`+realGroupID+`","decision":"graduate"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("graduate out of grade 11 status = %d, want 400", rec.Code)
+	}
+}
+
+// Emergency reopening re-enables writes on a closed year.
+func TestReopenYear(t *testing.T) {
+	h := testStack(t)
+	rec := doRequest(t, h, http.MethodGet, "/v1/schoolyears", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("years status = %d, want 200", rec.Code)
+	}
+	var years []struct {
+		ID   string `json:"ID"`
+		Year int    `json:"Year"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &years); err != nil {
+		t.Fatalf("decode years: %v", err)
+	}
+	var id string
+	for _, y := range years {
+		if y.Year == 2026 {
+			id = y.ID
+		}
+	}
+	if id == "" {
+		t.Fatal("2026 not found")
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/schoolyears/"+id+"/close", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("close status = %d, want 200", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/sessions/open", teacherSubject,
+		`{"classGroupID":"`+realGroupID+`","period":2}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("open on closed status = %d, want 400", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/schoolyears/"+id+"/reopen", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reopen status = %d, want 200", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/sessions/open", teacherSubject,
+		`{"classGroupID":"`+realGroupID+`","period":2}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("open after reopen status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	// Secretary cannot reopen.
+	rec = doRequest(t, h, http.MethodPost, "/v1/schoolyears/"+id+"/close", adminSubject, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("re-close status = %d, want 200", rec.Code)
+	}
+	_, secretary := secretaryStack(t)
+	rec = doRequest(t, h, http.MethodPost, "/v1/schoolyears/"+id+"/reopen", secretary, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("secretary reopen status = %d, want 403", rec.Code)
+	}
+}

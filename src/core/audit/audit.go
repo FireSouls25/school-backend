@@ -37,6 +37,8 @@ const (
 	ResourceSubject    Resource = "subject"
 	ResourceAssignment Resource = "assignment"
 	ResourceGroup      Resource = "group"
+	// ResourceYear marks school-year lifecycle events (close, reopen).
+	ResourceYear Resource = "year"
 	// ResourceTeacherAttendance marks the daily roll of teachers.
 	ResourceTeacherAttendance Resource = "teacher-attendance"
 	// ResourceUser marks a login account (lockout): the audit row says

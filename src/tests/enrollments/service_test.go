@@ -113,7 +113,6 @@ func TestRecordPromotionValidation(t *testing.T) {
 		want   error
 	}{
 		{"bad decision", func(p *enrollments.Promotion) { p.Decision = "skip" }, enrollments.ErrInvalidDecision},
-		{"promote without destination", func(p *enrollments.Promotion) { p.ToGroupID = "" }, enrollments.ErrInvalidPromotion},
 		{"graduate with destination", func(p *enrollments.Promotion) {
 			p.Decision = enrollments.DecisionGraduate
 		}, enrollments.ErrInvalidPromotion},
@@ -140,11 +139,19 @@ func TestRecordPromotionValidation(t *testing.T) {
 		t.Fatalf("RecordPromotion graduate: %v", err)
 	}
 
+	// Promote without destination is valid: the decision is recorded
+	// now and the distribution board assigns the salon later.
+	pending := base
+	pending.ToGroupID = ""
+	if _, err := svc.RecordPromotion(ctx, pending); err != nil {
+		t.Fatalf("RecordPromotion promote without destination: %v", err)
+	}
+
 	hist, err := svc.PromotionsForStudent(ctx, studentA)
 	if err != nil {
 		t.Fatalf("PromotionsForStudent: %v", err)
 	}
-	if len(hist) != 2 || hist[0].Decision != enrollments.DecisionPromote {
+	if len(hist) != 3 || hist[0].Decision != enrollments.DecisionPromote {
 		t.Errorf("history = %+v, want oldest first", hist)
 	}
 }

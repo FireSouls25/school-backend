@@ -63,6 +63,23 @@ func (s *Service) Update(ctx context.Context, y SchoolYear) (SchoolYear, error) 
 	return s.store.Update(ctx, y)
 }
 
+// Reopen reverts an emergency-closed year back to open. It exists only
+// for the explicit emergency path: closing is otherwise final.
+func (s *Service) Reopen(ctx context.Context, id string) (SchoolYear, error) {
+	if err := validateID(id); err != nil {
+		return SchoolYear{}, err
+	}
+	y, err := s.store.ByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return SchoolYear{}, err
+	}
+	if !y.Closed {
+		return y, nil
+	}
+	y.Closed = false
+	return s.store.Update(ctx, y)
+}
+
 // Delete removes a school year. It is blocked while the year keeps
 // class-groups; the database enforces this with ErrHasClasses.
 func (s *Service) Delete(ctx context.Context, id string) error {

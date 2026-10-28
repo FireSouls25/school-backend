@@ -136,8 +136,10 @@ func validatePromotion(p Promotion) error {
 		if p.ToGroupID != "" {
 			return ErrInvalidPromotion
 		}
-	} else if _, err := uuid.Parse(p.ToGroupID); err != nil {
-		return ErrInvalidPromotion
+	} else if p.ToGroupID != "" {
+		if _, err := uuid.Parse(p.ToGroupID); err != nil {
+			return ErrInvalidPromotion
+		}
 	}
 	if p.DecidedAt.IsZero() {
 		return ErrInvalidDate

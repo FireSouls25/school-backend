@@ -112,6 +112,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Put("/schoolyears/{id}", handleUpdateYear(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/schoolyears/{id}/close", handleCloseYear(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Post("/schoolyears/{id}/reopen", handleReopenYear(deps))
 		// Official Colombian holidays as an editable seed for the year form.
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/holidays", handleHolidays(deps))
