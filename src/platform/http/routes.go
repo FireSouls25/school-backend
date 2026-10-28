@@ -121,6 +121,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/classes/{groupID}/roster", handleClassRoster(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/dashboard/summary", handleDashboardSummary(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/statistics/overview", handleStatisticsOverview(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/statistics/class/{groupID}", handleClassReport(deps))

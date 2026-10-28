@@ -1648,6 +1648,44 @@ func handleStudentReport(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// handleStatisticsOverview returns the year (or year+period) aggregate
+// behind the dashboard charts and the year export: distinct roll-call
+// days, mark tallies, llamados by gravity and the per-salon breakdown.
+// ?year= is required, ?period= optional (0 or missing means whole year).
+func handleStatisticsOverview(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		year, ok := parseYearQuery(w, r)
+		if !ok {
+			return
+		}
+		var period int
+		if raw := strings.TrimSpace(q.Get("period")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 0 {
+				WriteError(w, r, errBadRequest)
+				return
+			}
+			period = n
+		}
+		y, err := deps.Years.ByYear(r.Context(), year)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		spans := make([]statistics.PeriodSpan, 0, len(y.PeriodRanges))
+		for _, pr := range y.PeriodRanges {
+			spans = append(spans, statistics.PeriodSpan{Start: pr.Start, End: pr.End})
+		}
+		out, err := deps.Dashboard.Overview(r.Context(), year, period, spans)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
 // markRequest is the body for recording a roll-call mark.
 type markRequest struct {
 	StudentID string `json:"studentID"`
