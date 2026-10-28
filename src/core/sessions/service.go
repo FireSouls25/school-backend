@@ -120,6 +120,12 @@ func (s *Service) SessionsForStudent(ctx context.Context, studentID string) ([]S
 	return s.store.SessionsForStudent(ctx, strings.TrimSpace(studentID))
 }
 
+// LatestNotesForStudent maps session id to the latest non-empty
+// revision note of one student.
+func (s *Service) LatestNotesForStudent(ctx context.Context, studentID string) (map[string]string, error) {
+	return s.store.LatestNotesForStudent(ctx, strings.TrimSpace(studentID))
+}
+
 // RevisionsForSession returns every revision of a session, oldest first.
 func (s *Service) RevisionsForSession(ctx context.Context, sessionID string) ([]Revision, error) {
 	if _, err := uuid.Parse(strings.TrimSpace(sessionID)); err != nil {

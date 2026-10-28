@@ -80,6 +80,11 @@ func (a statisticsSessions) StudentSessions(ctx context.Context, studentID strin
 	return a.withMarks(ctx, list)
 }
 
+// StudentSessionNotes implements statistics.SessionSource.
+func (a statisticsSessions) StudentSessionNotes(ctx context.Context, studentID string) (map[string]string, error) {
+	return a.sessions.LatestNotesForStudent(ctx, studentID)
+}
+
 func (a statisticsSessions) withMarks(ctx context.Context, list []sessions.Session) ([]statistics.SessionView, error) {
 	out := make([]statistics.SessionView, 0, len(list))
 	for _, sess := range list {

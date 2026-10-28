@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -110,6 +111,24 @@ func (s *MemoryStore) AppendRevision(_ context.Context, r Revision) (Revision, e
 	defer s.mu.Unlock()
 	s.revisions[r.ID] = r
 	return r, nil
+}
+
+// LatestNotesForStudent implements Store.
+func (s *MemoryStore) LatestNotesForStudent(_ context.Context, studentID string) (map[string]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]string)
+	latest := make(map[string]int)
+	for _, r := range s.revisions {
+		if r.StudentID != studentID || strings.TrimSpace(r.Note) == "" {
+			continue
+		}
+		if n, ok := latest[r.SessionID]; !ok || r.Number > n {
+			latest[r.SessionID] = r.Number
+			out[r.SessionID] = r.Note
+		}
+	}
+	return out, nil
 }
 
 // RevisionsForSession implements Store.

@@ -68,6 +68,9 @@ type SessionEntry struct {
 	SchoolYear int
 	Period     int
 	Mark       string
+	// Note is the latest revision note of the session, if any: the
+	// recorded reason of a permission lives here.
+	Note string
 }
 
 // StudentReport is the full per-student view across years: session
@@ -172,6 +175,10 @@ func (s *Service) StudentReport(ctx context.Context, studentID string) (StudentR
 	if err != nil {
 		return StudentReport{}, err
 	}
+	notes, err := s.sessions.StudentSessionNotes(ctx, studentID)
+	if err != nil {
+		return StudentReport{}, err
+	}
 	report := StudentReport{StudentID: studentID}
 	for _, v := range views {
 		mark := v.Marks[studentID]
@@ -182,6 +189,7 @@ func (s *Service) StudentReport(ctx context.Context, studentID string) (StudentR
 			SchoolYear: v.SchoolYear,
 			Period:     v.Period,
 			Mark:       mark,
+			Note:       notes[v.ID],
 		})
 		switch mark {
 		case "absence":

@@ -43,6 +43,11 @@ func (f fakeSources) StudentSessions(_ context.Context, id string) ([]statistics
 	return out, nil
 }
 
+// StudentSessionNotes is unused by these tests: no notes.
+func (f fakeSources) StudentSessionNotes(context.Context, string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (f fakeSources) StudentWarnings(_ context.Context, id string) ([]statistics.WarningView, error) {
 	return f.warnings[id], nil
 }

@@ -210,6 +210,28 @@ func (s *SessionsStore) SessionsForStudent(ctx context.Context, studentID string
 }
 
 // DeleteSession implements sessions.Store. Roster and revisions cascade.
+// LatestNotesForStudent implements sessions.Store.
+func (s *SessionsStore) LatestNotesForStudent(ctx context.Context, studentID string) (map[string]string, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT DISTINCT ON (session_id) session_id, note
+		FROM session_revisions
+		WHERE student_id = $1 AND note <> ''
+		ORDER BY session_id, rev_no DESC`, studentID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: latest notes: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string]string)
+	for rows.Next() {
+		var sessionID, note string
+		if err := rows.Scan(&sessionID, &note); err != nil {
+			return nil, fmt.Errorf("postgres: scan latest note: %w", err)
+		}
+		out[sessionID] = note
+	}
+	return out, rows.Err()
+}
+
 func (s *SessionsStore) DeleteSession(ctx context.Context, id string) error {
 	if _, err := s.db.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id); err != nil {
 		return fmt.Errorf("postgres: delete session: %w", err)

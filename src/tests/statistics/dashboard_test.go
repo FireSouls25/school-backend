@@ -40,6 +40,11 @@ func (g groupSessions) StudentSessions(context.Context, string) ([]statistics.Se
 	return nil, nil
 }
 
+// StudentSessionNotes is unused by these tests: no notes.
+func (g groupSessions) StudentSessionNotes(context.Context, string) (map[string]string, error) {
+	return nil, nil
+}
+
 func dashService(sessions groupSessions, dash fakeDash) *statistics.DashboardService {
 	return statistics.NewDashboardService(sessions, fakeSources{}, fakeSources{}, dash)
 }

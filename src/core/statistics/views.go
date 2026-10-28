@@ -51,6 +51,9 @@ type SessionSource interface {
 	// StudentSessions returns every session including the student in its
 	// frozen roster, newest first.
 	StudentSessions(ctx context.Context, studentID string) ([]SessionView, error)
+	// StudentSessionNotes maps session id to the latest non-empty
+	// revision note of one student (permission reasons).
+	StudentSessionNotes(ctx context.Context, studentID string) (map[string]string, error)
 }
 
 // WarningSource reads llamados de atención per student.

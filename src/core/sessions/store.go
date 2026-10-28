@@ -29,4 +29,8 @@ type Store interface {
 	// RevisionsForSession returns every revision of a session ordered by
 	// number, oldest first.
 	RevisionsForSession(ctx context.Context, sessionID string) ([]Revision, error)
+	// LatestNotesForStudent maps session id to the latest non-empty
+	// revision note of one student. It feeds the "with permission and
+	// reason" display without sweeping every session.
+	LatestNotesForStudent(ctx context.Context, studentID string) (map[string]string, error)
 }

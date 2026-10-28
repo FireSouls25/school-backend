@@ -83,6 +83,10 @@ func (t testSessions) StudentSessions(ctx context.Context, id string) ([]statist
 	return t.withMarks(ctx, list)
 }
 
+func (t testSessions) StudentSessionNotes(ctx context.Context, id string) (map[string]string, error) {
+	return t.svc.LatestNotesForStudent(ctx, id)
+}
+
 func (t testSessions) withMarks(ctx context.Context, list []sessions.Session) ([]statistics.SessionView, error) {
 	out := make([]statistics.SessionView, 0, len(list))
 	for _, sess := range list {
