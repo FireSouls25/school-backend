@@ -23,6 +23,7 @@ func TestSecretaryPermissions(t *testing.T) {
 		roles.PermissionBlockAccess,
 		roles.PermissionManageSchedules,
 		roles.PermissionViewWarnings,
+		roles.PermissionManagePromotions,
 	} {
 		if !granted[want] {
 			t.Errorf("secretary lacks %q", want)

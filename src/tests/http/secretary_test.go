@@ -134,8 +134,36 @@ func TestSecretaryReads(t *testing.T) {
 	}
 }
 
+// Promotion flow: the secretary records decisions, enrolls and creates
+// next-year salons through manage-promotions.
+func TestSecretaryRunsPromotionFlow(t *testing.T) {
+	h, secretary := secretaryStack(t)
+
+	rec := doRequest(t, h, http.MethodPost, "/v1/classes", secretary,
+		`{"year":2026,"grade":7,"groupNo":9}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create class status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(t, h, http.MethodPost, "/v1/promotions", secretary,
+		`{"studentID":"`+studentSubject+`","fromGroupID":"`+realGroupID+`","toGroupID":"`+realGroupID+`","decision":"repeat"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("record promotion status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(t, h, http.MethodGet, "/v1/promotions?groupID="+realGroupID, secretary, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list promotions status = %d, want 200", rec.Code)
+	}
+
+	rec = doRequest(t, h, http.MethodGet, "/v1/enrollments?studentID="+studentSubject, secretary, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list enrollments status = %d, want 200", rec.Code)
+	}
+}
+
 // Writes the secretary must never perform: teacher edits, warnings,
-// years, enrollments, users and roles.
+// years, users and roles.
 func TestSecretaryWritesDenied(t *testing.T) {
 	h, secretary := secretaryStack(t)
 	fake := "00000000-0000-0000-0000-000000000000"
@@ -147,8 +175,6 @@ func TestSecretaryWritesDenied(t *testing.T) {
 		{http.MethodPost, "/v1/warnings/batch", `{}`},
 		{http.MethodPost, "/v1/users", `{"username":"x","email":"x@e.co","password":"x1234567*"}`},
 		{http.MethodPost, "/v1/schoolyears/" + fake + "/close", `{}`},
-		{http.MethodPost, "/v1/classes", `{"grade":7,"groupNo":9}`},
-		{http.MethodPost, "/v1/enrollments", `{}`},
 	}
 	for _, c := range cases {
 		rec := doRequest(t, h, c.method, c.target, secretary, c.body)

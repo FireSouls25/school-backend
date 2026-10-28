@@ -40,6 +40,10 @@ const (
 	// PermissionViewWarnings lets a secretary read the incident history
 	// without registering or correcting anything.
 	PermissionViewWarnings Permission = "view-warnings"
+	// PermissionManagePromotions covers the year-end flow both admin and
+	// secretary run: promotion decisions, enrollments and creating the
+	// next year salons. Closing the year stays manage-users.
+	PermissionManagePromotions Permission = "manage-promotions"
 )
 
 // permissionCatalog is the complete set of permissions the system knows.
@@ -58,6 +62,7 @@ var permissionCatalog = []Permission{
 	PermissionBlockAccess,
 	PermissionManageSchedules,
 	PermissionViewWarnings,
+	PermissionManagePromotions,
 }
 
 // rolePermissions maps each role to the permissions it grants.
@@ -84,6 +89,7 @@ var rolePermissions = func() map[Role][]Permission {
 		PermissionBlockAccess,
 		PermissionManageSchedules,
 		PermissionViewWarnings,
+		PermissionManagePromotions,
 	}
 	base[RoleAdmin] = append([]Permission(nil), permissionCatalog...)
 	return base

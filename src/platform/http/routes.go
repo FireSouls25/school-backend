@@ -88,18 +88,18 @@ func routes(r *chi.Mux, deps Dependencies) {
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/classes", handleListClasses(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePromotions)).
 			Post("/classes", handleCreateClass(deps))
 		// Enrollments and promotion decisions (manage-students).
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePromotions)).
 			Post("/enrollments", handleCreateEnrollment(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePromotions)).
 			Get("/enrollments", handleListEnrollments(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePromotions)).
 			Delete("/enrollments/{id}", handleDeleteEnrollment(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePromotions)).
 			Post("/promotions", handleRecordPromotion(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePromotions)).
 			Get("/promotions", handleListPromotions(deps))
 		// School years: dated periods, frozen calendars, close.
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).

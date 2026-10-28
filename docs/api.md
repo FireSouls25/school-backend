@@ -81,7 +81,7 @@ Routes declare one required permission, enforced by
 | `GET /v1/statistics/student/{studentID}` | `manage-system` | admin only |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
 | `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
-| `POST /v1/classes` | `manage-users` | admin only |
+| `POST /v1/classes` | `manage-promotions` | admin + secretary (year-end board) |
 | `GET /v1/schoolyears` | `view-class-statistics` | teacher, admin |
 | `GET /v1/schoolyears/{id}` | `view-class-statistics` | teacher, admin |
 | `GET /v1/holidays?year=AAAA` | `view-class-statistics` | teacher, admin |
