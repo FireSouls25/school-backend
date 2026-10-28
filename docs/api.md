@@ -107,6 +107,7 @@ Routes declare one required permission, enforced by
 | `POST /v1/incidents` | `record-incidents` | teacher, admin |
 | `GET /v1/students/{id}/incidents` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/dashboard/summary?year=AAAA` | `view-class-statistics` | teacher, admin, secretary |
+| `GET /v1/statistics/overview?year=AAAA[&period=N]` | `view-class-statistics` | teacher, admin, secretary (dashboard charts + year export: distinct roll-call days, mark tallies, llamados by gravity, per-salon breakdown) |
 | `POST /v1/students` | `manage-students` | admin only |
 | `PUT /v1/students/{id}` | `manage-students` | admin only |
 | `POST /v1/teachers` | `manage-users` | admin only |
