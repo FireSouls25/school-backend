@@ -282,7 +282,7 @@ func handleRefresh(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 			WriteError(w, r, errUnauthorized)
 			return
 		}
-		if !u.Active || u.TokenVersion != claims.Ver {
+		if !u.Active || u.DeletedAt != nil || u.TokenVersion != claims.Ver {
 			_ = deps.Tokens.Revoke(r.Context(), claims.Jti)
 			limit.record(r.Context(), key, ip, false, now)
 			WriteError(w, r, errUnauthorized)

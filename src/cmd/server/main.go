@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"grade/src/app"
 	"grade/src/core/throttle"
@@ -44,11 +45,30 @@ func main() {
 
 	// Legacy placeholder identities (X-Subject-ID), when configured.
 	application.SeedPlaceholderRoles(ctx)
-	// Bootstrap admin + demo data (development only), idempotent.
+	// Bootstrap admin + owner + demo data (development only), idempotent.
 	if err := application.Prepare(ctx); err != nil {
 		slog.Error("startup preparation failed", "error", err)
 		os.Exit(1)
 	}
+	if err := application.BootstrapOwner(ctx); err != nil {
+		slog.Error("startup owner bootstrap failed", "error", err)
+		os.Exit(1)
+	}
+	// Soft-deleted accounts outlive their deletion by the retention
+	// window and then disappear for good. Purge once at startup and
+	// hourly after that; a missed run only delays, never skips, expiry.
+	if _, err := application.PurgeDeletedUsers(ctx); err != nil {
+		slog.Error("startup purge failed", "error", err)
+	}
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if _, err := application.PurgeDeletedUsers(context.Background()); err != nil {
+				slog.Error("scheduled purge failed", "error", err)
+			}
+		}
+	}()
 
 	addr := ":" + cfg.Port
 	slog.Info("starting server",

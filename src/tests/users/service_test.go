@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -233,16 +234,162 @@ func TestByIDAndDelete(t *testing.T) {
 	if _, err := svc.ByID(ctx, "00000000-0000-4000-8000-000000000000"); !errors.Is(err, users.ErrNotFound) {
 		t.Errorf("ByID unknown error = %v, want ErrNotFound", err)
 	}
+	// Delete is soft: the row stays, the login dies, history resolves.
 	if err := svc.Delete(ctx, u.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := svc.ByID(ctx, u.ID); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("ByID after delete error = %v, want ErrNotFound", err)
+	stored, err := svc.ByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("ByID after delete: %v", err)
 	}
-	// Deleting again is a no-op.
+	if stored.DeletedAt == nil {
+		t.Error("DeletedAt is nil after Delete, want a timestamp")
+	}
+	if stored.Active {
+		t.Error("Active is true after Delete, want false")
+	}
+	if _, err := svc.Authenticate(ctx, "admin", "admin123*"); !errors.Is(err, users.ErrInvalidCredentials) {
+		t.Errorf("Authenticate after delete error = %v, want ErrInvalidCredentials", err)
+	}
+	// Deleting twice reports the bin, it does not resurrect anything.
+	if err := svc.Delete(ctx, u.ID); !errors.Is(err, users.ErrAlreadyDeleted) {
+		t.Errorf("second Delete error = %v, want ErrAlreadyDeleted", err)
+	}
+	// Unknown ids stay a no-op.
+	if err := svc.Delete(ctx, "00000000-0000-4000-8000-000000000000"); err != nil {
+		t.Errorf("unknown Delete error = %v, want nil", err)
+	}
+}
+
+func TestDeleteRestoreRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	u, err := svc.Create(ctx, "temporal", "", "temporal123*")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
 	if err := svc.Delete(ctx, u.ID); err != nil {
-		t.Errorf("second Delete: %v", err)
+		t.Fatalf("Delete: %v", err)
 	}
+	restored, err := svc.Restore(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if restored.DeletedAt != nil {
+		t.Error("DeletedAt set after Restore, want nil")
+	}
+	if !restored.Active {
+		t.Error("Active is false after Restore, want true")
+	}
+	if _, err := svc.Authenticate(ctx, "temporal", "temporal123*"); err != nil {
+		t.Errorf("Authenticate after restore: %v", err)
+	}
+	// Restoring a live account is a no-op with a clear error.
+	if _, err := svc.Restore(ctx, u.ID); !errors.Is(err, users.ErrNotDeleted) {
+		t.Errorf("second Restore error = %v, want ErrNotDeleted", err)
+	}
+	// Unknown ids stay NotFound.
+	if _, err := svc.Restore(ctx, "00000000-0000-4000-8000-000000000000"); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("unknown Restore error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRetentionExpiryAndPurge(t *testing.T) {
+	ctx := context.Background()
+	store := users.NewMemoryStore()
+	svc := users.NewServiceWithCost(store, bcrypt.MinCost)
+
+	u, err := svc.Create(ctx, "viejo", "", "viejo1234*")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := svc.Delete(ctx, u.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	// A fresh deletion restores fine inside the window.
+	if _, err := svc.Restore(ctx, u.ID); err != nil {
+		t.Fatalf("Restore inside window: %v", err)
+	}
+	// Backdate past the window through the store: the service must now
+	// refuse the restore and the purge must take the row for good.
+	// (The account is live again after the round trip above.)
+	past := time.Now().AddDate(0, 0, -(users.DefaultRetentionDays + 1))
+	if err := svc.Delete(ctx, u.ID); err != nil {
+		t.Fatalf("Delete again: %v", err)
+	}
+	// Rewrite the stamp to the past: SoftDelete refuses a second stamp,
+	// so clear via Restore on the store and stamp the old date.
+	if err := store.Restore(ctx, u.ID); err != nil {
+		t.Fatalf("store Restore: %v", err)
+	}
+	if err := store.SoftDelete(ctx, u.ID, past); err != nil {
+		t.Fatalf("store SoftDelete backdated: %v", err)
+	}
+	if _, err := svc.Restore(ctx, u.ID); !errors.Is(err, users.ErrRetentionExpired) {
+		t.Errorf("Restore past window error = %v, want ErrRetentionExpired", err)
+	}
+	purged, err := svc.PurgeDeleted(ctx, time.Now())
+	if err != nil {
+		t.Fatalf("PurgeDeleted: %v", err)
+	}
+	if len(purged) != 1 || purged[0] != u.ID {
+		t.Errorf("PurgeDeleted = %v, want [%s]", purged, u.ID)
+	}
+	if _, err := svc.ByID(ctx, u.ID); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("ByID after purge error = %v, want ErrNotFound", err)
+	}
+	// Nothing left to purge.
+	purged, err = svc.PurgeDeleted(ctx, time.Now())
+	if err != nil {
+		t.Fatalf("second PurgeDeleted: %v", err)
+	}
+	if len(purged) != 0 {
+		t.Errorf("second PurgeDeleted = %v, want empty", purged)
+	}
+}
+
+func TestListHidesDeletedUnlessAsked(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	a, err := svc.Create(ctx, "vive", "", "vive12345*")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	b, err := svc.Create(ctx, "borrado", "", "borrado123*")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := svc.Delete(ctx, b.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	visible, err := svc.List(ctx, false)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(visible) != 1 || visible[0].ID != a.ID {
+		t.Errorf("List without deleted = %v, want only the live account", ids(visible))
+	}
+	all, err := svc.List(ctx, true)
+	if err != nil {
+		t.Fatalf("List includeDeleted: %v", err)
+	}
+	if len(all) != 2 {
+		t.Errorf("List includeDeleted = %d users, want 2", len(all))
+	}
+	if all[0].PasswordHash != "" || all[1].PasswordHash != "" {
+		t.Error("List leaks password hashes")
+	}
+}
+
+func ids(in []users.User) []string {
+	out := make([]string, 0, len(in))
+	for _, u := range in {
+		out = append(out, u.Username)
+	}
+	return out
 }
 
 func TestLinkTeacher(t *testing.T) {

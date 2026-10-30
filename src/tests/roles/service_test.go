@@ -160,3 +160,58 @@ func TestServiceCanInvalidSubject(t *testing.T) {
 		t.Errorf("Can error = %v, want ErrInvalidSubjectID", err)
 	}
 }
+
+func TestServiceSubjectsWithRoleAndRemoveAll(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	if err := svc.Assign(ctx, "s1", roles.RoleOwner); err != nil {
+		t.Fatalf("Assign owner: %v", err)
+	}
+	if err := svc.Assign(ctx, "s2", roles.RoleOwner); err != nil {
+		t.Fatalf("Assign owner: %v", err)
+	}
+	if err := svc.Assign(ctx, "s2", roles.RoleAdmin); err != nil {
+		t.Fatalf("Assign admin: %v", err)
+	}
+	if err := svc.Assign(ctx, "s3", roles.RoleAdmin); err != nil {
+		t.Fatalf("Assign admin: %v", err)
+	}
+
+	got, err := svc.SubjectsWithRole(ctx, roles.RoleOwner)
+	if err != nil {
+		t.Fatalf("SubjectsWithRole: %v", err)
+	}
+	if want := []string{"s1", "s2"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("SubjectsWithRole(owner) = %v, want %v", got, want)
+	}
+	if _, err := svc.SubjectsWithRole(ctx, roles.Role("nope")); !errors.Is(err, roles.ErrUnknownRole) {
+		t.Errorf("SubjectsWithRole unknown error = %v, want ErrUnknownRole", err)
+	}
+
+	if err := svc.RemoveAll(ctx, "s2"); err != nil {
+		t.Fatalf("RemoveAll: %v", err)
+	}
+	has, err := svc.HasRole(ctx, "s2", roles.RoleOwner)
+	if err != nil {
+		t.Fatalf("HasRole: %v", err)
+	}
+	if has {
+		t.Error("HasRole should be false after RemoveAll")
+	}
+	got, err = svc.SubjectsWithRole(ctx, roles.RoleOwner)
+	if err != nil {
+		t.Fatalf("SubjectsWithRole: %v", err)
+	}
+	if want := []string{"s1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("SubjectsWithRole(owner) = %v, want %v", got, want)
+	}
+	// Admin grants must survive an unrelated RemoveAll.
+	has, err = svc.HasRole(ctx, "s3", roles.RoleAdmin)
+	if err != nil {
+		t.Fatalf("HasRole: %v", err)
+	}
+	if !has {
+		t.Error("HasRole should stay true for untouched subject")
+	}
+}

@@ -44,6 +44,11 @@ const (
 	// secretary run: promotion decisions, enrollments and creating the
 	// next year salons. Closing the year stays manage-users.
 	PermissionManagePromotions Permission = "manage-promotions"
+	// PermissionManageOwners is the exclusive owner capability: deleting
+	// or restoring accounts, removing the admin or owner role from anyone,
+	// and touching admin accounts (deactivation included). Admins hold
+	// every other permission but never this one.
+	PermissionManageOwners Permission = "manage-owners"
 )
 
 // permissionCatalog is the complete set of permissions the system knows.
@@ -63,6 +68,7 @@ var permissionCatalog = []Permission{
 	PermissionManageSchedules,
 	PermissionViewWarnings,
 	PermissionManagePromotions,
+	PermissionManageOwners,
 }
 
 // rolePermissions maps each role to the permissions it grants.
@@ -92,8 +98,23 @@ var rolePermissions = func() map[Role][]Permission {
 		PermissionManagePromotions,
 	}
 	base[RoleAdmin] = append([]Permission(nil), permissionCatalog...)
+	// The admin union above includes manage-owners by construction:
+	// strip it so only owners hold the exclusive capability.
+	base[RoleAdmin] = exclude(base[RoleAdmin], PermissionManageOwners)
+	base[RoleOwner] = append([]Permission(nil), permissionCatalog...)
 	return base
 }()
+
+// exclude returns ps without p, preserving order.
+func exclude(ps []Permission, p Permission) []Permission {
+	out := ps[:0]
+	for _, q := range ps {
+		if q != p {
+			out = append(out, q)
+		}
+	}
+	return out
+}
 
 // Permissions returns the permissions granted by r as a fresh, sorted slice.
 func (r Role) Permissions() []Permission {

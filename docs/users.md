@@ -23,9 +23,17 @@ The account keeps:
   and are never persisted. `PasswordHash` is excluded from JSON
   (`json:"-"`) and every public `Service` method returns sanitized users
   (empty hash); only the `Store` sees hashes.
-- **Lifecycle**: `Active` flag. Disabling flips it to false instead of
-  deleting the account, so history keeps resolving. Disabled users fail
-  authentication exactly like bad credentials (no enumeration).
+- **Lifecycle**: `Active` flag plus `DeletedAt` timestamp. Disabling
+  flips `Active` to false instead of deleting the account, so history
+  keeps resolving. Disabled users fail authentication exactly like bad
+  credentials (no enumeration).
+- **Soft delete with retention**: `DELETE /v1/users/{id}` (owner-only)
+  stamps `DeletedAt` and disables the login instead of removing the row.
+  The account stops working immediately, but its data survives
+  `USER_RETENTION_DAYS` (default 7) for a possible restore
+  (`POST /v1/users/{id}/restore`). A scheduled purge hard-deletes expired
+  rows and cleans their role grants; the audit trail and snapshots keep
+  resolving because they reference users by UUID.
 - **Timestamps**: `CreatedAt` / `UpdatedAt`.
 - **Photo**: own account picture (admins), capped at 2 MiB like every
   other photo store. It travels through `Photo` / `SetPhoto` and lives
@@ -154,6 +162,13 @@ password never shows up in `docker inspect` or a process listing.
 `APP_ENV=production` rejects the development passwords above, so a real
 deployment must set its own; see `docs/deploy.md`.
 
+`BOOTSTRAP_OWNER_*` mirrors `BOOTSTRAP_ADMIN_*` (username, email,
+password or `_PASSWORD_FILE`; half-configured pairs fail boot, known
+dev passwords are rejected in production) and grants the `owner` role:
+the developers' account in production and the only role holding
+`manage-owners`. `USER_RETENTION_DAYS` (default 7, minimum 1) sizes the
+soft-delete window.
+
 `SEED_ADMINS` / `SEED_TEACHERS` keep working unchanged: they grant roles
 to subject UUIDs, and a user id is a valid subject id. They are a
 development hook (roles live in memory until the auth phase).
@@ -180,8 +195,11 @@ idempotent, and an account that already exists (say a bootstrap admin named
 | Code | HTTP |
 |---|---|
 | `users.err_not_found` | 404 |
-| `users.err_invalid_id` / `err_invalid_username` / `err_invalid_email` / `err_weak_password` / `err_duplicate_username` / `err_duplicate_email` | 400 |
+| `users.err_invalid_id` / `err_invalid_username` / `err_invalid_email` / `err_weak_password` / `err_duplicate_username` / `err_duplicate_email` / `err_not_deleted` | 400 |
 | `users.err_invalid_credentials` | 401 |
+| `users.err_self_delete` | 403 |
+| `users.err_last_owner` / `err_already_deleted` | 409 |
+| `users.err_retention_expired` | 410 |
 
 All messages are localized through `src/platform/i18n/catalogs/es.json`.
 `PasswordHash` never leaves the server (`json:"-"` plus sanitized
@@ -199,9 +217,24 @@ service results), so no error path can leak it.
 
 ## HTTP (implementado)
 
-`POST /v1/users` (permiso `manage-users`, solo admin) crea la cuenta de
-acceso de un docente: sin registro público, el admin le pone la
-contraseña inicial.
+`POST /v1/users` (permiso `manage-users`) crea la cuenta de acceso de un
+docente: sin registro público, el admin le pone la contraseña inicial.
+Crear con `role: "owner"` exige además `manage-owners` (solo owners).
+
+- `GET /v1/users` (`manage-users`): roster de cuentas con sus roles;
+  filtros `?role=` e `?includeDeleted=` (el bin de retención solo lo ve
+  un owner).
+- `GET /v1/users/{id}` (`manage-users`): ficha con roles y `DeletedAt`;
+  las eliminadas responden 404 salvo para owners.
+- `DELETE /v1/users/{id}` (`manage-owners`): borrado suave con retención.
+  Ni la propia cuenta (403) ni el último owner activo (409) pueden
+  eliminarse.
+- `POST /v1/users/{id}/restore` (`manage-owners`): restaura dentro de la
+  ventana de retención.
+- `DELETE /v1/roles` (`manage-roles`, o `manage-owners` para revocar
+  `admin`/`owner`): revoca un rol; quitar el último owner da 409.
+- `PUT /v1/users/{id}/active` (`block-access`, `manage-owners` para
+  objetivos admin/owner): el secretario sigue sin poder tocar admins.
 
 ```json
 // POST /v1/users {"username","email","password","role?"}

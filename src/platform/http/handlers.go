@@ -1872,7 +1872,14 @@ func handleCreateUser(deps Dependencies) http.HandlerFunc {
 				return
 			}
 			subject, _ := SubjectFrom(r.Context())
-			allowed, err := deps.Auth.Can(r.Context(), subject, roles.PermissionManageRoles)
+			// Granting the owner role is owner-only, like every other
+			// touch of the central administration. Admins keep granting
+			// the rest, including admin itself.
+			want := roles.PermissionManageRoles
+			if role == roles.RoleOwner {
+				want = roles.PermissionManageOwners
+			}
+			allowed, err := deps.Auth.Can(r.Context(), subject, want)
 			if err != nil {
 				WriteError(w, r, err)
 				return
@@ -1894,6 +1901,7 @@ func handleCreateUser(deps Dependencies) http.HandlerFunc {
 		if rs == nil {
 			rs = []roles.Role{}
 		}
+		recordAudit(deps, r, audit.ActionCreate, audit.ResourceUser, u.ID, "", http.StatusCreated)
 		writeJSON(w, http.StatusCreated, userAccount{
 			ID: u.ID, Username: u.Username, Email: u.Email, Active: u.Active, Roles: rs,
 		})
@@ -1970,6 +1978,13 @@ func handleAssignRole(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		// Granting the owner role is owner-only, even though the route
+		// guard (manage-roles) already admitted admins for the rest.
+		if role == roles.RoleOwner && !callerIsOwner(deps, r) {
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceUser, strings.TrimSpace(body.SubjectID), "", http.StatusForbidden)
+			WriteError(w, r, errForbidden)
+			return
+		}
 		subjectID := strings.TrimSpace(body.SubjectID)
 		if err := deps.RolesSvc.Assign(r.Context(), subjectID, role); err != nil {
 			WriteError(w, r, err)
@@ -1980,6 +1995,7 @@ func handleAssignRole(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		recordAudit(deps, r, audit.ActionCreate, audit.ResourceUser, subjectID, "", http.StatusCreated)
 		writeJSON(w, http.StatusCreated, roleGrant{SubjectID: subjectID, Roles: rs})
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -80,6 +81,22 @@ func (b BootstrapAdmin) Enabled() bool {
 	return b.Username != "" && b.Password != ""
 }
 
+// BootstrapOwner is the central administrator created at boot: the
+// developers' account in production. It receives the owner role, which
+// is the only one allowed to delete accounts or touch other admins.
+// Same shape and env-file conventions as BootstrapAdmin, with the
+// BOOTSTRAP_OWNER_ prefix. Setting both creates both accounts.
+type BootstrapOwner struct {
+	Username string
+	Email    string
+	Password string
+}
+
+// Enabled reports whether an owner bootstrap was requested.
+func (b BootstrapOwner) Enabled() bool {
+	return b.Username != "" && b.Password != ""
+}
+
 // Config holds the runtime configuration for the backend.
 type Config struct {
 	// Port is the TCP port the HTTP server listens on.
@@ -102,6 +119,11 @@ type Config struct {
 	SeedDemo bool
 	// Bootstrap is the optional first admin account.
 	Bootstrap BootstrapAdmin
+	// BootstrapOwner is the optional central administrator account.
+	BootstrapOwner BootstrapOwner
+	// UserRetentionDays is how many days a soft-deleted account survives
+	// before the purge removes it for good. Zero means the default (7).
+	UserRetentionDays int
 	// AuthSecret signs login tokens. Required in production; in
 	// development an empty value means a random per-boot secret (logins
 	// die with the process, never with a shipped default).
@@ -195,6 +217,35 @@ func FromEnv() (Config, error) {
 		return Config{}, fmt.Errorf(
 			"config: BOOTSTRAP_ADMIN_PASSWORD set without BOOTSTRAP_ADMIN_USERNAME")
 	}
+	cfg.BootstrapOwner = BootstrapOwner{
+		Username: strings.TrimSpace(os.Getenv("BOOTSTRAP_OWNER_USERNAME")),
+		Email:    strings.TrimSpace(os.Getenv("BOOTSTRAP_OWNER_EMAIL")),
+	}
+	ownerPassword := os.Getenv("BOOTSTRAP_OWNER_PASSWORD")
+	if file := strings.TrimSpace(os.Getenv("BOOTSTRAP_OWNER_PASSWORD_FILE")); file != "" {
+		secret, err := readSecretFile(file)
+		if err != nil {
+			return Config{}, err
+		}
+		ownerPassword = secret
+	}
+	cfg.BootstrapOwner.Password = strings.TrimRight(ownerPassword, "\r\n")
+	if cfg.BootstrapOwner.Username != "" && cfg.BootstrapOwner.Password == "" {
+		return Config{}, fmt.Errorf(
+			"config: BOOTSTRAP_OWNER_USERNAME set without BOOTSTRAP_OWNER_PASSWORD")
+	}
+	if cfg.BootstrapOwner.Username == "" && cfg.BootstrapOwner.Password != "" {
+		return Config{}, fmt.Errorf(
+			"config: BOOTSTRAP_OWNER_PASSWORD set without BOOTSTRAP_OWNER_USERNAME")
+	}
+	if raw := strings.TrimSpace(os.Getenv("USER_RETENTION_DAYS")); raw != "" {
+		days, err := strconv.Atoi(raw)
+		if err != nil || days < 1 {
+			return Config{}, fmt.Errorf(
+				"config: USER_RETENTION_DAYS must be a positive number of days")
+		}
+		cfg.UserRetentionDays = days
+	}
 	cfg.AuthSecret = os.Getenv("AUTH_SECRET")
 	if raw := strings.TrimSpace(os.Getenv("AUTH_ACCESS_TTL")); raw != "" {
 		ttl, err := time.ParseDuration(raw)
@@ -245,6 +296,11 @@ func (c Config) Validate() error {
 	if c.Bootstrap.Enabled() && isDevPassword(c.Bootstrap.Password) {
 		return fmt.Errorf(
 			"config: BOOTSTRAP_ADMIN_PASSWORD is a known development password; " +
+				"pick a unique one before deploying")
+	}
+	if c.BootstrapOwner.Enabled() && isDevPassword(c.BootstrapOwner.Password) {
+		return fmt.Errorf(
+			"config: BOOTSTRAP_OWNER_PASSWORD is a known development password; " +
 				"pick a unique one before deploying")
 	}
 	if strings.TrimSpace(c.AuthSecret) == "" {

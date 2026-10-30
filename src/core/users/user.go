@@ -28,6 +28,11 @@ type User struct {
 	// Active reports whether the user may log in. Disabling flips it to
 	// false instead of deleting the account, so history keeps resolving.
 	Active bool
+	// DeletedAt marks a soft-deleted account: the login is dead but the
+	// row (and its history) survives until the retention window lapses,
+	// during which Restore can bring it back. Nil means the account is
+	// alive. Serialized as null when unset.
+	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
 	// TeacherID links the login to a teacher profile, so "my schedule"
 	// and "my name" resolve without a second login. Empty means none
 	// (pure admins). The teachers capability owns the profile; a dangling

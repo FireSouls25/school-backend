@@ -88,7 +88,7 @@ func TestRoleMessageKey(t *testing.T) {
 }
 
 func TestKnownRolesSorted(t *testing.T) {
-	want := []roles.Role{roles.RoleAdmin, roles.RoleSecretary, roles.RoleStudent, roles.RoleTeacher}
+	want := []roles.Role{roles.RoleAdmin, roles.RoleOwner, roles.RoleSecretary, roles.RoleStudent, roles.RoleTeacher}
 	got := roles.KnownRoles()
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("KnownRoles() = %v, want %v", got, want)

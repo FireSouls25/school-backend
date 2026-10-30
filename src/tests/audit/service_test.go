@@ -34,6 +34,9 @@ func TestRecordValidation(t *testing.T) {
 		{"bad subject", func(e *audit.Entry) { e.SubjectID = "nope" }, audit.ErrInvalidSubject},
 		{"bad action", func(e *audit.Entry) { e.Action = "erase" }, audit.ErrInvalidAction},
 		{"bad resource", func(e *audit.Entry) { e.Resource = "desk" }, audit.ErrInvalidResource},
+		{"user resource", func(e *audit.Entry) { e.Resource = audit.ResourceUser }, nil},
+		{"year resource", func(e *audit.Entry) { e.Resource = audit.ResourceYear }, nil},
+		{"academic-alert resource", func(e *audit.Entry) { e.Resource = audit.ResourceAcademicAlert }, nil},
 		{"bad resource id", func(e *audit.Entry) { e.ResourceID = "nope" }, audit.ErrInvalidResource},
 		{"bad status", func(e *audit.Entry) { e.Status = 99 }, audit.ErrInvalidStatus},
 	} {

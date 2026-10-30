@@ -138,11 +138,17 @@ func TestSetUserActiveLocksAndRestores(t *testing.T) {
 	h, usersSvc, _ := recoverStack(t)
 	ctx := context.Background()
 	admin, _ := usersSvc.ByUsername(ctx, "admin")
-	bearer := loginToken(t, h, "admin", "admin123*")
+	// The lockout flow runs against a plain account: flipping an admin
+	// now requires the owner role (covered in owners_test.go).
+	plain, err := usersSvc.Create(ctx, "operador", "operador@colegio.edu", "operador123*")
+	if err != nil {
+		t.Fatalf("seed plain user: %v", err)
+	}
+	bearer := loginToken(t, h, "operador", "operador123*")
 
 	toggle := func(active bool) int {
 		body, _ := json.Marshal(map[string]bool{"active": active})
-		req := httptest.NewRequest(http.MethodPut, "/v1/users/"+admin.ID+"/active", strings.NewReader(string(body)))
+		req := httptest.NewRequest(http.MethodPut, "/v1/users/"+plain.ID+"/active", strings.NewReader(string(body)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set(httpapi.SubjectHeader, admin.ID)
 		rec := httptest.NewRecorder()
@@ -155,13 +161,13 @@ func TestSetUserActiveLocksAndRestores(t *testing.T) {
 	if rec := bearerGet(t, h, "/v1/me", bearer); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("disabled bearer = %d, want 401", rec.Code)
 	}
-	if _, _, code := loginRaw(t, h, "admin", "admin123*"); code != http.StatusUnauthorized {
+	if _, _, code := loginRaw(t, h, "operador", "operador123*"); code != http.StatusUnauthorized {
 		t.Fatalf("disabled login code = %d, want 401", code)
 	}
 	if code := toggle(true); code != http.StatusOK {
 		t.Fatalf("enable code = %d, want 200", code)
 	}
-	loginToken(t, h, "admin", "admin123*")
+	loginToken(t, h, "operador", "operador123*")
 }
 
 func loginRaw(t *testing.T, h http.Handler, identifier, password string) (string, string, int) {

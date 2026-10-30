@@ -47,4 +47,22 @@ var (
 	// (unknown, expired or reused token) so callers cannot distinguish
 	// which half failed.
 	ErrInvalidRecoveryToken = newError("users.err_invalid_recovery_token", "users: invalid recovery token")
+	// ErrLastOwner is returned when removing the owner role from, or
+	// deleting, the last remaining owner. The system never leaves
+	// itself without an owner.
+	ErrLastOwner = newError("users.err_last_owner", "users: last owner")
+	// ErrAlreadyDeleted is returned when soft-deleting an account that
+	// is already in the retention bin.
+	ErrAlreadyDeleted = newError("users.err_already_deleted", "users: already deleted")
+	// ErrNotDeleted is returned when restoring an account that is not
+	// soft-deleted.
+	ErrNotDeleted = newError("users.err_not_deleted", "users: not deleted")
+	// ErrRetentionExpired is returned when restoring an account whose
+	// retention window already lapsed. Only a fresh account (or a
+	// database restore) can bring it back.
+	ErrRetentionExpired = newError("users.err_retention_expired", "users: retention expired")
+	// ErrSelfDelete is returned when an owner tries to delete their own
+	// login. Destructive self-service is a footgun: another owner must
+	// do it.
+	ErrSelfDelete = newError("users.err_self_delete", "users: cannot delete own account")
 )

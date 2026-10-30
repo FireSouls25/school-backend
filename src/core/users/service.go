@@ -21,12 +21,18 @@ const (
 	MaxPasswordLength = 72
 )
 
+// DefaultRetentionDays is how long a soft-deleted account survives
+// before PurgeDeleted removes it for good. A week gives the school
+// time to undo a mistaken deletion.
+const DefaultRetentionDays = 7
+
 // Service applies account policy and persists users through a Store.
 // Passwords only cross this boundary as plaintext on Create/Authenticate/
 // SetPassword; they are stored and compared as bcrypt hashes.
 type Service struct {
-	store Store
-	cost  int
+	store         Store
+	cost          int
+	retentionDays int
 }
 
 // NewService wires a Service onto the provided Store, hashing passwords
@@ -45,7 +51,31 @@ func NewServiceWithCost(store Store, cost int) *Service {
 	if cost > bcrypt.MaxCost {
 		cost = bcrypt.MaxCost
 	}
-	return &Service{store: store, cost: cost}
+	return &Service{store: store, cost: cost, retentionDays: DefaultRetentionDays}
+}
+
+// WithRetentionDays sets how many days a soft-deleted account survives
+// before PurgeDeleted removes it. Non-positive values keep the default.
+// It returns the service so wiring stays fluent.
+func (s *Service) WithRetentionDays(days int) *Service {
+	if days > 0 {
+		s.retentionDays = days
+	}
+	return s
+}
+
+// RetentionDays reports the configured soft-delete retention in days.
+func (s *Service) RetentionDays() int {
+	if s.retentionDays <= 0 {
+		return DefaultRetentionDays
+	}
+	return s.retentionDays
+}
+
+// RetentionCutoff returns the instant before which soft-deleted accounts
+// count as expired: anything deleted at or before it is purgable.
+func (s *Service) RetentionCutoff(now time.Time) time.Time {
+	return now.AddDate(0, 0, -s.RetentionDays())
 }
 
 // Create validates the input, hashes the password with bcrypt, assigns a
@@ -140,7 +170,7 @@ func (s *Service) Authenticate(ctx context.Context, identifier, password string)
 	if err != nil {
 		return User{}, ErrInvalidCredentials
 	}
-	if !u.Active {
+	if !u.Active || u.DeletedAt != nil {
 		return User{}, ErrInvalidCredentials
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
@@ -281,12 +311,77 @@ func (s *Service) SetActive(ctx context.Context, id string, active bool) (User, 
 	return u.Sanitized(), nil
 }
 
-// Delete removes the account. Removing an unknown user is a no-op.
+// Delete soft-deletes the account: it stamps DeletedAt and disables
+// the login instead of removing the row, so the account stops working
+// immediately while its data survives the retention window for a
+// possible Restore. Removing an unknown user is a no-op.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := validateID(id); err != nil {
 		return err
 	}
-	return s.store.Delete(ctx, strings.TrimSpace(id))
+	id = strings.TrimSpace(id)
+	if err := s.store.SoftDelete(ctx, id, time.Now()); err != nil {
+		return err
+	}
+	// Unknown users are a no-op: only bump when the row still exists.
+	if _, err := s.store.ByID(ctx, id); err != nil {
+		return nil
+	}
+	if _, err := s.store.BumpTokenVersion(ctx, id); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Restore brings a soft-deleted account back: it clears DeletedAt and
+// re-enables the login. It fails with ErrNotFound for unknown ids,
+// ErrNotDeleted when the account was never deleted, and
+// ErrRetentionExpired when the retention window already lapsed (only a
+// fresh account can replace it then).
+func (s *Service) Restore(ctx context.Context, id string) (User, error) {
+	if err := validateID(id); err != nil {
+		return User{}, err
+	}
+	id = strings.TrimSpace(id)
+	u, err := s.store.ByID(ctx, id)
+	if err != nil {
+		return User{}, err
+	}
+	if u.DeletedAt == nil {
+		return User{}, ErrNotDeleted
+	}
+	if !u.DeletedAt.After(s.RetentionCutoff(time.Now())) {
+		return User{}, ErrRetentionExpired
+	}
+	u.DeletedAt = nil
+	u.Active = true
+	u.UpdatedAt = time.Now()
+	u, err = s.store.Update(ctx, u)
+	if err != nil {
+		return User{}, err
+	}
+	return u.Sanitized(), nil
+}
+
+// PurgeDeleted physically removes every account soft-deleted at or
+// before the retention cutoff and returns their ids so callers can
+// clean related role grants. It is the only path that truly deletes.
+func (s *Service) PurgeDeleted(ctx context.Context, now time.Time) ([]string, error) {
+	return s.store.PurgeBefore(ctx, s.RetentionCutoff(now))
+}
+
+// List returns accounts in store order, without password hashes.
+// Deleted accounts are included only when includeDeleted is true.
+func (s *Service) List(ctx context.Context, includeDeleted bool) ([]User, error) {
+	all, err := s.store.List(ctx, includeDeleted)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]User, 0, len(all))
+	for _, u := range all {
+		out = append(out, u.Sanitized())
+	}
+	return out, nil
 }
 
 // LinkTeacher binds a login to a teacher profile, so schedule and name

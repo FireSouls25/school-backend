@@ -17,6 +17,9 @@ func clearEnv(t *testing.T) {
 		"PORT", "DATABASE_URL", "ALLOWED_ORIGINS", "APP_ENV", "SEED_DEMO",
 		"BOOTSTRAP_ADMIN_USERNAME", "BOOTSTRAP_ADMIN_EMAIL",
 		"BOOTSTRAP_ADMIN_PASSWORD", "BOOTSTRAP_ADMIN_PASSWORD_FILE",
+		"BOOTSTRAP_OWNER_USERNAME", "BOOTSTRAP_OWNER_EMAIL",
+		"BOOTSTRAP_OWNER_PASSWORD", "BOOTSTRAP_OWNER_PASSWORD_FILE",
+		"USER_RETENTION_DAYS",
 		"TRUSTED_PROXIES", "AUTH_ACCESS_TTL", "AUTH_REFRESH_TTL", "AUTH_TTL",
 	} {
 		t.Setenv(key, "")
@@ -273,5 +276,74 @@ func TestAccessRefreshTTLSplit(t *testing.T) {
 	}
 	if cfg.RefreshTTL() != 168*60*60*1000*1000*1000 {
 		t.Errorf("RefreshTTL = %v, want 168h", cfg.RefreshTTL())
+	}
+}
+
+func TestOwnerBootstrapFromEnv(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("BOOTSTRAP_OWNER_USERNAME", "soporte")
+	t.Setenv("BOOTSTRAP_OWNER_EMAIL", "soporte@colegio.edu")
+	t.Setenv("BOOTSTRAP_OWNER_PASSWORD", "s0porte-fuerte1")
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if !cfg.BootstrapOwner.Enabled() {
+		t.Error("BootstrapOwner disabled, want enabled with username and password")
+	}
+	if cfg.BootstrapOwner.Username != "soporte" {
+		t.Errorf("BootstrapOwner.Username = %q, want soporte", cfg.BootstrapOwner.Username)
+	}
+
+	clearEnv(t)
+	t.Setenv("BOOTSTRAP_OWNER_USERNAME", "soporte")
+	if _, err := config.FromEnv(); err == nil {
+		t.Error("FromEnv() = nil error, want failure when the owner password is missing")
+	}
+
+	clearEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://u:p@h/db?sslmode=disable")
+	t.Setenv("AUTH_SECRET", "test-secret-for-validation-only")
+	cfg, err = config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.Env != config.EnvProduction {
+		t.Errorf("Env = %q, want production", cfg.Env)
+	}
+	bad := cfg
+	bad.BootstrapOwner = config.BootstrapOwner{Username: "soporte", Password: "admin123*"}
+	if err := bad.Validate(); err == nil {
+		t.Error("Validate() accepted a demo owner password in production")
+	}
+}
+
+func TestUserRetentionDays(t *testing.T) {
+	clearEnv(t)
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.UserRetentionDays != 0 {
+		t.Errorf("UserRetentionDays = %d, want 0 (service default applies)", cfg.UserRetentionDays)
+	}
+
+	clearEnv(t)
+	t.Setenv("USER_RETENTION_DAYS", "30")
+	cfg, err = config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.UserRetentionDays != 30 {
+		t.Errorf("UserRetentionDays = %d, want 30", cfg.UserRetentionDays)
+	}
+
+	for _, bad := range []string{"0", "-3", "muchos"} {
+		clearEnv(t)
+		t.Setenv("USER_RETENTION_DAYS", bad)
+		if _, err := config.FromEnv(); err == nil {
+			t.Errorf("FromEnv() accepted USER_RETENTION_DAYS=%q", bad)
+		}
 	}
 }

@@ -53,3 +53,25 @@ func (s *MemoryStore) RolesFor(_ context.Context, subjectID string) ([]Role, err
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out, nil
 }
+
+// SubjectsWithRole implements Store.
+func (s *MemoryStore) SubjectsWithRole(_ context.Context, role Role) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for id, roles := range s.subject {
+		if _, ok := roles[role]; ok {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// RemoveAllForSubject implements Store.
+func (s *MemoryStore) RemoveAllForSubject(_ context.Context, subjectID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.subject, subjectID)
+	return nil
+}

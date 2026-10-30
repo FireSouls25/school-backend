@@ -17,13 +17,18 @@ const (
 	RoleTeacher Role = "teacher"
 	// RoleAdmin manages the system and its users.
 	RoleAdmin Role = "admin"
+	// RoleOwner is the central administrator: it holds every permission
+	// including the exclusive management of other admins. Only owners
+	// may delete accounts, remove the admin role, or touch other owners.
+	// The owner account doubles as the developers' account in production.
+	RoleOwner Role = "owner"
 	// RoleSecretary assists with records, schedules and lockout, without
 	// user management, school years or incident registration.
 	RoleSecretary Role = "secretary"
 )
 
 // knownRoles is the canonical, alphabetically sorted list of roles.
-var knownRoles = [...]Role{RoleAdmin, RoleSecretary, RoleStudent, RoleTeacher}
+var knownRoles = [...]Role{RoleAdmin, RoleOwner, RoleSecretary, RoleStudent, RoleTeacher}
 
 // Parse converts a case-insensitive, whitespace-trimmed string into a Role.
 func Parse(s string) (Role, error) {
@@ -37,7 +42,7 @@ func Parse(s string) (Role, error) {
 // IsValid reports whether r is one of the known roles.
 func (r Role) IsValid() bool {
 	switch r {
-	case RoleStudent, RoleTeacher, RoleAdmin, RoleSecretary:
+	case RoleStudent, RoleTeacher, RoleAdmin, RoleOwner, RoleSecretary:
 		return true
 	}
 	return false

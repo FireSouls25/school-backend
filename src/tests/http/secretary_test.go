@@ -84,8 +84,9 @@ func TestSecretaryBlocksTeacher(t *testing.T) {
 	}
 }
 
-// Admin accounts are untouchable without manage-users: a secretary
-// blocking an admin gets 403, an admin succeeds.
+// Admin accounts are untouchable without manage-owners: a secretary
+// blocking an admin gets 403, an admin gets 403 too, only an owner
+// succeeds.
 func TestSecretaryCannotTouchAdmins(t *testing.T) {
 	h, secretary := secretaryStack(t)
 
@@ -110,8 +111,16 @@ func TestSecretaryCannotTouchAdmins(t *testing.T) {
 	}
 
 	rec = doRequest(t, h, http.MethodPut, "/v1/users/"+target.ID+"/active", adminSubject, `{"active":false}`)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("admin block admin status = %d, want 403", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "http.err_forbidden" {
+		t.Errorf("code = %q, want http.err_forbidden", code)
+	}
+
+	rec = doRequest(t, h, http.MethodPut, "/v1/users/"+target.ID+"/active", ownerSubject, `{"active":false}`)
 	if rec.Code != http.StatusOK {
-		t.Errorf("admin block admin status = %d, want 200", rec.Code)
+		t.Errorf("owner block admin status = %d, want 200", rec.Code)
 	}
 }
 

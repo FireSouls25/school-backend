@@ -155,7 +155,7 @@ func RequireTokenFresh(usersSvc *users.Service) func(http.Handler) http.Handler 
 				WriteError(w, r, err)
 				return
 			}
-			if !u.Active || u.TokenVersion != claims.Ver {
+			if !u.Active || u.DeletedAt != nil || u.TokenVersion != claims.Ver {
 				WriteError(w, r, errUnauthorized)
 				return
 			}

@@ -244,8 +244,20 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/audit", handleListAudit(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
 			Post("/roles", handleAssignRole(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageRoles)).
+			Delete("/roles", handleRemoveRole(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
 			Post("/users", handleCreateUser(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Get("/users", handleListUsers(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageUsers)).
+			Get("/users/{id}", handleGetUser(deps))
+		// Deletion is soft with retention (owner-only): the row survives
+		// a week for a possible restore before the purge removes it.
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageOwners)).
+			Delete("/users/{id}", handleDeleteUser(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionManageOwners)).
+			Post("/users/{id}/restore", handleRestoreUser(deps))
 		// Lockout response: disable/enable a login without deleting it.
 		// The version bump kills bearers; refresh is rejected on Active.
 		r.With(RequirePermission(deps.Auth, roles.PermissionBlockAccess)).

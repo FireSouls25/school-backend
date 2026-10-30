@@ -46,6 +46,24 @@ func (s *Service) Remove(ctx context.Context, subjectID string, role Role) error
 	return s.store.RemoveRole(ctx, subjectID, role)
 }
 
+// SubjectsWithRole returns the ids of every subject holding the role,
+// sorted. It backs admin listings and the last-owner guard.
+func (s *Service) SubjectsWithRole(ctx context.Context, role Role) ([]string, error) {
+	if !role.IsValid() {
+		return nil, ErrUnknownRole
+	}
+	return s.store.SubjectsWithRole(ctx, role)
+}
+
+// RemoveAll revokes every role held by the subject. It runs when an
+// account is purged so no orphan grant survives it.
+func (s *Service) RemoveAll(ctx context.Context, subjectID string) error {
+	if strings.TrimSpace(subjectID) == "" {
+		return ErrInvalidSubjectID
+	}
+	return s.store.RemoveAllForSubject(ctx, subjectID)
+}
+
 // Roles implements RoleGetter.
 func (s *Service) Roles(ctx context.Context, subjectID string) ([]Role, error) {
 	if strings.TrimSpace(subjectID) == "" {

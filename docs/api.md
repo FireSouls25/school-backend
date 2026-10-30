@@ -70,7 +70,12 @@ Routes declare one required permission, enforced by
 | `POST /v1/recover/request` | public (throttled 5/min) | anyone (always 204, no enumeration) |
 | `POST /v1/recover/reset` | reset token (throttled 5/min) | password-forgotten holder |
 | `GET /v1/teachers/{id}/account` | `manage-users` | admin only (login or honest 404) |
-| `PUT /v1/users/{id}/active` | `block-access` | admin + secretary (never admin targets without manage-users; trailed with subject) |
+| `PUT /v1/users/{id}/active` | `block-access` | admin + secretary (admin/owner targets need `manage-owners`; trailed with subject) |
+| `GET /v1/users[?role=&includeDeleted=]` | `manage-users` | admin roster with roles (bin needs `manage-owners`) |
+| `GET /v1/users/{id}` | `manage-users` | admin account detail (deleted hidden unless owner) |
+| `DELETE /v1/users/{id}` | `manage-owners` | owner-only soft delete with retention (self and last owner blocked) |
+| `POST /v1/users/{id}/restore` | `manage-owners` | restore inside the retention window |
+| `DELETE /v1/roles` | `manage-roles` | revoke a role (`admin`/`owner` need `manage-owners`; last owner kept) |
 | `GET /v1/me` | authenticated only | anyone with an id |
 | `PUT /v1/me/password` | authenticated only | anyone with an account row |
 | `GET /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
@@ -142,7 +147,7 @@ Routes declare one required permission, enforced by
 | `PUT /v1/schedule/{id}` | `manage-schedules` | admin + secretary |
 | `DELETE /v1/schedule/{id}` | `manage-users` | admin only |
 | `GET /v1/audit?limit=&studentID=` | `manage-system` | admin only |
-| `POST /v1/roles` | `manage-roles` | admin only |
+| `POST /v1/roles` | `manage-roles` | admin only (granting `owner` needs `manage-owners`) |
 
 Self-scoped reads (`view-own-history`) additionally require
 `subject == id`; anything else is denied even with the permission.
@@ -180,9 +185,11 @@ students — there is no `StudentID` link yet.
 initial password: no self-registration. Body
 `{"username","email","password","role?"}`; `201` returns the sanitized
 account `{ID, Username, Email, Active, Roles}`. The optional `role`
-additionally requires `manage-roles`. Teachers get their account (and
-role) from this endpoint when the admin creates their profile; they only
-ever log in. Frontend flow in `docs/users.md`.
+additionally requires `manage-roles` (`manage-owners` for `owner`).
+Teachers get their account (and role) from this endpoint when the admin
+creates their profile; they only ever log in. Deleting is always soft
+with retention (see `docs/users.md`); purging is automatic. Frontend
+flow in `docs/users.md`.
 
 ## School years (teacher reads, admin writes)
 

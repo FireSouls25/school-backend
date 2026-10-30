@@ -48,14 +48,23 @@ func TestRolePermissionsSorted(t *testing.T) {
 }
 
 func TestAdminGrantsEveryPermission(t *testing.T) {
-	admin := roles.RoleAdmin.Permissions()
 	for _, p := range roles.AllPermissions() {
+		if p == roles.PermissionManageOwners {
+			continue
+		}
 		if !roles.RoleAdmin.HasPermission(p) {
 			t.Errorf("admin does not grant %q", p)
 		}
 	}
-	if !reflect.DeepEqual(admin, roles.AllPermissions()) {
-		t.Errorf("admin permissions %v != AllPermissions() %v", admin, roles.AllPermissions())
+	if roles.RoleAdmin.HasPermission(roles.PermissionManageOwners) {
+		t.Errorf("admin grants %q, which is owner-only", roles.PermissionManageOwners)
+	}
+}
+
+func TestOwnerGrantsEveryPermission(t *testing.T) {
+	owner := roles.RoleOwner.Permissions()
+	if !reflect.DeepEqual(owner, roles.AllPermissions()) {
+		t.Errorf("owner permissions %v != AllPermissions() %v", owner, roles.AllPermissions())
 	}
 }
 

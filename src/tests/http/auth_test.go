@@ -36,6 +36,9 @@ const (
 	teacherSubject = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 	unknownSubject = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
 	groupID        = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+	// ownerSubject holds the owner role in the shared fixture so the
+	// owner-only paths are exercised without extra setup.
+	ownerSubject = "99999999-9999-4999-8999-999999999999"
 )
 
 var (
@@ -247,6 +250,7 @@ func testStack(t *testing.T) http.Handler {
 	}
 	must(roleSvc.Assign(ctx, adminSubject, roles.RoleAdmin))
 	must(roleSvc.Assign(ctx, teacherSubject, roles.RoleTeacher))
+	must(roleSvc.Assign(ctx, ownerSubject, roles.RoleOwner))
 
 	year, err := yearsSvc.Create(ctx, schoolyears.SchoolYear{
 		Year: 2026, Periods: 3,

@@ -14,4 +14,10 @@ type Store interface {
 	// RolesFor returns the roles held by subjectID, sorted, or an empty slice
 	// when the subject is unknown.
 	RolesFor(ctx context.Context, subjectID string) ([]Role, error)
+	// SubjectsWithRole returns the ids of every subject holding the given
+	// role, sorted. It backs admin listings and the last-owner guard.
+	SubjectsWithRole(ctx context.Context, role Role) ([]string, error)
+	// RemoveAllForSubject revokes every role held by subjectID. It runs
+	// when an account is purged so no orphan grant survives it.
+	RemoveAllForSubject(ctx context.Context, subjectID string) error
 }

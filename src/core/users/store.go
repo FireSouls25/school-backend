@@ -1,6 +1,9 @@
 package users
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Photo is the account picture. It travels alone, never inside the
 // account row, so reading or listing accounts never drags image bytes.
@@ -43,9 +46,22 @@ type Store interface {
 	// when missing. Callers bump after password changes and active flips
 	// so previously minted bearers stop validating.
 	BumpTokenVersion(ctx context.Context, id string) (int64, error)
-	// Delete removes the user with the given id. Removing an unknown
-	// user is a no-op.
-	Delete(ctx context.Context, id string) error
+	// SoftDelete stamps DeletedAt on the user with the given id and
+	// disables the login, instead of removing the row, so history keeps
+	// resolving and Restore can bring the account back inside the
+	// retention window. Removing an unknown user is a no-op; deleting an
+	// already deleted one reports ErrAlreadyDeleted.
+	SoftDelete(ctx context.Context, id string, at time.Time) error
+	// Restore clears the soft-delete mark, bringing the account back.
+	// Returns ErrNotFound when missing.
+	Restore(ctx context.Context, id string) error
+	// PurgeBefore physically removes users soft-deleted before cutoff
+	// and returns their ids so callers can clean related grants. It is
+	// the only path that truly deletes an account.
+	PurgeBefore(ctx context.Context, cutoff time.Time) ([]string, error)
+	// List returns every account in store order. Deleted accounts are
+	// included only when includeDeleted is true.
+	List(ctx context.Context, includeDeleted bool) ([]User, error)
 	// ForTeacher returns every login linked to the given teacher profile.
 	// It backs the "made by this teacher" history on the teacher file.
 	ForTeacher(ctx context.Context, teacherID string) ([]User, error)

@@ -158,7 +158,7 @@ func (s *RecoveryService) Request(ctx context.Context, identifier string) (strin
 	} else {
 		u, err = s.users.store.ByUsername(ctx, normalizeUsername(identifier))
 	}
-	if err != nil || !u.Active {
+	if err != nil || !u.Active || u.DeletedAt != nil {
 		return "", nil
 	}
 	var raw [32]byte

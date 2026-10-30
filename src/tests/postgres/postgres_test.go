@@ -354,6 +354,24 @@ func TestRolesRoundTrip(t *testing.T) {
 	if err != nil || len(empty) != 0 {
 		t.Errorf("unknown = %v, %v; want empty", empty, err)
 	}
+	other := "ffffffff-3333-4333-8333-ffffffffffff"
+	if err := store.AssignRole(ctx, other, roles.RoleTeacher); err != nil {
+		t.Fatalf("AssignRole other: %v", err)
+	}
+	owners, err := store.SubjectsWithRole(ctx, roles.RoleTeacher)
+	if err != nil {
+		t.Fatalf("SubjectsWithRole: %v", err)
+	}
+	if len(owners) != 2 || owners[0] != subject || owners[1] != other {
+		t.Errorf("SubjectsWithRole = %v, want [%s %s] sorted", owners, subject, other)
+	}
+	if err := store.RemoveAllForSubject(ctx, subject); err != nil {
+		t.Fatalf("RemoveAllForSubject: %v", err)
+	}
+	got, err = store.RolesFor(ctx, subject)
+	if err != nil || len(got) != 0 {
+		t.Errorf("after RemoveAllForSubject = %v, %v; want empty", got, err)
+	}
 }
 
 func TestUsersStoreRoundTrip(t *testing.T) {
@@ -459,11 +477,61 @@ func TestUsersStoreRoundTrip(t *testing.T) {
 		t.Errorf("PasswordHash = %q, want %q", after.PasswordHash, "newhash")
 	}
 
-	if err := store.Delete(ctx, want.ID); err != nil {
-		t.Fatalf("Delete: %v", err)
+	if err := store.SoftDelete(ctx, want.ID, time.Now()); err != nil {
+		t.Fatalf("SoftDelete: %v", err)
+	}
+	after, err = store.ByID(ctx, want.ID)
+	if err != nil {
+		t.Fatalf("ByID after SoftDelete: %v", err)
+	}
+	if after.DeletedAt == nil || after.Active {
+		t.Errorf("after SoftDelete DeletedAt=%v Active=%v, want stamp and false", after.DeletedAt, after.Active)
+	}
+	if err := store.SoftDelete(ctx, want.ID, time.Now()); !errors.Is(err, users.ErrAlreadyDeleted) {
+		t.Errorf("second SoftDelete error = %v, want ErrAlreadyDeleted", err)
+	}
+	listed, err := store.List(ctx, false)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, u := range listed {
+		if u.ID == want.ID {
+			t.Error("List hides the soft-deleted account by default")
+		}
+	}
+	listed, err = store.List(ctx, true)
+	if err != nil {
+		t.Fatalf("List includeDeleted: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != want.ID {
+		t.Errorf("List includeDeleted = %v, want the deleted account", listed)
+	}
+	if err := store.Restore(ctx, want.ID); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	after, err = store.ByID(ctx, want.ID)
+	if err != nil {
+		t.Fatalf("ByID after Restore: %v", err)
+	}
+	if after.DeletedAt != nil || !after.Active {
+		t.Errorf("after Restore DeletedAt=%v Active=%v, want nil and true", after.DeletedAt, after.Active)
+	}
+	if err := store.Restore(ctx, want.ID); !errors.Is(err, users.ErrNotDeleted) {
+		t.Errorf("second Restore error = %v, want ErrNotDeleted", err)
+	}
+	old := time.Now().AddDate(0, 0, -30)
+	if err := store.SoftDelete(ctx, want.ID, old); err != nil {
+		t.Fatalf("SoftDelete backdated: %v", err)
+	}
+	purged, err := store.PurgeBefore(ctx, time.Now())
+	if err != nil {
+		t.Fatalf("PurgeBefore: %v", err)
+	}
+	if len(purged) != 1 || purged[0] != want.ID {
+		t.Errorf("PurgeBefore = %v, want [%s]", purged, want.ID)
 	}
 	if _, err := store.ByID(ctx, want.ID); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("ByID after delete error = %v, want ErrNotFound", err)
+		t.Errorf("ByID after purge error = %v, want ErrNotFound", err)
 	}
 }
 

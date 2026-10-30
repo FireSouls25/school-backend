@@ -425,6 +425,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS photo BYTEA;
 -- Auth revocation: bumping invalidates previously minted bearers.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version BIGINT NOT NULL DEFAULT 0;
 
+-- Soft delete with retention: deleted_at stamps when the login was
+-- removed by an owner instead of wiped. The row (and its history)
+-- survives until the retention window lapses, during which it can be
+-- restored; a scheduled purge hard-deletes expired rows.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at) WHERE deleted_at IS NOT NULL;
+
 -- Manual no-class days (locally moved holidays, emergencies).
 ALTER TABLE school_years ADD COLUMN IF NOT EXISTS no_class_days DATE[] NOT NULL DEFAULT '{}';
 

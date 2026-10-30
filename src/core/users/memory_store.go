@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -139,12 +140,81 @@ func (s *MemoryStore) BumpTokenVersion(_ context.Context, id string) (int64, err
 	return u.TokenVersion, nil
 }
 
-// Delete implements Store.
-func (s *MemoryStore) Delete(_ context.Context, id string) error {
+// SoftDelete implements Store: it stamps DeletedAt and disables the
+// login without removing the row. Unknown users are a no-op;
+// already deleted ones report ErrAlreadyDeleted.
+func (s *MemoryStore) SoftDelete(_ context.Context, id string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.users, id)
+	u, ok := s.users[id]
+	if !ok {
+		return nil
+	}
+	if u.DeletedAt != nil {
+		return ErrAlreadyDeleted
+	}
+	u.DeletedAt = &at
+	u.Active = false
+	u.UpdatedAt = at
+	s.users[id] = u
 	return nil
+}
+
+// Restore implements Store: it clears the soft-delete mark and
+// re-enables the login.
+func (s *MemoryStore) Restore(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if u.DeletedAt == nil {
+		return ErrNotDeleted
+	}
+	u.DeletedAt = nil
+	u.Active = true
+	u.UpdatedAt = time.Now()
+	s.users[id] = u
+	return nil
+}
+
+// PurgeBefore implements Store: it physically removes users
+// soft-deleted before cutoff and returns their ids.
+func (s *MemoryStore) PurgeBefore(_ context.Context, cutoff time.Time) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for id, u := range s.users {
+		if u.DeletedAt != nil && !u.DeletedAt.After(cutoff) {
+			delete(s.users, id)
+			delete(s.photos, id)
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// List implements Store in username order. Deleted accounts are
+// included only when includeDeleted is true.
+func (s *MemoryStore) List(_ context.Context, includeDeleted bool) ([]User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]User, 0, len(s.users))
+	for _, u := range s.users {
+		if u.DeletedAt != nil && !includeDeleted {
+			continue
+		}
+		out = append(out, u)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Username != out[j].Username {
+			return out[i].Username < out[j].Username
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
 }
 
 // ForTeacher implements Store.

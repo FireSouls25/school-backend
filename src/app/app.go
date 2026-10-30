@@ -10,11 +10,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
-	"grade/src/core/attendance"
 	"grade/src/core/academics"
+	"grade/src/core/attendance"
 	"grade/src/core/audit"
 	"grade/src/core/auth"
 	"grade/src/core/classes"
@@ -232,7 +234,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 					warnings:    warningsSvc,
 				},
 			),
-			Users:    users.NewService(s.Users),
+			Users:    usersSvc.WithRetentionDays(cfg.UserRetentionDays),
 			Roles:    roles.NewService(s.Roles),
 			Auth:     authSvc,
 			Throttle: throttle.NewService(s.Throttle),
@@ -327,6 +329,72 @@ func (a *App) Bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrap admin created", "username", created.Username)
 	return nil
+}
+
+// BootstrapOwner creates the configured central administrator and grants
+// it the owner role: the developers' account in production, and the only
+// role allowed to delete accounts or touch other admins. Idempotent like
+// Bootstrap: an existing username only gets the role ensured.
+func (a *App) BootstrapOwner(ctx context.Context) error {
+	b := a.Config.BootstrapOwner
+	if !b.Enabled() {
+		return nil
+	}
+	if existing, err := a.Stores.Users.ByUsername(ctx, b.Username); err == nil {
+		if err := a.Services.Roles.Assign(ctx, existing.ID, roles.RoleOwner); err != nil {
+			return fmt.Errorf("app: bootstrap owner role: %w", err)
+		}
+		slog.Info("bootstrap owner already exists", "username", existing.Username)
+		return nil
+	}
+	created, err := a.Services.Users.Create(ctx, b.Username, b.Email, b.Password)
+	if err != nil {
+		return fmt.Errorf("app: bootstrap owner: %w", err)
+	}
+	if err := a.Services.Roles.Assign(ctx, created.ID, roles.RoleOwner); err != nil {
+		return fmt.Errorf("app: bootstrap owner role: %w", err)
+	}
+	slog.Info("bootstrap owner created", "username", created.Username)
+	return nil
+}
+
+// PurgeDeletedUsers hard-deletes accounts whose retention window lapsed
+// and cleans their role grants, so no orphan grant survives a purged
+// account. Each purge is audited with the purged account as resource.
+func (a *App) PurgeDeletedUsers(ctx context.Context) (int, error) {
+	ids, err := a.Services.Users.PurgeDeleted(ctx, time.Now())
+	if err != nil {
+		return 0, fmt.Errorf("app: purge deleted users: %w", err)
+	}
+	for _, id := range ids {
+		if err := a.Services.Roles.RemoveAll(ctx, id); err != nil {
+			slog.Warn("purge grant cleanup failed", "user", id, "error", err)
+		}
+		a.recordPurge(ctx, id)
+	}
+	if len(ids) > 0 {
+		slog.Info("purged deleted users", "count", len(ids))
+	}
+	return len(ids), nil
+}
+
+// recordPurge trails one purged account. The audit trail requires a
+// subject UUID, and a scheduled purge has no caller: the zero UUID
+// marks it as a system action.
+func (a *App) recordPurge(ctx context.Context, id string) {
+	const systemSubject = "00000000-0000-0000-0000-000000000000"
+	if a.Services.Audit == nil {
+		return
+	}
+	if _, err := a.Services.Audit.Record(ctx, audit.Entry{
+		SubjectID:  systemSubject,
+		Action:     audit.ActionDelete,
+		Resource:   audit.ResourceUser,
+		ResourceID: id,
+		Status:     http.StatusOK,
+	}); err != nil {
+		slog.Warn("purge audit dropped", "user", id, "error", err)
+	}
 }
 
 // SeedDemo runs only the demo data step, ignoring the bootstrap account.

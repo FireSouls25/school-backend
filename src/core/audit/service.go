@@ -44,7 +44,7 @@ func (s *Service) Record(ctx context.Context, e Entry) (Entry, error) {
 	switch e.Resource {
 	case ResourceStudent, ResourceWarning, ResourceSession, ResourceReport,
 		ResourceSchedule, ResourceSubject, ResourceAssignment, ResourceGroup,
-		ResourceTeacherAttendance:
+		ResourceTeacherAttendance, ResourceYear, ResourceUser, ResourceAcademicAlert:
 	default:
 		return Entry{}, ErrInvalidResource
 	}

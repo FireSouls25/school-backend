@@ -128,11 +128,19 @@ func handleSetUserActive(deps Dependencies) http.HandlerFunc {
 		}
 		subject, _ := SubjectFrom(r.Context())
 		if targetRoles, err := deps.Roles.Roles(r.Context(), id); err == nil {
+			isOwner, isPrivileged := false, false
 			for _, targetRole := range targetRoles {
-				if targetRole != roles.RoleAdmin {
-					continue
+				if targetRole == roles.RoleOwner {
+					isOwner, isPrivileged = true, true
+				} else if targetRole == roles.RoleAdmin {
+					isPrivileged = true
 				}
-				allowed, err := deps.Auth.Can(r.Context(), subject, roles.PermissionManageUsers)
+			}
+			// Touching an admin or an owner account is owner-only, so
+			// an admin can never lock another admin out. Deactivating
+			// the last active owner would strand the system instead.
+			if isPrivileged {
+				allowed, err := deps.Auth.Can(r.Context(), subject, roles.PermissionManageOwners)
 				if err != nil {
 					WriteError(w, r, err)
 					return
@@ -141,7 +149,12 @@ func handleSetUserActive(deps Dependencies) http.HandlerFunc {
 					WriteError(w, r, errForbidden)
 					return
 				}
-				break
+				if isOwner && !body.Active {
+					if err := guardLastOwner(deps, r, id); err != nil {
+						WriteError(w, r, err)
+						return
+					}
+				}
 			}
 		}
 		u, err := deps.Users.SetActive(r.Context(), id, body.Active)

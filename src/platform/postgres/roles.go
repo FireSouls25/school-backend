@@ -41,6 +41,33 @@ func (s *RolesStore) RemoveRole(ctx context.Context, subjectID string, role role
 	return nil
 }
 
+// SubjectsWithRole implements roles.Store.
+func (s *RolesStore) SubjectsWithRole(ctx context.Context, role roles.Role) ([]string, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT subject_id FROM role_grants WHERE role = $1 ORDER BY subject_id`, string(role))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list role subjects: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("postgres: scan role subject: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// RemoveAllForSubject implements roles.Store.
+func (s *RolesStore) RemoveAllForSubject(ctx context.Context, subjectID string) error {
+	if _, err := s.db.pool.Exec(ctx, `DELETE FROM role_grants WHERE subject_id = $1`, subjectID); err != nil {
+		return fmt.Errorf("postgres: remove all roles: %w", err)
+	}
+	return nil
+}
+
 // RolesFor implements roles.Store: unknown subjects hold nothing.
 func (s *RolesStore) RolesFor(ctx context.Context, subjectID string) ([]roles.Role, error) {
 	rows, err := s.db.pool.Query(ctx, `

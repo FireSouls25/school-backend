@@ -41,6 +41,11 @@ var statusByCode = map[string]int{
 	"users.err_invalid_teacher":        http.StatusBadRequest,
 	"users.err_photo_too_large":        http.StatusBadRequest,
 	"users.err_photo_not_found":        http.StatusNotFound,
+	"users.err_last_owner":             http.StatusConflict,
+	"users.err_already_deleted":        http.StatusConflict,
+	"users.err_not_deleted":            http.StatusBadRequest,
+	"users.err_retention_expired":      http.StatusGone,
+	"users.err_self_delete":            http.StatusForbidden,
 	"http.err_rate_limited":            http.StatusTooManyRequests,
 
 	"auth.err_invalid_token":   http.StatusUnauthorized,
