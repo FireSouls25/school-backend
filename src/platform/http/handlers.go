@@ -2904,6 +2904,13 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 			date = d
 		}
 		subject, _ := SubjectFrom(r.Context())
+		// Callers that open from a roster only know the group: an
+		// omitted period means the single (or first) block of the day.
+		// Explicit negatives still fail validation downstream.
+		period := body.Period
+		if period == 0 {
+			period = 1
+		}
 		sess, err := deps.Sessions.OpenSession(r.Context(), sessions.Session{
 			ClassGroupID: group.ID,
 			ClassLabel:   group.Label(),
@@ -2911,7 +2918,7 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 			TeacherID:    subject,
 			SubjectID:    strings.TrimSpace(body.SubjectID),
 			Date:         date,
-			Period:       body.Period,
+			Period:       period,
 			Roster:       roster,
 		})
 		if err != nil {
