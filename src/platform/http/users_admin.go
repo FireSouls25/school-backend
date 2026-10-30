@@ -28,6 +28,7 @@ type userRow struct {
 	Email     string       `json:"Email"`
 	Active    bool         `json:"Active"`
 	DeletedAt *string      `json:"DeletedAt,omitempty"`
+	TeacherID string       `json:"TeacherID,omitempty"`
 	Roles     []roles.Role `json:"Roles"`
 }
 
@@ -37,7 +38,7 @@ func toUserRow(u users.User, rs []roles.Role) userRow {
 		rs = []roles.Role{}
 	}
 	row := userRow{
-		ID: u.ID, Username: u.Username, Email: u.Email, Active: u.Active, Roles: rs,
+		ID: u.ID, Username: u.Username, Email: u.Email, Active: u.Active, TeacherID: u.TeacherID, Roles: rs,
 	}
 	if u.DeletedAt != nil {
 		s := u.DeletedAt.UTC().Format("2006-01-02T15:04:05Z")
