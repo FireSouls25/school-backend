@@ -106,10 +106,32 @@ func recordAudit(deps Dependencies, r *http.Request, action audit.Action, resour
 // meResponse describes the caller for frontend navigation (roles, home)
 // plus the personal profile of the login account. Account fields are
 // zero-valued for dev identities (X-Subject-ID) that carry no users row.
+// permissionsOf unions the grants of every role, sorted and deduplicated.
+// The SPA gates its UI on this list instead of reimplementing the role
+// matrix: adding a permission only touches the backend role map.
+func permissionsOf(rs []roles.Role) []roles.Permission {
+	seen := map[roles.Permission]bool{}
+	var out []roles.Permission
+	for _, r := range rs {
+		for _, p := range r.Permissions() {
+			if !seen[p] {
+				seen[p] = true
+			out = append(out, p)
+			}
+		}
+	}
+	if out == nil {
+		out = []roles.Permission{}
+	}
+	return out
+}
+
 type meResponse struct {
 	Subject string       `json:"subject"`
 	Roles   []roles.Role `json:"roles"`
-	Home    string       `json:"home"`
+	// Effective permissions: the reusable contract the frontend gates on.
+	Permissions []roles.Permission `json:"permissions"`
+	Home        string             `json:"home"`
 	// Account profile: the login itself.
 	Username  string `json:"username"`
 	Email     string `json:"email"`
@@ -190,7 +212,7 @@ func handleMe(deps Dependencies) http.HandlerFunc {
 		if rs == nil {
 			rs = []roles.Role{}
 		}
-		resp := meResponse{Subject: subject, Roles: rs, Home: homeFor(rs)}
+		resp := meResponse{Subject: subject, Roles: rs, Permissions: permissionsOf(rs), Home: homeFor(rs)}
 		if deps.Users != nil {
 			u, err := deps.Users.ByID(r.Context(), subject)
 			switch {
@@ -216,6 +238,32 @@ func handleMe(deps Dependencies) http.HandlerFunc {
 			}
 		}
 		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+type todayResponse struct {
+	// Calendar day on the server (YYYY-MM-DD), ISO weekday (Mon=1..Sun=7)
+	// and the full instant for reference.
+	Date    string `json:"date"`
+	Weekday int    `json:"weekday"`
+	Now     string `json:"now"`
+}
+
+// handleToday answers the server's calendar day. No permission beyond
+// a live session: it carries no data, only the clock.
+func handleToday(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		now := time.Now().UTC()
+		iso := now.Format("2006-01-02")
+		wd := int(now.Weekday())
+		if wd == 0 {
+			wd = 7
+		}
+		writeJSON(w, http.StatusOK, todayResponse{
+			Date:    iso,
+			Weekday: wd,
+			Now:     now.Format(time.RFC3339),
+		})
 	}
 }
 
@@ -1066,6 +1114,9 @@ func handleSessionsHistory(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, errBadRequest)
 			return
 		}
+		if teacherGroupScope(r, w, deps, groupID) {
+			return
+		}
 		var from, to time.Time
 		var err error
 		if raw := strings.TrimSpace(q.Get("from")); raw != "" {
@@ -1128,6 +1179,9 @@ func handleSessionDetail(deps Dependencies) http.HandlerFunc {
 		detail, err := deps.Sessions.SessionDetail(r.Context(), chi.URLParam(r, "id"))
 		if err != nil {
 			WriteError(w, r, err)
+			return
+		}
+		if teacherGroupScope(r, w, deps, detail.Session.ClassGroupID) {
 			return
 		}
 		revs := make([]sessionRevisionRow, 0, len(detail.Revisions))
@@ -1393,6 +1447,14 @@ func handleGetStudentWarnings(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, errForbidden)
 			return
 		}
+		st, err := deps.Students.ByID(r.Context(), strings.TrimSpace(id))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if teacherGroupScope(r, w, deps, st.ClassID) {
+			return
+		}
 		list, err := deps.Warnings.ForStudent(r.Context(), id)
 		if err != nil {
 			WriteError(w, r, err)
@@ -1639,6 +1701,14 @@ func handleStudentReport(deps Dependencies) http.HandlerFunc {
 				return
 			}
 		}
+		st, err := deps.Students.ByID(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if teacherGroupScope(r, w, deps, st.ClassID) {
+			return
+		}
 		report, err := deps.Statistics.StudentReport(r.Context(), id)
 		if err != nil {
 			WriteError(w, r, err)
@@ -1732,6 +1802,63 @@ func rejectClosedYearForGroup(r *http.Request, w http.ResponseWriter, deps Depen
 	return false
 }
 
+// teacherGroupScope confines pure teachers to the groups on their own
+// schedule: passing another teacher's list URL shows and changes nothing.
+// Staff with broader roles (admin, secretary, owner) keep full scope, and
+// dev identities without an account row keep the legacy open scope so
+// memory-stack tests stay green. Answers true after writing the refusal.
+func teacherGroupScope(r *http.Request, w http.ResponseWriter, deps Dependencies, groupID string) bool {
+	if strings.TrimSpace(groupID) == "" || deps.Roles == nil {
+		return false
+	}
+	ctx := r.Context()
+	subject, _ := SubjectFrom(ctx)
+	rs, err := deps.Roles.Roles(ctx, subject)
+	if err != nil {
+		WriteError(w, r, err)
+		return true
+	}
+	teaches := false
+	for _, rl := range rs {
+		if rl == roles.RoleAdmin || rl == roles.RoleSecretary || rl == roles.RoleOwner {
+			return false
+		}
+		if rl == roles.RoleTeacher {
+			teaches = true
+		}
+	}
+	if !teaches {
+		return false
+	}
+	if deps.Users == nil || deps.Schedules == nil {
+		return false
+	}
+	u, err := deps.Users.ByID(ctx, subject)
+	if err != nil {
+		if errors.Is(err, users.ErrNotFound) && deps.AllowDevIdentity {
+			return false
+		}
+		WriteError(w, r, errForbidden)
+		return true
+	}
+	if strings.TrimSpace(u.TeacherID) == "" {
+		WriteError(w, r, errForbidden)
+		return true
+	}
+	entries, err := deps.Schedules.EntriesForTeacher(ctx, u.TeacherID)
+	if err != nil {
+		WriteError(w, r, err)
+		return true
+	}
+	for _, e := range entries {
+		if e.ClassGroupID == groupID {
+			return false
+		}
+	}
+	WriteError(w, r, errForbidden)
+	return true
+}
+
 // handleRecordMark records one roll-call mark; the author is always the
 // authenticated caller, never a body field.
 func handleRecordMark(deps Dependencies) http.HandlerFunc {
@@ -1754,6 +1881,9 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 		sessionID := chi.URLParam(r, "sessionID")
 		if deps.Sessions != nil {
 			if sess, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
+				if teacherGroupScope(r, w, deps, sess.ClassGroupID) {
+					return
+				}
 				if rejectClosedYearForGroup(r, w, deps, sess.ClassGroupID) {
 					return
 				}
@@ -2758,6 +2888,9 @@ func handleClassRoster(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		if teacherGroupScope(r, w, deps, groupID) {
+			return
+		}
 		ens, err := deps.Enrollments.EnrollmentsForGroup(r.Context(), groupID)
 		if err != nil {
 			WriteError(w, r, err)
@@ -2880,6 +3013,9 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		if teacherGroupScope(r, w, deps, group.ID) {
+			return
+		}
 		sy, err := deps.Years.ByID(r.Context(), group.SchoolYearID)
 		if err != nil {
 			WriteError(w, r, err)
@@ -2963,6 +3099,9 @@ func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body warningBatchRequest
 		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if teacherGroupScope(r, w, deps, strings.TrimSpace(body.ClassID)) {
 			return
 		}
 		gravity, err := warnings.Parse(body.Gravity)
@@ -3062,6 +3201,14 @@ func handleStudentIncidents(deps Dependencies) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		if !allowStudentView(r.Context(), deps.Auth, subject, id) {
 			WriteError(w, r, errForbidden)
+			return
+		}
+		st, err := deps.Students.ByID(r.Context(), strings.TrimSpace(id))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if teacherGroupScope(r, w, deps, st.ClassID) {
 			return
 		}
 		list, err := deps.Incidents.ForStudent(r.Context(), id)

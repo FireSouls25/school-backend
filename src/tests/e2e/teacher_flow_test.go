@@ -50,7 +50,7 @@ func TestTeacherSaveFlowContract(t *testing.T) {
 
 	// Horario del docente: primer bloque con grupo, como Agenda.
 	var groupID string
-	for w := 1; w <= 7 && groupID == ""; w++ {
+	for w := 0; w <= 6 && groupID == ""; w++ {
 		code, raw := flowDo(t, h, http.MethodGet, fmt.Sprintf("/v1/teachers/me/schedule?weekday=%d", w), dToken, "")
 		if code != http.StatusOK {
 			t.Fatalf("schedule w=%d = %d, want 200: %s", w, code, raw)
@@ -147,7 +147,7 @@ func TestWarningBatchContract(t *testing.T) {
 	aToken := flowToken(t, h, "admin", "admin123*")
 
 	var groupID, studentID string
-	for w := 1; w <= 7 && (groupID == "" || studentID == ""); w++ {
+	for w := 0; w <= 6 && (groupID == "" || studentID == ""); w++ {
 		_, raw := flowDo(t, h, http.MethodGet, fmt.Sprintf("/v1/teachers/me/schedule?weekday=%d", w), dToken, "")
 		var entries []map[string]any
 		if err := json.Unmarshal(raw, &entries); err != nil || len(entries) == 0 {
