@@ -84,6 +84,7 @@ func routes(r *chi.Mux, deps Dependencies) {
 		// Self-service password: auth only, the current password gates
 		// the swap, so permissions play no part here.
 		r.Put("/me/password", handleChangeMyPassword(deps))
+		r.Put("/me/email", handleChangeMyEmail(deps))
 
 		r.Get("/students/{id}", handleGetStudent(deps))
 		r.Get("/students/{id}/warnings", handleGetStudentWarnings(deps))

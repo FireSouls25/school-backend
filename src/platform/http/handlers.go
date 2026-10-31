@@ -275,6 +275,39 @@ func handleToday(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// emailChangeRequest is the body for PUT /v1/me/email: the new address
+// plus the current password as proof of presence.
+type emailChangeRequest struct {
+	Email         string `json:"email"`
+	CurrentPassword string `json:"currentPassword"`
+}
+
+// handleChangeMyEmail lets the signed-in account replace its own login
+// email. Teachers usually edit theirs on the ficha; this covers the rest
+// (admin, secretaries, role-less staff).
+func handleChangeMyEmail(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, ok := SubjectFrom(r.Context())
+		if !ok {
+			WriteError(w, r, errUnauthorized)
+			return
+		}
+		var body emailChangeRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if deps.Users == nil {
+			WriteError(w, r, errInternal)
+			return
+		}
+		if err := deps.Users.ChangeEmail(r.Context(), subject, body.CurrentPassword, body.Email); err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // passwordChangeRequest is the body for PUT /v1/me/password. The current
 // password must be repeated: the bearer alone never grants a password
 // swap, so a stolen token cannot silently take over the account.

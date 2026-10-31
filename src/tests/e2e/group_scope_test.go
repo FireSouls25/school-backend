@@ -330,3 +330,27 @@ func firstSlug(t *testing.T, sched []map[string]any) string {
 	t.Fatal("sin GroupSlug en el horario")
 	return ""
 }
+
+// El titular puede cambiar su propio correo verificando su contraseña.
+func TestChangeOwnEmail(t *testing.T) {
+	h := boot(t)
+	dToken := flowToken(t, h, "docente", "docente123*")
+
+	code, _ := flowDo(t, h, http.MethodPut, "/v1/me/email", dToken, `{"email":"nuevo@colegio.edu","currentPassword":"mal"}`)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("email con clave mala = %d, want 401", code)
+	}
+	code, _ = flowDo(t, h, http.MethodPut, "/v1/me/email", dToken, `{"email":"nuevo@colegio.edu","currentPassword":"docente123*"}`)
+	if code != http.StatusNoContent {
+		t.Fatalf("email propio = %d, want 204", code)
+	}
+	code, raw := flowDo(t, h, http.MethodGet, "/v1/me", dToken, "")
+	if code != http.StatusOK {
+		t.Fatalf("me = %d, want 200: %s", code, raw)
+	}
+	var meOut map[string]any
+	_ = json.Unmarshal(raw, &meOut)
+	if meOut["email"] != "nuevo@colegio.edu" {
+		t.Fatalf("email no actualizado: %v", meOut["email"])
+	}
+}

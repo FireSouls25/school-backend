@@ -230,6 +230,34 @@ func (s *Service) SetPassword(ctx context.Context, id, newPassword string) error
 	return nil
 }
 
+// ChangeEmail verifies the current password before replacing the login
+// email. Uniqueness is enforced across accounts; an empty current
+// password counts as a wrong one, like ChangePassword.
+func (s *Service) ChangeEmail(ctx context.Context, id, currentPassword, newEmail string) error {
+	if err := validateID(id); err != nil {
+		return err
+	}
+	newEmail = normalizeEmail(newEmail)
+	if err := validateEmail(newEmail); err != nil {
+		return err
+	}
+	u, err := s.store.ByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+	if other, err := s.store.ByEmail(ctx, newEmail); err == nil && other.ID != u.ID {
+		return ErrDuplicateEmail
+	}
+	u.Email = newEmail
+	if _, err := s.store.Update(ctx, u); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ChangePassword verifies the current password before replacing the
 // stored hash, so a stolen bearer cannot silently take over the account.
 // A wrong current password answers ErrInvalidCredentials, exactly what

@@ -434,7 +434,7 @@ into a redirect to the teacher's own agenda with an explanatory notice.
   texto no vacío. Si no hay falta vigente, la API lo rechaza (400).
 - La tasa de asistencia cuenta presentes + permisos + atrasos; solo la
   falta y la evasion la bajan. Los atrasos no bajan el porcentaje, pero
-  una racha (`LateStreak >= 3`, calculada en orden cronológico) genera
+  una racha (`LateStreak >= 3` por estudiante y salón, calculada en orden cronológico) genera
   aviso en el resumen y suma a la lista de estudiantes en riesgo.
 - En la interfaz, falta injustificada y evasión se unifican bajo el
   nombre "evasión". El backend conserva ambas marcas intactas en los
