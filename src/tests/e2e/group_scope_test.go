@@ -201,3 +201,44 @@ func TestTeacherGroupScopeContract(t *testing.T) {
 		t.Logf("roster admin (revisar forma): %s", raw)
 	}
 }
+
+// Filas viejas traen ClassID como etiqueta ("7-1") en vez de UUID: el
+// alcance se resuelve por matrículas vivas, no por ese campo.
+func TestTeacherScopeLegacyLabel(t *testing.T) {
+	h := boot(t)
+	aToken := flowToken(t, h, "admin", "admin123*")
+	dToken := flowToken(t, h, "docente", "docente123*")
+	groups := mustGroupsOf(t, h, dToken)
+	own := groups[0]
+
+	createStudent := func(doc, classID string) string {
+		t.Helper()
+		code, raw := flowDo(t, h, http.MethodPost, "/v1/students", aToken,
+			`{"names":"Legacy","surnames":"Caso `+doc+`","documentID":"`+doc+`","classID":"`+classID+`","caregiver":{"names":"Acudiente `+doc+`"}}`)
+		if code != http.StatusCreated {
+			t.Fatalf("crear estudiante = %d, want 201: %s", code, raw)
+		}
+		var st map[string]any
+		if err := json.Unmarshal(raw, &st); err != nil || st["ID"] == nil {
+			t.Fatalf("estudiante sin ID: %s", raw)
+		}
+		return st["ID"].(string)
+	}
+
+	labeled := createStudent("90000001", "7-1-etiqueta")
+	code, raw := flowDo(t, h, http.MethodPost, "/v1/enrollments", aToken,
+		`{"studentID":"`+labeled+`","classGroupID":"`+own+`"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("matricular = %d, want 201: %s", code, raw)
+	}
+	code, raw = flowDo(t, h, http.MethodGet, "/v1/statistics/student/"+labeled, dToken, "")
+	if code != http.StatusOK {
+		t.Fatalf("reporte con etiqueta vieja = %d, want 200: %s", code, raw)
+	}
+
+	orphan := createStudent("90000002", "9-9-fantasma")
+	code, raw = flowDo(t, h, http.MethodGet, "/v1/statistics/student/"+orphan, dToken, "")
+	if code != http.StatusForbidden {
+		t.Fatalf("reporte huérfano = %d, want 403: %s", code, raw)
+	}
+}

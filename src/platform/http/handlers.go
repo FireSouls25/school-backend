@@ -1459,7 +1459,7 @@ func handleGetStudentWarnings(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		if teacherGroupScope(r, w, deps, st.ClassID) {
+		if teacherStudentScope(r, w, deps, st) {
 			return
 		}
 		list, err := deps.Warnings.ForStudent(r.Context(), id)
@@ -1713,7 +1713,7 @@ func handleStudentReport(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		if teacherGroupScope(r, w, deps, st.ClassID) {
+		if teacherStudentScope(r, w, deps, st) {
 			return
 		}
 		report, err := deps.Statistics.StudentReport(r.Context(), id)
@@ -1809,56 +1809,112 @@ func rejectClosedYearForGroup(r *http.Request, w http.ResponseWriter, deps Depen
 	return false
 }
 
-// teacherGroupScope confines pure teachers to the groups on their own
-// schedule: passing another teacher's list URL shows and changes nothing.
-// Staff with broader roles (admin, secretary, owner) keep full scope, and
-// dev identities without an account row keep the legacy open scope so
-// memory-stack tests stay green. Answers true after writing the refusal.
-func teacherGroupScope(r *http.Request, w http.ResponseWriter, deps Dependencies, groupID string) bool {
-	if strings.TrimSpace(groupID) == "" || deps.Roles == nil {
-		return false
+// teacherTaughtGroups resolves the groups a pure teacher may touch: the
+// schedule linked through their login. Staff with broader roles (admin,
+// secretary, owner) get teachOnly=false and keep full scope; dev
+// identities without an account row keep the legacy open scope so
+// memory-stack tests stay green.
+func teacherTaughtGroups(ctx context.Context, deps Dependencies, subject string) (teachOnly bool, taught map[string]bool, err error) {
+	taught = map[string]bool{}
+	if deps.Roles == nil {
+		return false, taught, nil
 	}
-	ctx := r.Context()
-	subject, _ := SubjectFrom(ctx)
 	rs, err := deps.Roles.Roles(ctx, subject)
 	if err != nil {
-		WriteError(w, r, err)
-		return true
+		return false, taught, err
 	}
-	teaches := false
 	for _, rl := range rs {
 		if rl == roles.RoleAdmin || rl == roles.RoleSecretary || rl == roles.RoleOwner {
-			return false
+			return false, taught, nil
 		}
 		if rl == roles.RoleTeacher {
-			teaches = true
+			teachOnly = true
 		}
 	}
-	if !teaches {
-		return false
-	}
-	if deps.Users == nil || deps.Schedules == nil {
-		return false
+	if !teachOnly || deps.Users == nil || deps.Schedules == nil {
+		return teachOnly, taught, nil
 	}
 	u, err := deps.Users.ByID(ctx, subject)
 	if err != nil {
 		if errors.Is(err, users.ErrNotFound) && deps.AllowDevIdentity {
-			return false
+			return false, taught, nil
 		}
-		WriteError(w, r, errForbidden)
-		return true
+		return true, taught, nil
 	}
 	if strings.TrimSpace(u.TeacherID) == "" {
-		WriteError(w, r, errForbidden)
-		return true
+		return true, taught, nil
 	}
 	entries, err := deps.Schedules.EntriesForTeacher(ctx, u.TeacherID)
+	if err != nil {
+		return true, taught, err
+	}
+	for _, e := range entries {
+		taught[e.ClassGroupID] = true
+	}
+	return true, taught, nil
+}
+
+// studentGroups gathers every group a student belongs to: live
+// enrollments first (the roster source of truth), then the profile's
+// ClassID, which on legacy rows is a label instead of an id.
+func studentGroups(ctx context.Context, deps Dependencies, st students.Student) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(g string) {
+		if g = strings.TrimSpace(g); g != "" && !seen[g] {
+			seen[g] = true
+			out = append(out, g)
+		}
+	}
+	if deps.Enrollments != nil {
+		if ens, err := deps.Enrollments.EnrollmentsForStudent(ctx, st.ID); err == nil {
+			for _, e := range ens {
+				add(e.ClassGroupID)
+			}
+		}
+	}
+	add(st.ClassID)
+	return out
+}
+
+// teacherGroupScope confines pure teachers to the groups on their own
+// schedule: passing another teacher's list URL shows and changes nothing.
+// Answers true after writing the refusal.
+func teacherGroupScope(r *http.Request, w http.ResponseWriter, deps Dependencies, groupID string) bool {
+	if strings.TrimSpace(groupID) == "" {
+		return false
+	}
+	ctx := r.Context()
+	subject, _ := SubjectFrom(ctx)
+	teachOnly, taught, err := teacherTaughtGroups(ctx, deps, subject)
 	if err != nil {
 		WriteError(w, r, err)
 		return true
 	}
-	for _, e := range entries {
-		if e.ClassGroupID == groupID {
+	if !teachOnly || taught[groupID] {
+		return false
+	}
+	WriteError(w, r, errForbidden)
+	return true
+}
+
+// teacherStudentScope is the student version: a pure teacher reaches the
+// academic record only through a shared group (any live enrollment or,
+// as a fallback, the profile's class). Basic identity stays readable
+// under view-students; marks, warnings and reports do not.
+func teacherStudentScope(r *http.Request, w http.ResponseWriter, deps Dependencies, st students.Student) bool {
+	ctx := r.Context()
+	subject, _ := SubjectFrom(ctx)
+	teachOnly, taught, err := teacherTaughtGroups(ctx, deps, subject)
+	if err != nil {
+		WriteError(w, r, err)
+		return true
+	}
+	if !teachOnly {
+		return false
+	}
+	for _, g := range studentGroups(ctx, deps, st) {
+		if taught[g] {
 			return false
 		}
 	}
@@ -3215,7 +3271,7 @@ func handleStudentIncidents(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		if teacherGroupScope(r, w, deps, st.ClassID) {
+		if teacherStudentScope(r, w, deps, st) {
 			return
 		}
 		list, err := deps.Incidents.ForStudent(r.Context(), id)

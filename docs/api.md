@@ -417,6 +417,7 @@ into a redirect to the teacher's own agenda with an explanatory notice.
 | `GET /v1/sessions/{id}` | teacher must teach the session's group |
 | `POST /v1/warnings/batch` | teacher must teach `classID` (unknown fields rejected with 400) |
 | `GET /v1/students/{id}/incidents`, `/warnings`, `/v1/statistics/student/{id}` | teacher must teach the student's current group |
+(Student group resolves through live enrollments; the profile's `ClassID` is only a fallback for legacy rows that carry a label instead of an id.)
 
 ## Request/response rules (kept consistent)
 
