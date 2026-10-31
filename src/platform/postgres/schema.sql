@@ -202,7 +202,7 @@ CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_
 CREATE TABLE IF NOT EXISTS teacher_attendance (
     teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
     day         DATE NOT NULL,
-    status      TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late')),
+    status      TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late', 'permission')),
     note        TEXT NOT NULL DEFAULT '',
     recorded_by TEXT NOT NULL DEFAULT '',
     recorded_at TIMESTAMPTZ NOT NULL,
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS teacher_attendance_revisions (
     teacher_id  UUID NOT NULL REFERENCES teachers (id) ON DELETE CASCADE,
     day         DATE NOT NULL,
     old_status  TEXT NOT NULL DEFAULT '',
-    new_status  TEXT NOT NULL CHECK (new_status IN ('present', 'absent', 'late')),
+    new_status  TEXT NOT NULL CHECK (new_status IN ('present', 'absent', 'late', 'permission')),
     note        TEXT NOT NULL DEFAULT '',
     recorded_by TEXT NOT NULL DEFAULT '',
     recorded_at TIMESTAMPTZ NOT NULL
@@ -534,3 +534,11 @@ CREATE TABLE IF NOT EXISTS session_defenses (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_defenses_session_id ON session_defenses (session_id);
+
+-- Permiso docente: ampliar los CHECK de estado existentes.
+ALTER TABLE teacher_attendance DROP CONSTRAINT IF EXISTS teacher_attendance_status_check;
+ALTER TABLE teacher_attendance ADD CONSTRAINT teacher_attendance_status_check
+    CHECK (status IN ('present', 'absent', 'late', 'permission'));
+ALTER TABLE teacher_attendance_revisions DROP CONSTRAINT IF EXISTS teacher_attendance_revisions_new_status_check;
+ALTER TABLE teacher_attendance_revisions ADD CONSTRAINT teacher_attendance_revisions_new_status_check
+    CHECK (new_status IN ('present', 'absent', 'late', 'permission'));

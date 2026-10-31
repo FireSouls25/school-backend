@@ -19,6 +19,9 @@ const (
 	StatusAbsent Status = "absent"
 	// StatusLate means the teacher arrived late (atraso).
 	StatusLate Status = "late"
+	// StatusPermission means the teacher missed the day under an approved
+	// permission (falta con permiso), recorded with its motive.
+	StatusPermission Status = "permission"
 )
 
 // Parse converts a case-insensitive, whitespace-trimmed string into a
@@ -31,6 +34,8 @@ func Parse(s string) (Status, error) {
 		return StatusAbsent, nil
 	case "late", "atraso", "tarde":
 		return StatusLate, nil
+	case "permission", "permiso", "con permiso", "con-permiso":
+		return StatusPermission, nil
 	}
 	return "", ErrUnknownStatus
 }
@@ -80,6 +85,8 @@ type Summary struct {
 	Present int
 	Absent  int
 	Late    int
+	// Excused counts days under an approved permission.
+	Excused int
 }
 
 // Revision is one change to a mark: the status before and after, who

@@ -219,3 +219,30 @@ func TestWarningBatchContract(t *testing.T) {
 		t.Fatalf("open con campo extra = %d, want 400: %s", code, raw)
 	}
 }
+
+// El permiso de docentes se registra con motivo obligatorio implícito
+// en la nota y cuenta como excusa, no como falta.
+func TestTeacherRollPermission(t *testing.T) {
+	h := boot(t)
+	aToken := flowToken(t, h, "admin", "admin123*")
+
+	code, raw := flowDo(t, h, http.MethodGet, "/v1/teachers", aToken, "")
+	if code != http.StatusOK {
+		t.Fatalf("teachers = %d, want 200: %s", code, raw)
+	}
+	var profiles []map[string]any
+	if err := json.Unmarshal(raw, &profiles); err != nil || len(profiles) == 0 {
+		t.Fatalf("sin docentes: %s", raw)
+	}
+	tid, _ := profiles[0]["ID"].(string)
+
+	code, raw = flowDo(t, h, http.MethodPost, "/v1/teachers/attendance", aToken,
+		`{"day":"2026-10-30","marks":[{"teacherID":"`+tid+`","status":"permission","note":"Cita médica"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("teacher roll permiso = %d, want 200: %s", code, raw)
+	}
+	code, raw = flowDo(t, h, http.MethodGet, "/v1/teachers/attendance?date=2026-10-30", aToken, "")
+	if code != http.StatusOK || !strings.Contains(string(raw), "permission") {
+		t.Fatalf("teacher day sin permiso: %d %s", code, raw)
+	}
+}

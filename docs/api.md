@@ -134,11 +134,11 @@ Routes declare one required permission, enforced by
 | `DELETE /v1/assignments/{id}` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/assignments` | `manage-users` | admin only |
 | `GET /v1/warnings/recent?limit=N` | `view-warnings` | admin + secretary |
-| `POST /v1/teachers/attendance` | `manage-teachers` | admin only |
-| `GET /v1/teachers/attendance?date=YYYY-MM-DD` | `manage-teachers` | admin only |
+| `POST /v1/teachers/attendance` | `manage-teachers` | admin + secretary (status `present/absent/late/permission`; permission needs motive) |
+| `GET /v1/teachers/attendance?date=YYYY-MM-DD` | `manage-teachers` | admin + secretary |
 | `GET /v1/teachers/{id}/attendance?from=&to=` | `manage-teachers` | admin only |
 | `GET /v1/teachers/roll?date=YYYY-MM-DD` | `manage-teachers` | admin only |
-| `GET /v1/teachers/attendance/history?from=&to=` | `manage-teachers` | admin only |
+| `GET /v1/teachers/attendance/history?from=&to=` | `manage-teachers` | admin + secretary |
 | `PUT /v1/teachers/{id}/photo` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/photo` | `manage-users` | admin only |
 | `GET /v1/teachers/{id}/sessions` | `manage-teachers` | admin only |
@@ -275,7 +275,7 @@ flow in `docs/users.md`.
   call with its current marks and full revision trail (student,
   before/after, author, timestamp, note).
 
-- `POST /v1/teachers/attendance` (`manage-teachers`, admin only)
+- `POST /v1/teachers/attendance` (`manage-teachers`, admin + secretary; `status` admite `permission` con motivo)
   records the daily roll of teachers. Body
   `{"day","marks":[{"teacherID","status?","note?"}]}`: `day` is
   `YYYY-MM-DD` or RFC3339 (today or past, never future); an empty
