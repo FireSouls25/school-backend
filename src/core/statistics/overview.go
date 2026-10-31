@@ -165,7 +165,7 @@ func (d *DashboardService) Overview(ctx context.Context, year, period int, spans
 	sort.Strings(out.Days)
 	for _, sal := range salons {
 		if sal.StudentDays > 0 {
-			sal.Rate = sal.Presences * 100 / sal.StudentDays
+			sal.Rate = (sal.Presences + sal.Excused + sal.Lates) * 100 / sal.StudentDays
 		}
 		out.Salons = append(out.Salons, *sal)
 	}
