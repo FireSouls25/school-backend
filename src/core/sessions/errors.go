@@ -53,4 +53,8 @@ var (
 	ErrNoChange = newError("sessions.err_no_change", "sessions: no change")
 	// ErrInvalidActor is returned when the change author is missing.
 	ErrInvalidActor = newError("sessions.err_invalid_actor", "sessions: invalid actor")
+	// ErrEmptyDefense is returned when recording a defense without text.
+	ErrEmptyDefense = newError("sessions.err_empty_defense", "sessions: empty defense")
+	// ErrDefenseNeedsFault is returned when defending a non-fault mark.
+	ErrDefenseNeedsFault = newError("sessions.err_defense_needs_fault", "sessions: defense needs a fault")
 )

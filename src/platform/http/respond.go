@@ -196,6 +196,8 @@ var statusByCode = map[string]int{
 	"sessions.err_invalid_student":     http.StatusBadRequest,
 	"sessions.err_not_enrolled":        http.StatusBadRequest,
 	"sessions.err_no_change":           http.StatusBadRequest,
+	"sessions.err_empty_defense":        http.StatusBadRequest,
+	"sessions.err_defense_needs_fault": http.StatusBadRequest,
 	"sessions.err_invalid_actor":       http.StatusBadRequest,
 
 	"statistics.err_invalid_class_group": http.StatusBadRequest,

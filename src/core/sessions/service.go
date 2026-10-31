@@ -73,6 +73,55 @@ func (s *Service) RecordMark(ctx context.Context, sessionID, studentID string, t
 	return s.store.AppendRevision(ctx, rev)
 }
 
+// uniformOf folds the uniform history of one session: only explicit
+// records appear, everything else counts as proper uniform.
+func uniformOf(revs []UniformMark) map[string]bool {
+	out := make(map[string]bool)
+	for _, r := range revs {
+		out[r.StudentID] = r.OK
+	}
+	return out
+}
+
+// SetUniform records one uniform-state change. Unchanged states are a
+// no-op (ErrNoChange); the checkbox starts checked, so only faults and
+// their corrections are stored.
+func (s *Service) SetUniform(ctx context.Context, sessionID, studentID string, ok bool, changedBy string) (UniformMark, error) {
+	sess, err := s.SessionByID(ctx, sessionID)
+	if err != nil {
+		return UniformMark{}, err
+	}
+	studentID = strings.TrimSpace(studentID)
+	if _, err := uuid.Parse(studentID); err != nil {
+		return UniformMark{}, ErrInvalidStudent
+	}
+	if !inRoster(sess.Roster, studentID) {
+		return UniformMark{}, ErrNotEnrolled
+	}
+	changedBy = strings.TrimSpace(changedBy)
+	if changedBy == "" {
+		return UniformMark{}, ErrInvalidActor
+	}
+	hist, err := s.store.UniformHistory(ctx, sess.ID)
+	if err != nil {
+		return UniformMark{}, err
+	}
+	if current, explicit := uniformOf(hist)[studentID]; explicit && current == ok {
+		return UniformMark{}, ErrNoChange
+	} else if !explicit && ok {
+		return UniformMark{}, ErrNoChange
+	}
+	m := UniformMark{
+		ID:        uuid.NewString(),
+		SessionID: sess.ID,
+		StudentID: studentID,
+		OK:        ok,
+		ChangedBy: changedBy,
+		ChangedAt: time.Now().UTC(),
+	}
+	return s.store.AppendUniformChange(ctx, m)
+}
+
 // SessionDetail returns the session with its folded current marks and
 // full revision history.
 func (s *Service) SessionDetail(ctx context.Context, id string) (SessionDetail, error) {
@@ -84,7 +133,74 @@ func (s *Service) SessionDetail(ctx context.Context, id string) (SessionDetail, 
 	if err != nil {
 		return SessionDetail{}, err
 	}
-	return SessionDetail{Session: sess, Marks: fold(sess.ID, revs), Revisions: revs}, nil
+	uniformHist, err := s.store.UniformHistory(ctx, sess.ID)
+	if err != nil {
+		return SessionDetail{}, err
+	}
+	defenses, err := s.store.DefensesForSession(ctx, sess.ID)
+	if err != nil {
+		return SessionDetail{}, err
+	}
+	return SessionDetail{
+		Session:        sess,
+		Marks:          fold(sess.ID, revs),
+		Revisions:      revs,
+		Uniform:        uniformOf(uniformHist),
+		UniformHistory: uniformHist,
+		Defenses:       defenses,
+	}, nil
+}
+
+// SetDefense records (or replaces) one student's defense against an
+// absence. Empty text clears it. Defenses only make sense on faults:
+// present students have nothing to defend.
+func (s *Service) SetDefense(ctx context.Context, sessionID, studentID, text, createdBy string) (Defense, error) {
+	sess, err := s.SessionByID(ctx, sessionID)
+	if err != nil {
+		return Defense{}, err
+	}
+	studentID = strings.TrimSpace(studentID)
+	if _, err := uuid.Parse(studentID); err != nil {
+		return Defense{}, ErrInvalidStudent
+	}
+	if !inRoster(sess.Roster, studentID) {
+		return Defense{}, ErrNotEnrolled
+	}
+	createdBy = strings.TrimSpace(createdBy)
+	if createdBy == "" {
+		return Defense{}, ErrInvalidActor
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return Defense{}, ErrEmptyDefense
+	}
+	revs, err := s.store.RevisionsForSession(ctx, sess.ID)
+	if err != nil {
+		return Defense{}, err
+	}
+	switch mark := fold(sess.ID, revs)[studentID]; mark {
+	case MarkAbsence, MarkAbsencePermission:
+		// faults worth defending
+	default:
+		return Defense{}, ErrDefenseNeedsFault
+	}
+	return s.store.UpsertDefense(ctx, Defense{
+		SessionID: sess.ID,
+		StudentID: studentID,
+		Text:      text,
+		CreatedBy: createdBy,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+// ClearDefense removes one student's defense. Missing defenses are a
+// no-op.
+func (s *Service) ClearDefense(ctx context.Context, sessionID, studentID string) error {
+	sess, err := s.SessionByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	return s.store.DeleteDefense(ctx, sess.ID, strings.TrimSpace(studentID))
 }
 
 // SessionByID returns the session with the given id, roster included.
@@ -124,6 +240,27 @@ func (s *Service) SessionsForStudent(ctx context.Context, studentID string) ([]S
 // revision note of one student.
 func (s *Service) LatestNotesForStudent(ctx context.Context, studentID string) (map[string]string, error) {
 	return s.store.LatestNotesForStudent(ctx, strings.TrimSpace(studentID))
+}
+
+// DefensesForStudent maps session id to the recorded defense text of one
+// student, across every session including them.
+func (s *Service) DefensesForStudent(ctx context.Context, studentID string) (map[string]string, error) {
+	studentID = strings.TrimSpace(studentID)
+	sessions, err := s.SessionsForStudent(ctx, studentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string)
+	for _, sess := range sessions {
+		defs, err := s.store.DefensesForSession(ctx, sess.ID)
+		if err != nil {
+			return nil, err
+		}
+		if d, ok := defs[studentID]; ok && strings.TrimSpace(d.Text) != "" {
+			out[sess.ID] = d.Text
+		}
+	}
+	return out, nil
 }
 
 // RevisionsForSession returns every revision of a session, oldest first.

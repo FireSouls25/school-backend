@@ -1172,6 +1172,7 @@ func handleSessionsHistory(deps Dependencies) http.HandlerFunc {
 
 // sessionRevisionRow is one mark change with student and author resolved.
 type sessionRevisionRow struct {
+	Kind      string `json:"Kind"`
 	Student   string `json:"Student"`
 	From      string `json:"From"`
 	To        string `json:"To"`
@@ -1202,6 +1203,7 @@ func handleSessionDetail(deps Dependencies) http.HandlerFunc {
 				}
 			}
 			revs = append(revs, sessionRevisionRow{
+				Kind:      "mark",
 				Student:   name,
 				From:      string(rev.From),
 				To:        string(rev.To),
@@ -1210,10 +1212,45 @@ func handleSessionDetail(deps Dependencies) http.HandlerFunc {
 				Note:      rev.Note,
 			})
 		}
+		uniformHist := make([]sessionRevisionRow, 0, len(detail.UniformHistory))
+		for _, u := range detail.UniformHistory {
+			name := u.StudentID
+			if deps.Students != nil {
+				if st, err := deps.Students.ByID(r.Context(), u.StudentID); err == nil {
+					name = strings.TrimSpace(st.Names + " " + st.Surnames)
+					if name == "" {
+						name = u.StudentID
+					}
+				}
+			}
+			from, to := "uniform-ok", "uniform-fault"
+			if u.OK {
+				from, to = "uniform-fault", "uniform-ok"
+			}
+			uniformHist = append(uniformHist, sessionRevisionRow{
+				Kind:      "uniform",
+				Student:   name,
+				From:      from,
+				To:        to,
+				Author:    revisionAuthor(r.Context(), deps, u.ChangedBy),
+				ChangedAt: u.ChangedAt.Format(time.RFC3339),
+			})
+		}
+		defenses := make(map[string]any, len(detail.Defenses))
+		for sid, d := range detail.Defenses {
+			defenses[sid] = map[string]any{
+				"Text":      d.Text,
+				"CreatedBy": revisionAuthor(r.Context(), deps, d.CreatedBy),
+				"CreatedAt": d.CreatedAt.Format(time.RFC3339),
+			}
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"Session":   detail.Session,
-			"Marks":     detail.Marks,
-			"Revisions": revs,
+			"Session":        detail.Session,
+			"Marks":          detail.Marks,
+			"Revisions":      revs,
+			"Uniform":        detail.Uniform,
+			"UniformHistory": uniformHist,
+			"Defenses":       defenses,
 		})
 	}
 }
@@ -2029,6 +2066,88 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusCreated, rev)
+	}
+}
+
+// uniformRequest carries one student's uniform state for a roll call:
+// ok=false is the fault, ok=true corrects it back. Unset students
+// count as proper uniform.
+type uniformRequest struct {
+	StudentID string `json:"studentID"`
+	OK        bool   `json:"ok"`
+}
+
+// handleRecordUniform records one student's uniform state. Teachers
+// register it from the list; scope and permission mirror marks.
+func handleRecordUniform(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body uniformRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		sessionID := chi.URLParam(r, "sessionID")
+		if deps.Sessions != nil {
+			if sess, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
+				if teacherGroupScope(r, w, deps, sess.ClassGroupID) {
+					return
+				}
+			}
+		}
+		subject, _ := SubjectFrom(r.Context())
+		m, err := deps.Sessions.SetUniform(r.Context(), sessionID,
+			strings.TrimSpace(body.StudentID), body.OK, subject)
+		if err != nil {
+			if errors.Is(err, sessions.ErrNoChange) {
+				writeJSON(w, http.StatusOK, map[string]any{"ok": body.OK, "unchanged": true})
+				return
+			}
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, m)
+	}
+}
+
+// defenseRequest carries one student's written defense against a fault
+// ("descargo"). Empty text clears it.
+type defenseRequest struct {
+	StudentID string `json:"studentID"`
+	Text      string `json:"text"`
+}
+
+// handleRecordDefense records (or clears) one student's defense.
+// Admins and secretaries only; the mark itself never changes.
+func handleRecordDefense(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body defenseRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		sessionID := chi.URLParam(r, "sessionID")
+		if deps.Sessions != nil {
+			if sess, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
+				if teacherGroupScope(r, w, deps, sess.ClassGroupID) {
+					return
+				}
+			}
+		}
+		subject, _ := SubjectFrom(r.Context())
+		studentID := strings.TrimSpace(body.StudentID)
+		if strings.TrimSpace(body.Text) == "" {
+			if err := deps.Sessions.ClearDefense(r.Context(), sessionID, studentID); err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			writeJSON(w, http.StatusNoContent, nil)
+			return
+		}
+		d, err := deps.Sessions.SetDefense(r.Context(), sessionID, studentID,
+			body.Text, subject)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, d)
 	}
 }
 

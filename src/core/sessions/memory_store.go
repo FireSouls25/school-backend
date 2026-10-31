@@ -13,6 +13,8 @@ type MemoryStore struct {
 	mu        sync.Mutex
 	sessions  map[string]Session
 	revisions map[string]Revision
+	uniform   map[string]UniformMark
+	defenses  map[string]Defense
 }
 
 // NewMemoryStore returns an empty, ready-to-use MemoryStore.
@@ -20,6 +22,8 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		sessions:  make(map[string]Session),
 		revisions: make(map[string]Revision),
+		uniform:   make(map[string]UniformMark),
+		defenses:  make(map[string]Defense),
 	}
 }
 
@@ -153,4 +157,64 @@ func sortSessions(out []Session) {
 		}
 		return out[i].Date.After(out[j].Date)
 	})
+}
+
+// AppendUniformChange implements Store.
+func (s *MemoryStore) AppendUniformChange(_ context.Context, m UniformMark) (UniformMark, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.uniform[m.ID] = m
+	return m, nil
+}
+
+// UniformHistory implements Store.
+func (s *MemoryStore) UniformHistory(_ context.Context, sessionID string) ([]UniformMark, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]UniformMark, 0)
+	for _, m := range s.uniform {
+		if m.SessionID == sessionID {
+			out = append(out, m)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ChangedAt.Equal(out[j].ChangedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].ChangedAt.Before(out[j].ChangedAt)
+	})
+	return out, nil
+}
+
+func defenseKey(sessionID, studentID string) string {
+	return sessionID + "\x00" + studentID
+}
+
+// UpsertDefense implements Store.
+func (s *MemoryStore) UpsertDefense(_ context.Context, d Defense) (Defense, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.defenses[defenseKey(d.SessionID, d.StudentID)] = d
+	return d, nil
+}
+
+// DeleteDefense implements Store.
+func (s *MemoryStore) DeleteDefense(_ context.Context, sessionID, studentID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.defenses, defenseKey(sessionID, studentID))
+	return nil
+}
+
+// DefensesForSession implements Store.
+func (s *MemoryStore) DefensesForSession(_ context.Context, sessionID string) (map[string]Defense, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]Defense)
+	for _, d := range s.defenses {
+		if d.SessionID == sessionID {
+			out[d.StudentID] = d
+		}
+	}
+	return out, nil
 }

@@ -34,6 +34,10 @@ const (
 	// PermissionBlockAccess lets a secretary disable or re-enable a
 	// login. Admin accounts stay out: only manage-users touches them.
 	PermissionBlockAccess Permission = "block-access"
+	// PermissionRecordDefenses lets admin and secretary record a
+	// student's written defense against a fault ("descargo"). Teachers
+	// don't grant them.
+	PermissionRecordDefenses Permission = "record-defenses"
 	// PermissionManageSchedules covers the timetable, its subjects and
 	// their assignments, the same for admins and secretaries.
 	PermissionManageSchedules Permission = "manage-schedules"
@@ -69,6 +73,7 @@ var permissionCatalog = []Permission{
 	PermissionViewWarnings,
 	PermissionManagePromotions,
 	PermissionManageOwners,
+	PermissionRecordDefenses,
 }
 
 // rolePermissions maps each role to the permissions it grants.
@@ -96,6 +101,7 @@ var rolePermissions = func() map[Role][]Permission {
 		PermissionManageSchedules,
 		PermissionViewWarnings,
 		PermissionManagePromotions,
+		PermissionRecordDefenses,
 	}
 	base[RoleAdmin] = append([]Permission(nil), permissionCatalog...)
 	// The admin union above includes manage-owners by construction:

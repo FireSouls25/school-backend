@@ -28,6 +28,8 @@ type SessionView struct {
 	Period       int
 	Roster       []RosterEntryView
 	Marks        map[string]string
+	// Uniform holds explicitly recorded uniform states (true = proper).
+	Uniform      map[string]bool
 }
 
 // WarningView is one llamado de atención reduced to its gravity and date.
@@ -54,6 +56,9 @@ type SessionSource interface {
 	// StudentSessionNotes maps session id to the latest non-empty
 	// revision note of one student (permission reasons).
 	StudentSessionNotes(ctx context.Context, studentID string) (map[string]string, error)
+	// StudentSessionDefenses maps session id to the recorded defense
+	// text ("descargo") of one student, if any.
+	StudentSessionDefenses(ctx context.Context, studentID string) (map[string]string, error)
 }
 
 // WarningSource reads llamados de atención per student.

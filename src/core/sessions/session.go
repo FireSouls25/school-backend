@@ -152,6 +152,47 @@ type SessionDetail struct {
 	Session   Session
 	Marks     map[string]Mark
 	Revisions []Revision
+	// Uniform holds the explicitly recorded uniform states (true =
+	// proper uniform). Students missing here count as proper: the
+	// checkbox starts checked and only faults are stored.
+	Uniform map[string]bool
+	// UniformHistory is the chronological uniform-change trail.
+	UniformHistory []UniformMark
+	// Defenses holds one student defense per absence ("descargo"),
+	// recorded by admin or secretary next to the fault.
+	Defenses map[string]Defense
+}
+
+// UniformMark records one uniform-state change of a student in a
+// session: uniform faults are tracked apart from attendance marks.
+type UniformMark struct {
+	// ID is the unique, immutable UUID of the change.
+	ID string
+	// SessionID references the session.
+	SessionID string
+	// StudentID references the student.
+	StudentID string
+	// OK is false for a uniform fault, true when corrected back.
+	OK bool
+	// ChangedBy identifies who recorded the change (opaque subject id).
+	ChangedBy string
+	// ChangedAt is when the change was recorded, set by the Service.
+	ChangedAt time.Time
+}
+
+// Defense is a student's written defense against one absence
+// ("descargo"): it never changes the mark, it travels next to it.
+type Defense struct {
+	// SessionID references the session.
+	SessionID string
+	// StudentID references the student.
+	StudentID string
+	// Text is the recorded defense.
+	Text string
+	// CreatedBy identifies who recorded it (opaque subject id).
+	CreatedBy string
+	// CreatedAt is when it was recorded, set by the Service.
+	CreatedAt time.Time
 }
 
 // MarkOf returns the student's current mark, "" for present.

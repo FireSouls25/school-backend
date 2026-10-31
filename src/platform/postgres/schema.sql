@@ -508,3 +508,29 @@ ALTER TABLE teachers ADD COLUMN IF NOT EXISTS slug TEXT NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_slug ON teachers (slug) WHERE slug <> '';
 ALTER TABLE class_groups ADD COLUMN IF NOT EXISTS slug TEXT NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_class_groups_slug ON class_groups (slug) WHERE slug <> '';
+
+-- Uniforme por estudiante y llamado: solo se registran cambios (el
+-- checkbox arranca marcado). Historial completo para la trazabilidad.
+CREATE TABLE IF NOT EXISTS session_uniform_history (
+    id         UUID PRIMARY KEY,
+    session_id UUID        NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+    student_id UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    ok         BOOLEAN     NOT NULL,
+    changed_by TEXT        NOT NULL,
+    changed_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_uniform_history_session_id ON session_uniform_history (session_id);
+
+-- Descargos: la defensa escrita ante una falta, una por estudiante y
+-- llamado (upsert). No cambia la marca; viaja junto a ella.
+CREATE TABLE IF NOT EXISTS session_defenses (
+    session_id UUID NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    text       TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (session_id, student_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_defenses_session_id ON session_defenses (session_id);

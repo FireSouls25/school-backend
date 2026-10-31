@@ -293,3 +293,92 @@ func (s *SessionsStore) RevisionsForSession(ctx context.Context, sessionID strin
 	}
 	return out, rows.Err()
 }
+
+// AppendUniformChange implements sessions.Store.
+func (s *SessionsStore) AppendUniformChange(ctx context.Context, m sessions.UniformMark) (sessions.UniformMark, error) {
+	row := s.db.pool.QueryRow(ctx, `
+		INSERT INTO session_uniform_history (id, session_id, student_id, ok, changed_by, changed_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, session_id, student_id, ok, changed_by, changed_at`,
+		m.ID, m.SessionID, m.StudentID, m.OK, m.ChangedBy, m.ChangedAt.Format(time.RFC3339))
+	var out sessions.UniformMark
+	if err := row.Scan(&out.ID, &out.SessionID, &out.StudentID, &out.OK, &out.ChangedBy, &out.ChangedAt); err != nil {
+		if isForeignKeyViolationOn(err, "_session_id_") {
+			return sessions.UniformMark{}, sessions.ErrNotFound
+		}
+		return sessions.UniformMark{}, fmt.Errorf("postgres: append uniform change: %w", err)
+	}
+	return out, nil
+}
+
+// UniformHistory implements sessions.Store.
+func (s *SessionsStore) UniformHistory(ctx context.Context, sessionID string) ([]sessions.UniformMark, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT id, session_id, student_id, ok, changed_by, changed_at
+		FROM session_uniform_history
+		WHERE session_id = $1
+		ORDER BY changed_at, id`,
+		sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list uniform history: %w", err)
+	}
+	defer rows.Close()
+	out := make([]sessions.UniformMark, 0)
+	for rows.Next() {
+		var m sessions.UniformMark
+		if err := rows.Scan(&m.ID, &m.SessionID, &m.StudentID, &m.OK, &m.ChangedBy, &m.ChangedAt); err != nil {
+			return nil, fmt.Errorf("postgres: scan uniform change: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// UpsertDefense implements sessions.Store.
+func (s *SessionsStore) UpsertDefense(ctx context.Context, d sessions.Defense) (sessions.Defense, error) {
+	row := s.db.pool.QueryRow(ctx, `
+		INSERT INTO session_defenses (session_id, student_id, text, created_by, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (session_id, student_id)
+		DO UPDATE SET text = EXCLUDED.text, created_by = EXCLUDED.created_by, created_at = EXCLUDED.created_at
+		RETURNING session_id, student_id, text, created_by, created_at`,
+		d.SessionID, d.StudentID, d.Text, d.CreatedBy, d.CreatedAt.Format(time.RFC3339))
+	var out sessions.Defense
+	if err := row.Scan(&out.SessionID, &out.StudentID, &out.Text, &out.CreatedBy, &out.CreatedAt); err != nil {
+		if isForeignKeyViolationOn(err, "_session_id_") {
+			return sessions.Defense{}, sessions.ErrNotFound
+		}
+		return sessions.Defense{}, fmt.Errorf("postgres: upsert defense: %w", err)
+	}
+	return out, nil
+}
+
+// DeleteDefense implements sessions.Store.
+func (s *SessionsStore) DeleteDefense(ctx context.Context, sessionID, studentID string) error {
+	if _, err := s.db.pool.Exec(ctx, `DELETE FROM session_defenses WHERE session_id = $1 AND student_id = $2`, sessionID, studentID); err != nil {
+		return fmt.Errorf("postgres: delete defense: %w", err)
+	}
+	return nil
+}
+
+// DefensesForSession implements sessions.Store.
+func (s *SessionsStore) DefensesForSession(ctx context.Context, sessionID string) (map[string]sessions.Defense, error) {
+	rows, err := s.db.pool.Query(ctx, `
+		SELECT session_id, student_id, text, created_by, created_at
+		FROM session_defenses
+		WHERE session_id = $1`,
+		sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list defenses: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string]sessions.Defense)
+	for rows.Next() {
+		var d sessions.Defense
+		if err := rows.Scan(&d.SessionID, &d.StudentID, &d.Text, &d.CreatedBy, &d.CreatedAt); err != nil {
+			return nil, fmt.Errorf("postgres: scan defense: %w", err)
+		}
+		out[d.StudentID] = d
+	}
+	return out, rows.Err()
+}

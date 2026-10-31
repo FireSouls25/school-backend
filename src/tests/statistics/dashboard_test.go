@@ -42,6 +42,11 @@ func (g groupSessions) StudentSessions(context.Context, string) ([]statistics.Se
 
 // StudentSessionNotes is unused by these tests: no notes.
 func (g groupSessions) StudentSessionNotes(context.Context, string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+// StudentSessionDefenses is unused by these tests: no defenses.
+func (g groupSessions) StudentSessionDefenses(context.Context, string) (map[string]string, error) {
 	return nil, nil
 }
 

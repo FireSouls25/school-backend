@@ -71,6 +71,9 @@ type SessionEntry struct {
 	// Note is the latest revision note of the session, if any: the
 	// recorded reason of a permission lives here.
 	Note string
+	// UniformOK is false only when a uniform fault was recorded for
+	// this session; missing records count as proper uniform.
+	UniformOK bool
 }
 
 // StudentReport is the full per-student view across years: session
@@ -78,6 +81,8 @@ type SessionEntry struct {
 type StudentReport struct {
 	StudentID string
 	Sessions  []SessionEntry
+	// Defenses maps session id to the recorded defense text, if any.
+	Defenses  map[string]string
 	Presences int
 	// Absences counts plain absences (falta injustificada).
 	Absences int
@@ -86,6 +91,8 @@ type StudentReport struct {
 	Excused  int
 	Evasions int
 	Lates    int
+	// UniformFaults counts sessions with a recorded uniform fault.
+	UniformFaults int
 	// Warnings tallies llamados by gravity.
 	WarningsMild     int
 	WarningsModerate int
@@ -179,9 +186,18 @@ func (s *Service) StudentReport(ctx context.Context, studentID string) (StudentR
 	if err != nil {
 		return StudentReport{}, err
 	}
-	report := StudentReport{StudentID: studentID}
+	defenses, err := s.sessions.StudentSessionDefenses(ctx, studentID)
+	if err != nil {
+		return StudentReport{}, err
+	}
+	report := StudentReport{StudentID: studentID, Defenses: defenses}
 	for _, v := range views {
 		mark := v.Marks[studentID]
+		uniformOK := true
+		if bad, explicit := v.Uniform[studentID]; explicit && !bad {
+			uniformOK = false
+			report.UniformFaults++
+		}
 		report.Sessions = append(report.Sessions, SessionEntry{
 			SessionID:  v.ID,
 			Date:       v.Date,
@@ -190,6 +206,7 @@ func (s *Service) StudentReport(ctx context.Context, studentID string) (StudentR
 			Period:     v.Period,
 			Mark:       mark,
 			Note:       notes[v.ID],
+			UniformOK:  uniformOK,
 		})
 		switch mark {
 		case "absence":

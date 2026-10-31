@@ -85,6 +85,11 @@ func (a statisticsSessions) StudentSessionNotes(ctx context.Context, studentID s
 	return a.sessions.LatestNotesForStudent(ctx, studentID)
 }
 
+// StudentSessionDefenses implements statistics.SessionSource.
+func (a statisticsSessions) StudentSessionDefenses(ctx context.Context, studentID string) (map[string]string, error) {
+	return a.sessions.DefensesForStudent(ctx, studentID)
+}
+
 func (a statisticsSessions) withMarks(ctx context.Context, list []sessions.Session) ([]statistics.SessionView, error) {
 	out := make([]statistics.SessionView, 0, len(list))
 	for _, sess := range list {
@@ -100,6 +105,7 @@ func (a statisticsSessions) withMarks(ctx context.Context, list []sessions.Sessi
 			Date:         sess.Date,
 			Period:       sess.Period,
 			Marks:        make(map[string]string, len(detail.Marks)),
+			Uniform:      detail.Uniform,
 		}
 		for _, e := range sess.Roster {
 			view.Roster = append(view.Roster, statistics.RosterEntryView{

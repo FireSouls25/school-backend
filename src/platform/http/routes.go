@@ -137,6 +137,10 @@ func routes(r *chi.Mux, deps Dependencies) {
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
 			Post("/sessions/{sessionID}/marks", handleRecordMark(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
+			Post("/sessions/{sessionID}/uniform", handleRecordUniform(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordDefenses)).
+			Post("/sessions/{sessionID}/defenses", handleRecordDefense(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
 			Post("/sessions/open", handleOpenSession(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/sessions/history", handleSessionsHistory(deps))

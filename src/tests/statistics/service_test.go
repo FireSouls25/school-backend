@@ -45,6 +45,11 @@ func (f fakeSources) StudentSessions(_ context.Context, id string) ([]statistics
 
 // StudentSessionNotes is unused by these tests: no notes.
 func (f fakeSources) StudentSessionNotes(context.Context, string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+// StudentSessionDefenses is unused by these tests: no defenses.
+func (f fakeSources) StudentSessionDefenses(context.Context, string) (map[string]string, error) {
 	return nil, nil
 }
 

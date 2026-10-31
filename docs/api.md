@@ -86,6 +86,15 @@ Routes declare one required permission, enforced by
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
 | `GET /v1/statistics/student/{studentID}` | `view-class-statistics` (+ own-history on self) | teacher (own groups), admin, student (own) |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
+| `POST /v1/sessions/{sessionID}/uniform` | `record-attendance` | teacher, admin (teacher scoped; `{"studentID","ok"}`) |
+| `POST /v1/sessions/{sessionID}/defenses` | `record-defenses` | admin + secretary (teacher scoped; `{"studentID","text"}`, empty text clears) |
+| `GET /v1/s/{slug}` | authenticated only | resolves an opaque URL slug to `{kind,id}`; 404 when unknown |
+| `POST /v1/sessions/{sessionID}/uniform` | `record-attendance` | teacher, admin (teacher scoped; `{"studentID","ok"}`) |
+| `POST /v1/sessions/{sessionID}/defenses` | `record-defenses` | admin + secretary (teacher scoped; `{"studentID","text"}`, empty text clears) |
+| `GET /v1/s/{slug}` | authenticated only | resolves an opaque URL slug to `{kind,id}`; 404 when unknown |
+| `POST /v1/sessions/{sessionID}/uniform` | `record-attendance` | teacher, admin (teacher scoped to own group; `{"studentID","ok"}`) |
+| `POST /v1/sessions/{sessionID}/defenses` | `record-defenses` | admin + secretary (teacher scoped; `{"studentID","text"}`, empty text clears) |
+| `GET /v1/s/{slug}` | authenticated only | resolves an opaque URL slug to `{kind,id}`; 404 when unknown |
 | `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
 | `POST /v1/classes` | `manage-promotions` | admin + secretary (year-end board) |
 | `GET /v1/schoolyears` | `view-class-statistics` | teacher, admin |
@@ -413,6 +422,10 @@ into a redirect to the teacher's own agenda with an explanatory notice.
 | `GET /v1/classes/{groupID}/roster` | teacher must teach the group |
 | `POST /v1/sessions/open` | teacher must teach `classGroupID` (omitted `period` defaults to 1) |
 | `POST /v1/sessions/{sessionID}/marks` | teacher must teach the session's group |
+| `POST /v1/sessions/{sessionID}/uniform` | teacher must teach the session's group |
+| `POST /v1/sessions/{sessionID}/defenses` | teacher must teach the session's group |
+| `POST /v1/sessions/{sessionID}/uniform` | teacher must teach the session's group |
+| `POST /v1/sessions/{sessionID}/defenses` | teacher must teach the session's group |
 | `GET /v1/sessions/history?classGroupID=` | teacher must teach the group |
 | `GET /v1/sessions/{id}` | teacher must teach the session's group |
 | `POST /v1/warnings/batch` | teacher must teach `classID` (unknown fields rejected with 400) |

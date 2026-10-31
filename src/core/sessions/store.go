@@ -26,6 +26,17 @@ type Store interface {
 	DeleteSession(ctx context.Context, id string) error
 	// AppendRevision persists r and returns the stored revision.
 	AppendRevision(ctx context.Context, r Revision) (Revision, error)
+	// AppendUniformChange persists one uniform-state change.
+	AppendUniformChange(ctx context.Context, m UniformMark) (UniformMark, error)
+	// UniformHistory returns every uniform change of a session, oldest
+	// first.
+	UniformHistory(ctx context.Context, sessionID string) ([]UniformMark, error)
+	// UpsertDefense records or replaces one student's defense.
+	UpsertDefense(ctx context.Context, d Defense) (Defense, error)
+	// DeleteDefense removes one student's defense; missing is a no-op.
+	DeleteDefense(ctx context.Context, sessionID, studentID string) error
+	// DefensesForSession maps every defended student to their defense.
+	DefensesForSession(ctx context.Context, sessionID string) (map[string]Defense, error)
 	// RevisionsForSession returns every revision of a session ordered by
 	// number, oldest first.
 	RevisionsForSession(ctx context.Context, sessionID string) ([]Revision, error)
