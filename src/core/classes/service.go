@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"grade/src/core/slug"
 )
 
 // Service applies class-group policy and persists groups through a Store.
@@ -19,8 +20,32 @@ func NewService(store Store) *Service {
 
 // Create validates the group, assigns a fresh UUID and persists it.
 // The ID field of g is ignored.
+// mintSlug draws a fresh URL slug, retrying on the rare collision.
+func (s *Service) mintSlug(ctx context.Context) string {
+	for i := 0; i < 5; i++ {
+		candidate := slug.New()
+		if _, err := s.store.BySlug(ctx, candidate); err != nil {
+			return candidate
+		}
+	}
+	return slug.New()
+}
+
+// healSlug backfills the URL slug of legacy rows exactly once.
+func (s *Service) healSlug(ctx context.Context, current ClassGroup) ClassGroup {
+	if strings.TrimSpace(current.Slug) != "" {
+		return current
+	}
+	current.Slug = s.mintSlug(ctx)
+	if updated, err := s.store.Update(ctx, current); err == nil {
+		return updated
+	}
+	return current
+}
+
 func (s *Service) Create(ctx context.Context, g ClassGroup) (ClassGroup, error) {
 	g.ID = uuid.NewString()
+	g.Slug = s.mintSlug(ctx)
 	g.SchoolYearID = strings.TrimSpace(g.SchoolYearID)
 	if err := validate(g); err != nil {
 		return ClassGroup{}, err
@@ -36,7 +61,19 @@ func (s *Service) ByID(ctx context.Context, id string) (ClassGroup, error) {
 	if err := validateID(id); err != nil {
 		return ClassGroup{}, err
 	}
-	return s.store.ByID(ctx, id)
+	g, err := s.store.ByID(ctx, id)
+	if err != nil {
+		return ClassGroup{}, err
+	}
+	return s.healSlug(ctx, g), nil
+}
+
+// BySlug resolves a browser URL slug to its group.
+func (s *Service) BySlug(ctx context.Context, slug string) (ClassGroup, error) {
+	if strings.TrimSpace(slug) == "" {
+		return ClassGroup{}, ErrNotFound
+	}
+	return s.store.BySlug(ctx, strings.TrimSpace(slug))
 }
 
 // ListByYear returns every group of a school year ordered by grade,
@@ -52,6 +89,11 @@ func (s *Service) ListByYear(ctx context.Context, schoolYearID string) ([]ClassG
 // unique within the year.
 func (s *Service) Update(ctx context.Context, g ClassGroup) (ClassGroup, error) {
 	g.ID = strings.TrimSpace(g.ID)
+	if strings.TrimSpace(g.Slug) == "" {
+		if current, err := s.store.ByID(ctx, g.ID); err == nil {
+			g.Slug = current.Slug
+		}
+	}
 	g.SchoolYearID = strings.TrimSpace(g.SchoolYearID)
 	if err := validate(g); err != nil {
 		return ClassGroup{}, err

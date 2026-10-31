@@ -22,12 +22,12 @@ func NewClassesStore(db *DB) *ClassesStore { return &ClassesStore{db: db} }
 var _ classes.Store = (*ClassesStore)(nil)
 
 // classColumns is the full column list used by every group SELECT.
-const classColumns = `id, school_year_id, grade, group_no`
+const classColumns = `id, school_year_id, grade, group_no, slug`
 
 // scanClass maps the current row (in classColumns order) onto a ClassGroup.
 func scanClass(scan func(dest ...any) error) (classes.ClassGroup, error) {
 	var g classes.ClassGroup
-	if err := scan(&g.ID, &g.SchoolYearID, &g.Grade, &g.GroupNo); err != nil {
+	if err := scan(&g.ID, &g.SchoolYearID, &g.Grade, &g.GroupNo, &g.Slug); err != nil {
 		return classes.ClassGroup{}, err
 	}
 	return g, nil
@@ -36,10 +36,10 @@ func scanClass(scan func(dest ...any) error) (classes.ClassGroup, error) {
 // Create implements classes.Store.
 func (s *ClassesStore) Create(ctx context.Context, g classes.ClassGroup) (classes.ClassGroup, error) {
 	row := s.db.pool.QueryRow(ctx, `
-		INSERT INTO class_groups (id, school_year_id, grade, group_no)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO class_groups (id, school_year_id, grade, group_no, slug)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+classColumns,
-		g.ID, g.SchoolYearID, g.Grade, g.GroupNo)
+		g.ID, g.SchoolYearID, g.Grade, g.GroupNo, g.Slug)
 	out, err := scanClass(row.Scan)
 	if err != nil {
 		switch {
@@ -63,6 +63,20 @@ func (s *ClassesStore) ByID(ctx context.Context, id string) (classes.ClassGroup,
 	}
 	if err != nil {
 		return classes.ClassGroup{}, fmt.Errorf("postgres: get class: %w", err)
+	}
+	return out, nil
+}
+
+// BySlug implements classes.Store.
+func (s *ClassesStore) BySlug(ctx context.Context, slug string) (classes.ClassGroup, error) {
+	row := s.db.pool.QueryRow(ctx,
+		`SELECT `+classColumns+` FROM class_groups WHERE slug = $1`, slug)
+	out, err := scanClass(row.Scan)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return classes.ClassGroup{}, classes.ErrNotFound
+	}
+	if err != nil {
+		return classes.ClassGroup{}, fmt.Errorf("postgres: get class by slug: %w", err)
 	}
 	return out, nil
 }
@@ -95,10 +109,10 @@ func (s *ClassesStore) ListByYear(ctx context.Context, schoolYearID string) ([]c
 func (s *ClassesStore) Update(ctx context.Context, g classes.ClassGroup) (classes.ClassGroup, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		UPDATE class_groups
-		SET school_year_id = $2, grade = $3, group_no = $4, updated_at = now()
+		SET school_year_id = $2, grade = $3, group_no = $4, slug = $5, updated_at = now()
 		WHERE id = $1
 		RETURNING `+classColumns,
-		g.ID, g.SchoolYearID, g.Grade, g.GroupNo)
+		g.ID, g.SchoolYearID, g.Grade, g.GroupNo, g.Slug)
 	out, err := scanClass(row.Scan)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return classes.ClassGroup{}, classes.ErrNotFound

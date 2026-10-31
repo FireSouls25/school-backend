@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"grade/src/core/slug"
 )
 
 // Service applies profile policy and persists students through a Store.
@@ -21,8 +22,32 @@ func NewService(store Store) *Service {
 
 // Create validates the profile, assigns a fresh UUID and persists it.
 // The ID field of st is ignored. New students are always active.
+// mintSlug draws a fresh URL slug, retrying on the rare collision.
+func (s *Service) mintSlug(ctx context.Context) string {
+	for i := 0; i < 5; i++ {
+		candidate := slug.New()
+		if _, err := s.store.BySlug(ctx, candidate); err != nil {
+			return candidate
+		}
+	}
+	return slug.New()
+}
+
+// healSlug backfills the URL slug of legacy rows exactly once.
+func (s *Service) healSlug(ctx context.Context, current Student) Student {
+	if strings.TrimSpace(current.Slug) != "" {
+		return current
+	}
+	current.Slug = s.mintSlug(ctx)
+	if updated, err := s.store.Update(ctx, current); err == nil {
+		return updated
+	}
+	return current
+}
+
 func (s *Service) Create(ctx context.Context, st Student) (Student, error) {
 	st.ID = uuid.NewString()
+	st.Slug = s.mintSlug(ctx)
 	st.Status = StatusActive
 	st = normalize(st)
 	if err := validate(st); err != nil {
@@ -36,7 +61,19 @@ func (s *Service) ByID(ctx context.Context, id string) (Student, error) {
 	if err := validateID(id); err != nil {
 		return Student{}, err
 	}
-	return s.store.ByID(ctx, id)
+	st, err := s.store.ByID(ctx, id)
+	if err != nil {
+		return Student{}, err
+	}
+	return s.healSlug(ctx, st), nil
+}
+
+// BySlug resolves a browser URL slug to its profile.
+func (s *Service) BySlug(ctx context.Context, slug string) (Student, error) {
+	if strings.TrimSpace(slug) == "" {
+		return Student{}, ErrNotFound
+	}
+	return s.store.BySlug(ctx, strings.TrimSpace(slug))
 }
 
 // ListByClass returns every student in classID ordered alphabetically.
@@ -56,6 +93,9 @@ func (s *Service) Update(ctx context.Context, st Student) (Student, error) {
 		return Student{}, err
 	}
 	st.Status = current.Status
+	if strings.TrimSpace(st.Slug) == "" {
+		st.Slug = current.Slug
+	}
 	st = normalize(st)
 	if err := validate(st); err != nil {
 		return Student{}, err

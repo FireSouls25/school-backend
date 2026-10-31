@@ -19,6 +19,8 @@ type Store interface {
 	Create(ctx context.Context, t Teacher) (Teacher, error)
 	// ByID returns the teacher with the given id or ErrNotFound.
 	ByID(ctx context.Context, id string) (Teacher, error)
+	// BySlug returns the teacher with the given URL slug or ErrNotFound.
+	BySlug(ctx context.Context, slug string) (Teacher, error)
 	// List returns every teacher sorted alphabetically by FullName.
 	List(ctx context.Context) ([]Teacher, error)
 	// Update replaces the profile of the teacher with the given id.

@@ -77,6 +77,7 @@ func routes(r *chi.Mux, deps Dependencies) {
 		// Version-based revocation: rotated/disabled accounts fail closed.
 		r.Use(RequireTokenFresh(deps.Users))
 		r.Get("/me", handleMe(deps))
+		r.Get("/s/{slug}", handleResolveSlug(deps))
 		// Server clock as calendar day: the single source of truth for
 		// "today". Device clocks may lie; school-day math must not.
 		r.Get("/today", handleToday(deps))

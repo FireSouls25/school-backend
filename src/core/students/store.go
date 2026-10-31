@@ -16,6 +16,8 @@ type Store interface {
 	Create(ctx context.Context, s Student) (Student, error)
 	// ByID returns the student with the given id or ErrNotFound.
 	ByID(ctx context.Context, id string) (Student, error)
+	// BySlug returns the student with the given URL slug or ErrNotFound.
+	BySlug(ctx context.Context, slug string) (Student, error)
 	// ListByClass returns every student in classID sorted alphabetically
 	// by FullName.
 	ListByClass(ctx context.Context, classID string) ([]Student, error)

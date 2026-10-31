@@ -18,6 +18,8 @@ const MinGroupNo = 1
 type ClassGroup struct {
 	// ID is the unique, immutable UUID of the class-group.
 	ID string
+	// Slug is the short opaque alias used in browser URLs.
+	Slug string
 	// SchoolYearID references the school year. Opaque here.
 	SchoolYearID string
 	// Grade is the school grade, 1 to 11.

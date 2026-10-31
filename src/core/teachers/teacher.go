@@ -13,6 +13,8 @@ import (
 type Teacher struct {
 	// ID is the unique, immutable UUID of the teacher.
 	ID string
+	// Slug is the short opaque alias used in browser URLs.
+	Slug string
 	// Names holds the given names (nombres).
 	Names string
 	// Surnames holds the family names (apellidos).

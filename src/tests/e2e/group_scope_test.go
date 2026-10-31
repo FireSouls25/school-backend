@@ -193,12 +193,18 @@ func TestTeacherGroupScopeContract(t *testing.T) {
 		t.Fatalf("history ajeno = %d, want 403: %s", code, raw)
 	}
 	// El admin conserva alcance total.
-	code, _ = flowDo(t, h, http.MethodGet, "/v1/classes/"+alien+"/roster", aToken, "")
+	code, raw = flowDo(t, h, http.MethodGet, "/v1/classes/"+alien+"/roster", aToken, "")
 	if code != http.StatusOK {
 		t.Fatalf("roster admin = %d, want 200", code)
 	}
-	if !strings.Contains(string(raw), "StudentID") && !strings.Contains(string(raw), "student") {
-		t.Logf("roster admin (revisar forma): %s", raw)
+	var roster []map[string]any
+	if err := json.Unmarshal(raw, &roster); err != nil || len(roster) == 0 {
+		t.Fatalf("roster admin vacío: %s", raw)
+	}
+	for _, r := range roster {
+		if slug, _ := r["Slug"].(string); slug == "" {
+			t.Fatalf("nómina sin Slug: %v", r)
+		}
 	}
 }
 
@@ -241,4 +247,86 @@ func TestTeacherScopeLegacyLabel(t *testing.T) {
 	if code != http.StatusForbidden {
 		t.Fatalf("reporte huérfano = %d, want 403: %s", code, raw)
 	}
+}
+
+// Las URLs solo muestran slugs opacos: únicos por entidad, resolvibles
+// al id interno, y presentes en los listados que enlazan.
+func TestSlugContract(t *testing.T) {
+	h := boot(t)
+	aToken := flowToken(t, h, "admin", "admin123*")
+	dToken := flowToken(t, h, "docente", "docente123*")
+
+	// El docente ve slugs (no UUIDs) en su horario.
+	code, raw := flowDo(t, h, http.MethodGet, "/v1/teachers/me/schedule?weekday=1", dToken, "")
+	if code != http.StatusOK {
+		t.Fatalf("schedule = %d, want 200: %s", code, raw)
+	}
+	if !strings.Contains(string(raw), "GroupSlug") {
+		t.Fatalf("horario sin GroupSlug: %s", raw)
+	}
+	var sched []map[string]any
+	if err := json.Unmarshal(raw, &sched); err != nil || len(sched) == 0 {
+		t.Fatalf("horario vacío: %s", raw)
+	}
+	seen := map[string]bool{}
+	for _, e := range sched {
+		slug, _ := e["GroupSlug"].(string)
+		gid, _ := e["GroupID"].(string)
+		if slug == "" || slug == gid {
+			t.Fatalf("GroupSlug ausente o igual al UUID: %v", e)
+		}
+		if seen[slug] {
+			t.Fatalf("slug de grupo duplicado: %s", slug)
+		}
+		seen[slug] = true
+	}
+
+	// El resolvedor traduce slug -> id interno.
+	code, raw = flowDo(t, h, http.MethodGet, "/v1/s/"+firstSlug(t, sched), dToken, "")
+	if code != http.StatusOK {
+		t.Fatalf("resolver = %d, want 200: %s", code, raw)
+	}
+	var resolved map[string]any
+	if err := json.Unmarshal(raw, &resolved); err != nil {
+		t.Fatalf("resolver inválido: %s", raw)
+	}
+	if resolved["kind"] != "class" || resolved["id"] == nil || resolved["id"] == "" {
+		t.Fatalf("resolver sin kind/id: %s", raw)
+	}
+	code, _ = flowDo(t, h, http.MethodGet, "/v1/s/noexiste123", dToken, "")
+	if code != http.StatusNotFound {
+		t.Fatalf("slug falso = %d, want 404", code)
+	}
+
+	// El reporte trae Slug por estudiante para los enlaces.
+	groups := mustGroupsOf(t, h, dToken)
+	code, raw = flowDo(t, h, http.MethodGet, "/v1/statistics/class/"+groups[0], aToken, "")
+	if code != http.StatusOK {
+		t.Fatalf("class report = %d, want 200: %s", code, raw)
+	}
+	var report map[string]any
+	if err := json.Unmarshal(raw, &report); err != nil {
+		t.Fatalf("report inválido: %s", raw)
+	}
+	students, _ := report["Students"].([]any)
+	if len(students) == 0 {
+		t.Fatalf("report sin estudiantes: %s", raw)
+	}
+	for _, s := range students {
+		m, _ := s.(map[string]any)
+		if slug, _ := m["Slug"].(string); slug == "" {
+			t.Fatalf("estudiante sin Slug en reporte: %v", m)
+		}
+	}
+}
+
+func firstSlug(t *testing.T, sched []map[string]any) string {
+	t.Helper()
+	for _, e := range sched {
+		if slug, ok := e["GroupSlug"].(string); ok && slug != "" {
+			return slug
+		}
+	}
+	t.Fatal("sin GroupSlug en el horario")
+	return ""
 }

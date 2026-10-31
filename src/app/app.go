@@ -397,6 +397,45 @@ func (a *App) recordPurge(ctx context.Context, id string) {
 	}
 }
 
+// EnsureSlugs backfills URL slugs on every boot: legacy rows predate
+// them, and links must never expose UUIDs. Services heal single rows on
+// read; this pass covers everything else. Idempotent by construction.
+func (a *App) EnsureSlugs(ctx context.Context) {
+	if a.Services.Teachers != nil {
+		if list, err := a.Services.Teachers.List(ctx); err == nil {
+			for _, t := range list {
+				if t.Slug == "" {
+					_, _ = a.Services.Teachers.ByID(ctx, t.ID)
+				}
+			}
+		}
+	}
+	if a.Services.Years != nil && a.Services.Classes != nil {
+		if years, err := a.Services.Years.List(ctx); err == nil {
+			for _, y := range years {
+				groups, err := a.Services.Classes.ListByYear(ctx, y.ID)
+				if err != nil {
+					continue
+				}
+				for _, g := range groups {
+					if g.Slug == "" {
+						_, _ = a.Services.Classes.ByID(ctx, g.ID)
+					}
+					if a.Services.Enrollments != nil && a.Services.Students != nil {
+						if ens, err := a.Services.Enrollments.EnrollmentsForGroup(ctx, g.ID); err == nil {
+							for _, e := range ens {
+								if st, err := a.Services.Students.ByID(ctx, e.StudentID); err == nil && st.Slug == "" {
+									_, _ = a.Services.Students.ByID(ctx, st.ID)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 // SeedDemo runs only the demo data step, ignoring the bootstrap account.
 func (a *App) SeedDemo(ctx context.Context) (devseed.Summary, error) {
 	return devseed.Run(ctx, devseed.Deps{

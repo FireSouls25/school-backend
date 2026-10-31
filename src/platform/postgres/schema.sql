@@ -499,3 +499,12 @@ CREATE INDEX IF NOT EXISTS idx_audit_happened_at ON audit_entries (happened_at D
 CREATE INDEX IF NOT EXISTS idx_audit_student_id ON audit_entries (student_id) WHERE student_id IS NOT NULL;
 -- Failed writes have no resource to point at: their id travels empty.
 ALTER TABLE audit_entries ALTER COLUMN resource_id DROP NOT NULL;
+
+-- Public URL slugs: short opaque aliases so links never expose UUIDs.
+-- Partial unique indexes let legacy '' rows coexist until backfilled.
+ALTER TABLE students ADD COLUMN IF NOT EXISTS slug TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_students_slug ON students (slug) WHERE slug <> '';
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS slug TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_slug ON teachers (slug) WHERE slug <> '';
+ALTER TABLE class_groups ADD COLUMN IF NOT EXISTS slug TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_class_groups_slug ON class_groups (slug) WHERE slug <> '';

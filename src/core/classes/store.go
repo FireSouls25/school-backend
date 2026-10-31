@@ -10,6 +10,8 @@ type Store interface {
 	Create(ctx context.Context, g ClassGroup) (ClassGroup, error)
 	// ByID returns the class-group with the given id or ErrNotFound.
 	ByID(ctx context.Context, id string) (ClassGroup, error)
+	// BySlug returns the class-group with the given URL slug or ErrNotFound.
+	BySlug(ctx context.Context, slug string) (ClassGroup, error)
 	// ListByYear returns every group of a school year ordered by
 	// grade, then group number.
 	ListByYear(ctx context.Context, schoolYearID string) ([]ClassGroup, error)

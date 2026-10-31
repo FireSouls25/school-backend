@@ -54,6 +54,9 @@ func main() {
 		slog.Error("startup owner bootstrap failed", "error", err)
 		os.Exit(1)
 	}
+	// Public slugs for URLs must exist before serving: legacy rows
+	// predate them.
+	application.EnsureSlugs(ctx)
 	// Soft-deleted accounts outlive their deletion by the retention
 	// window and then disappear for good. Purge once at startup and
 	// hourly after that; a missed run only delays, never skips, expiry.

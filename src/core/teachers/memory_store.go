@@ -39,6 +39,21 @@ func (s *MemoryStore) ByID(_ context.Context, id string) (Teacher, error) {
 	return t, nil
 }
 
+// BySlug implements Store.
+func (s *MemoryStore) BySlug(_ context.Context, slug string) (Teacher, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if slug == "" {
+		return Teacher{}, ErrNotFound
+	}
+	for _, t := range s.teachers {
+		if t.Slug == slug {
+			return t, nil
+		}
+	}
+	return Teacher{}, ErrNotFound
+}
+
 // List implements Store.
 func (s *MemoryStore) List(_ context.Context) ([]Teacher, error) {
 	s.mu.Lock()

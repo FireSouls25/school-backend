@@ -37,6 +37,7 @@ import (
 
 // errBadRequest renders 400 when the request body is unreadable.
 var errBadRequest = codedError{"http.err_bad_request"}
+var errNotFound = codedError{"http.err_not_found"}
 
 // maxBodyBytes caps JSON request bodies (1 MiB).
 const maxBodyBytes = 1 << 20
@@ -1685,6 +1686,53 @@ func handleWarningRevisions(deps Dependencies) http.HandlerFunc {
 }
 
 // handleClassReport returns the per-class-group statistics report.
+// slugResolution is the public alias of one internal id: URLs only ever
+// carry the slug, never the UUID.
+type slugResolution struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+}
+
+// handleResolveSlug maps a public slug back to its internal id. Unknown
+// slugs 404 without revealing which kind was tried.
+func handleResolveSlug(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		slug := strings.TrimSpace(chi.URLParam(r, "slug"))
+		if slug == "" {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		if deps.Students != nil {
+			if st, err := deps.Students.BySlug(ctx, slug); err == nil {
+				writeJSON(w, http.StatusOK, slugResolution{Kind: "student", ID: st.ID})
+				return
+			}
+		}
+		if deps.Teachers != nil {
+			if t, err := deps.Teachers.BySlug(ctx, slug); err == nil {
+				writeJSON(w, http.StatusOK, slugResolution{Kind: "teacher", ID: t.ID})
+				return
+			}
+		}
+		if deps.Classes != nil {
+			if g, err := deps.Classes.BySlug(ctx, slug); err == nil {
+				writeJSON(w, http.StatusOK, slugResolution{Kind: "class", ID: g.ID})
+				return
+			}
+		}
+		WriteError(w, r, errNotFound)
+	}
+}
+
+// classStudentRow mirrors statistics.StudentSummary with the public URL
+// slug attached: slugs resolve through enrollments here so list links
+// never expose UUIDs.
+type classStudentRow struct {
+	statistics.StudentSummary
+	Slug string `json:"Slug"`
+}
+
 func handleClassReport(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		report, err := deps.Statistics.ClassReport(r.Context(), chi.URLParam(r, "groupID"))
@@ -1692,7 +1740,26 @@ func handleClassReport(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, report)
+		slugs := map[string]string{}
+		if deps.Students != nil && deps.Enrollments != nil {
+			if ens, err := deps.Enrollments.EnrollmentsForGroup(r.Context(), report.ClassGroupID); err == nil {
+				for _, en := range ens {
+					if st, err := deps.Students.ByID(r.Context(), en.StudentID); err == nil {
+						slugs[st.ID] = st.Slug
+					}
+				}
+			}
+		}
+		rows := make([]classStudentRow, 0, len(report.Students))
+		for _, st := range report.Students {
+			rows = append(rows, classStudentRow{StudentSummary: st, Slug: slugs[st.StudentID]})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ClassGroupID": report.ClassGroupID,
+			"Sessions":     report.Sessions,
+			"Students":     rows,
+			"Totals":       report.Totals,
+		})
 	}
 }
 
@@ -2440,6 +2507,7 @@ func parseRecentLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 type recentWarning struct {
 	warnings.Warning
 	StudentName string `json:"StudentName"`
+	StudentSlug string `json:"StudentSlug"`
 	ClassLabel  string `json:"ClassLabel"`
 	AuthorName  string `json:"AuthorName"`
 }
@@ -2481,6 +2549,7 @@ func enrichWarning(ctx context.Context, deps Dependencies, warn warnings.Warning
 	if deps.Students != nil {
 		if st, err := deps.Students.ByID(ctx, warn.StudentID); err == nil {
 			studentName = strings.TrimSpace(st.Names + " " + st.Surnames)
+			e.StudentSlug = st.Slug
 		}
 	}
 	e.StudentName = studentName
@@ -2940,6 +3009,7 @@ type rosterEntry struct {
 	Names      string `json:"Names"`
 	Surnames   string `json:"Surnames"`
 	DocumentID string `json:"DocumentID"`
+	Slug       string `json:"Slug"`
 }
 
 // handleClassRoster returns the group nómina: enrolled students with
@@ -2979,6 +3049,7 @@ func handleClassRoster(deps Dependencies) http.HandlerFunc {
 				Names:      st.Names,
 				Surnames:   st.Surnames,
 				DocumentID: st.DocumentID,
+				Slug:       st.Slug,
 			})
 		}
 		writeJSON(w, http.StatusOK, out)
@@ -2990,6 +3061,7 @@ func handleClassRoster(deps Dependencies) http.HandlerFunc {
 // without the catalog fall back to sliced ids, never to invented names.
 type teacherDayEntry struct {
 	GroupID     string `json:"GroupID"`
+	GroupSlug   string `json:"GroupSlug"`
 	ClassLabel  string `json:"ClassLabel"`
 	SubjectID   string `json:"SubjectID"`
 	SubjectName string `json:"SubjectName"`
@@ -3025,6 +3097,7 @@ func handleMySchedule(deps Dependencies) http.HandlerFunc {
 		}
 		out := make([]teacherDayEntry, 0, len(entries))
 		for _, e := range entries {
+			groupSlug := ""
 			label := e.ClassGroupID
 			if len(label) > 8 {
 				label = label[:8]
@@ -3032,6 +3105,7 @@ func handleMySchedule(deps Dependencies) http.HandlerFunc {
 			if deps.Classes != nil {
 				if g, err := deps.Classes.ByID(r.Context(), e.ClassGroupID); err == nil {
 					label = g.Label()
+					groupSlug = g.Slug
 				}
 			}
 			name := e.SubjectID
@@ -3044,7 +3118,7 @@ func handleMySchedule(deps Dependencies) http.HandlerFunc {
 				}
 			}
 			out = append(out, teacherDayEntry{
-				GroupID: e.ClassGroupID, ClassLabel: label,
+				GroupID: e.ClassGroupID, GroupSlug: groupSlug, ClassLabel: label,
 				SubjectID: e.SubjectID, SubjectName: name,
 				Weekday: e.Weekday, Start: e.Start.String(), End: e.End.String(),
 			})

@@ -91,6 +91,9 @@ func (s Status) MessageKey() string { return "student.status." + s.String() }
 type Student struct {
 	// ID is the unique, immutable UUID of the student.
 	ID string
+	// Slug is the short opaque alias used in browser URLs. The UUID
+	// stays the internal identity; links never expose it.
+	Slug string
 	// Names holds the given names (nombres).
 	Names string
 	// Surnames holds the family names (apellidos).

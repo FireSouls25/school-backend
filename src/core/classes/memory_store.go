@@ -37,6 +37,21 @@ func (s *MemoryStore) ByID(_ context.Context, id string) (ClassGroup, error) {
 	return g, nil
 }
 
+// BySlug implements Store.
+func (s *MemoryStore) BySlug(_ context.Context, slug string) (ClassGroup, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if slug == "" {
+		return ClassGroup{}, ErrNotFound
+	}
+	for _, g := range s.groups {
+		if g.Slug == slug {
+			return g, nil
+		}
+	}
+	return ClassGroup{}, ErrNotFound
+}
+
 // ListByYear implements Store.
 func (s *MemoryStore) ListByYear(_ context.Context, schoolYearID string) ([]ClassGroup, error) {
 	s.mu.Lock()

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"grade/src/core/slug"
 )
 
 // Service applies profile policy and persists teachers through a Store.
@@ -21,8 +22,32 @@ func NewService(store Store) *Service {
 
 // Create validates the profile, assigns a fresh UUID and persists it.
 // The ID field of t is ignored. New teachers are always active.
+// mintSlug draws a fresh URL slug, retrying on the rare collision.
+func (s *Service) mintSlug(ctx context.Context) string {
+	for i := 0; i < 5; i++ {
+		candidate := slug.New()
+		if _, err := s.store.BySlug(ctx, candidate); err != nil {
+			return candidate
+		}
+	}
+	return slug.New()
+}
+
+// healSlug backfills the URL slug of legacy rows exactly once.
+func (s *Service) healSlug(ctx context.Context, current Teacher) Teacher {
+	if strings.TrimSpace(current.Slug) != "" {
+		return current
+	}
+	current.Slug = s.mintSlug(ctx)
+	if updated, err := s.store.Update(ctx, current); err == nil {
+		return updated
+	}
+	return current
+}
+
 func (s *Service) Create(ctx context.Context, t Teacher) (Teacher, error) {
 	t.ID = uuid.NewString()
+	t.Slug = s.mintSlug(ctx)
 	t.Active = true
 	t = normalize(t)
 	if err := validate(t); err != nil {
@@ -36,7 +61,19 @@ func (s *Service) ByID(ctx context.Context, id string) (Teacher, error) {
 	if err := validateID(id); err != nil {
 		return Teacher{}, err
 	}
-	return s.store.ByID(ctx, id)
+	t, err := s.store.ByID(ctx, id)
+	if err != nil {
+		return Teacher{}, err
+	}
+	return s.healSlug(ctx, t), nil
+}
+
+// BySlug resolves a browser URL slug to its profile.
+func (s *Service) BySlug(ctx context.Context, slug string) (Teacher, error) {
+	if strings.TrimSpace(slug) == "" {
+		return Teacher{}, ErrNotFound
+	}
+	return s.store.BySlug(ctx, strings.TrimSpace(slug))
 }
 
 // List returns every teacher ordered alphabetically.
@@ -47,6 +84,11 @@ func (s *Service) List(ctx context.Context) ([]Teacher, error) {
 // Update replaces the profile of an existing teacher.
 func (s *Service) Update(ctx context.Context, t Teacher) (Teacher, error) {
 	t.ID = strings.TrimSpace(t.ID)
+	if strings.TrimSpace(t.Slug) == "" {
+		if current, err := s.store.ByID(ctx, t.ID); err == nil {
+			t.Slug = current.Slug
+		}
+	}
 	t = normalize(t)
 	if err := validate(t); err != nil {
 		return Teacher{}, err
