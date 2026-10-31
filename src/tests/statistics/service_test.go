@@ -187,3 +187,35 @@ func TestStudentReport(t *testing.T) {
 		t.Errorf("bad student error = %v, want ErrInvalidStudent", err)
 	}
 }
+
+func TestLateStreak(t *testing.T) {
+	ctx := context.Background()
+	roster := []statistics.RosterEntryView{
+		{StudentID: studentA, Names: "Ana", Surnames: "Gómez"},
+	}
+	fx := fakeSources{sessions: []statistics.SessionView{
+		{ID: "11111111-1111-4111-8111-111111111111", ClassGroupID: groupID, Date: day(2026, 8, 18), Roster: roster, Marks: map[string]string{studentA: "late"}},
+		{ID: "22222222-2222-4222-8222-222222222222", ClassGroupID: groupID, Date: day(2026, 8, 19), Roster: roster, Marks: map[string]string{studentA: "late"}},
+		{ID: "33333333-3333-4333-8333-333333333333", ClassGroupID: groupID, Date: day(2026, 8, 20), Roster: roster, Marks: map[string]string{studentA: ""}},
+		{ID: "44444444-4444-4444-8444-444444444444", ClassGroupID: groupID, Date: day(2026, 8, 21), Roster: roster, Marks: map[string]string{studentA: "late"}},
+		{ID: "55555555-5555-4555-8555-555555555555", ClassGroupID: groupID, Date: day(2026, 8, 22), Roster: roster, Marks: map[string]string{studentA: "late"}},
+		{ID: "66666666-6666-4666-8666-666666666666", ClassGroupID: groupID, Date: day(2026, 8, 23), Roster: roster, Marks: map[string]string{studentA: "late"}},
+	}}
+	svc := statistics.NewService(fx, fx, fx)
+	report, err := svc.StudentReport(ctx, studentA)
+	if err != nil {
+		t.Fatalf("StudentReport: %v", err)
+	}
+	if report.LateStreak != 3 {
+		t.Errorf("LateStreak = %d, want 3", report.LateStreak)
+	}
+	rep, err := svc.ClassReport(ctx, groupID)
+	if err != nil {
+		t.Fatalf("ClassReport: %v", err)
+	}
+	for _, s := range rep.Students {
+		if s.StudentID == studentA && s.LateStreak != 3 {
+			t.Errorf("class LateStreak = %d, want 3", s.LateStreak)
+		}
+	}
+}

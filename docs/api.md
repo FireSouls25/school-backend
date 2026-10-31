@@ -89,12 +89,6 @@ Routes declare one required permission, enforced by
 | `POST /v1/sessions/{sessionID}/uniform` | `record-attendance` | teacher, admin (teacher scoped; `{"studentID","ok"}`) |
 | `POST /v1/sessions/{sessionID}/defenses` | `record-defenses` | admin + secretary (teacher scoped; `{"studentID","text"}`, empty text clears) |
 | `GET /v1/s/{slug}` | authenticated only | resolves an opaque URL slug to `{kind,id}`; 404 when unknown |
-| `POST /v1/sessions/{sessionID}/uniform` | `record-attendance` | teacher, admin (teacher scoped; `{"studentID","ok"}`) |
-| `POST /v1/sessions/{sessionID}/defenses` | `record-defenses` | admin + secretary (teacher scoped; `{"studentID","text"}`, empty text clears) |
-| `GET /v1/s/{slug}` | authenticated only | resolves an opaque URL slug to `{kind,id}`; 404 when unknown |
-| `POST /v1/sessions/{sessionID}/uniform` | `record-attendance` | teacher, admin (teacher scoped to own group; `{"studentID","ok"}`) |
-| `POST /v1/sessions/{sessionID}/defenses` | `record-defenses` | admin + secretary (teacher scoped; `{"studentID","text"}`, empty text clears) |
-| `GET /v1/s/{slug}` | authenticated only | resolves an opaque URL slug to `{kind,id}`; 404 when unknown |
 | `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
 | `POST /v1/classes` | `manage-promotions` | admin + secretary (year-end board) |
 | `GET /v1/schoolyears` | `view-class-statistics` | teacher, admin |
@@ -424,12 +418,27 @@ into a redirect to the teacher's own agenda with an explanatory notice.
 | `POST /v1/sessions/{sessionID}/marks` | teacher must teach the session's group |
 | `POST /v1/sessions/{sessionID}/uniform` | teacher must teach the session's group |
 | `POST /v1/sessions/{sessionID}/defenses` | teacher must teach the session's group |
-| `POST /v1/sessions/{sessionID}/uniform` | teacher must teach the session's group |
-| `POST /v1/sessions/{sessionID}/defenses` | teacher must teach the session's group |
 | `GET /v1/sessions/history?classGroupID=` | teacher must teach the group |
 | `GET /v1/sessions/{id}` | teacher must teach the session's group |
 | `POST /v1/warnings/batch` | teacher must teach `classID` (unknown fields rejected with 400) |
 | `GET /v1/students/{id}/incidents`, `/warnings`, `/v1/statistics/student/{id}` | teacher must teach the student's current group |
+
+### Uniforme, descargos y tasas
+
+- El uniforme es un check por estudiante y llamado (marcado = correcto).
+  Solo viajan los cambios (`ok: false` registra la falta). Se muestra en
+  el resumen y la ficha del estudiante, en el historial de la llamada
+  (trazabilidad completa) y cuenta en `UniformFaults`.
+- El descargo (`record-defenses`: admin y secretaria) es la defensa
+  escrita ante una falta. No cambia la marca; viaja junto a ella y exige
+  texto no vacío. Si no hay falta vigente, la API lo rechaza (400).
+- La tasa de asistencia cuenta presentes + permisos + atrasos; solo la
+  falta y la evasion la bajan. Los atrasos no bajan el porcentaje, pero
+  una racha (`LateStreak >= 3`, calculada en orden cronológico) genera
+  aviso en el resumen y suma a la lista de estudiantes en riesgo.
+- En la interfaz, falta injustificada y evasión se unifican bajo el
+  nombre "evasión". El backend conserva ambas marcas intactas en los
+  datos y el historial.
 (Student group resolves through live enrollments; the profile's `ClassID` is only a fallback for legacy rows that carry a label instead of an id.)
 
 ## Request/response rules (kept consistent)

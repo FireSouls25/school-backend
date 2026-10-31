@@ -25,6 +25,8 @@ type StudentSummary struct {
 	Excused int
 	Evasions int
 	Lates    int
+	// LateStreak is the longest run of consecutive late marks.
+	LateStreak int
 }
 
 // AttendanceRate returns presences over sessions, or 0 without sessions.
@@ -93,6 +95,9 @@ type StudentReport struct {
 	Lates    int
 	// UniformFaults counts sessions with a recorded uniform fault.
 	UniformFaults int
+	// LateStreak is the longest run of consecutive late marks, oldest to
+	// newest. Several in a row should raise an alert.
+	LateStreak int
 	// Warnings tallies llamados by gravity.
 	WarningsMild     int
 	WarningsModerate int
@@ -126,12 +131,40 @@ func (s *Service) ClassReport(ctx context.Context, classGroupID string) (ClassRe
 	if err != nil {
 		return ClassReport{}, err
 	}
+	ordered := append([]SessionView(nil), views...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Date.Equal(ordered[j].Date) {
+			return ordered[i].ID < ordered[j].ID
+		}
+		return ordered[i].Date.Before(ordered[j].Date)
+	})
+	streak := map[string]int{}
+	best := map[string]int{}
+	for _, v := range ordered {
+		seen := map[string]bool{}
+		for _, e := range v.Roster {
+			seen[e.StudentID] = true
+			if v.Marks[e.StudentID] == "late" {
+				streak[e.StudentID]++
+				if streak[e.StudentID] > best[e.StudentID] {
+					best[e.StudentID] = streak[e.StudentID]
+				}
+			} else {
+				streak[e.StudentID] = 0
+			}
+		}
+		for id := range streak {
+			if !seen[id] {
+				streak[id] = 0
+			}
+		}
+	}
 	byID := make(map[string]*StudentSummary)
 	for _, v := range views {
 		for _, e := range v.Roster {
 			sum, ok := byID[e.StudentID]
 			if !ok {
-				sum = &StudentSummary{StudentID: e.StudentID, Names: e.Names, Surnames: e.Surnames}
+				sum = &StudentSummary{StudentID: e.StudentID, Names: e.Names, Surnames: e.Surnames, LateStreak: best[e.StudentID]}
 				byID[e.StudentID] = sum
 			}
 			sum.Sessions++
@@ -191,6 +224,25 @@ func (s *Service) StudentReport(ctx context.Context, studentID string) (StudentR
 		return StudentReport{}, err
 	}
 	report := StudentReport{StudentID: studentID, Defenses: defenses}
+	ordered := append([]SessionView(nil), views...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Date.Equal(ordered[j].Date) {
+			return ordered[i].ID < ordered[j].ID
+		}
+		return ordered[i].Date.Before(ordered[j].Date)
+	})
+	run := 0
+	for _, v := range ordered {
+		if v.Marks[studentID] == "late" {
+			run++
+			if run > report.LateStreak {
+				report.LateStreak = run
+			}
+		} else {
+			run = 0
+		}
+	}
+
 	for _, v := range views {
 		mark := v.Marks[studentID]
 		uniformOK := true
