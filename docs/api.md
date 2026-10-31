@@ -76,14 +76,15 @@ Routes declare one required permission, enforced by
 | `DELETE /v1/users/{id}` | `manage-owners` | owner-only soft delete with retention (self and last owner blocked) |
 | `POST /v1/users/{id}/restore` | `manage-owners` | restore inside the retention window |
 | `DELETE /v1/roles` | `manage-roles` | revoke a role (`admin`/`owner` need `manage-owners`; last owner kept) |
-| `GET /v1/me` | authenticated only | anyone with an id |
+| `GET /v1/me` | authenticated only | anyone with an id (`permissions` carries the effective grants; the SPA gates UI on that list instead of reimplementing roles) |
+| `GET /v1/today` | authenticated only | server school day (`date` YYYY-MM-DD in America/Bogota, `weekday` 1–7, `now` UTC instant); the only source of "today" |
 | `PUT /v1/me/password` | authenticated only | anyone with an account row |
 | `GET /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
 | `PUT /v1/me/photo` | authenticated only | anyone (photo lives on the account; linked docentes keep the teacher profile photo) |
 | `GET /v1/students/{id}` | `view-students`, or `view-own-history` on self | teacher, admin / student (own) |
 | `GET /v1/students/{id}/warnings` | same as above | teacher, admin / student (own) |
 | `GET /v1/statistics/class/{groupID}` | `view-class-statistics` | teacher, admin |
-| `GET /v1/statistics/student/{studentID}` | `manage-system` | admin only |
+| `GET /v1/statistics/student/{studentID}` | `view-class-statistics` (+ own-history on self) | teacher (own groups), admin, student (own) |
 | `POST /v1/sessions/{sessionID}/marks` | `record-attendance` | teacher, admin |
 | `GET /v1/classes?year=AAAA` | `view-class-statistics` | teacher, admin |
 | `POST /v1/classes` | `manage-promotions` | admin + secretary (year-end board) |
@@ -397,6 +398,25 @@ meaningfully). Instead the SPA implements "send back":
 So a teacher opening an admin-only report gets `403
 http.err_forbidden`, sees nothing, and lands back where they were —
 or on `/docente` by default.
+
+Teacher lists carry their own rule: pure teachers (role `teacher`
+without staff roles) are scoped to the groups on their schedule. Roster,
+open, marks, session detail/history, batches, incidents, warnings and
+student reports answer `403` outside that scope, so sharing another
+teacher's list URL shows and changes nothing. The SPA turns that denial
+into a redirect to the teacher's own agenda with an explanatory notice.
+
+### Teacher group scope (in addition to the permission above)
+
+| Route | Extra check |
+|---|---|
+| `GET /v1/classes/{groupID}/roster` | teacher must teach the group |
+| `POST /v1/sessions/open` | teacher must teach `classGroupID` (omitted `period` defaults to 1) |
+| `POST /v1/sessions/{sessionID}/marks` | teacher must teach the session's group |
+| `GET /v1/sessions/history?classGroupID=` | teacher must teach the group |
+| `GET /v1/sessions/{id}` | teacher must teach the session's group |
+| `POST /v1/warnings/batch` | teacher must teach `classID` (unknown fields rejected with 400) |
+| `GET /v1/students/{id}/incidents`, `/warnings`, `/v1/statistics/student/{id}` | teacher must teach the student's current group |
 
 ## Request/response rules (kept consistent)
 

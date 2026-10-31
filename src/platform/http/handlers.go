@@ -249,13 +249,20 @@ type todayResponse struct {
 	Now     string `json:"now"`
 }
 
-// handleToday answers the server's calendar day. No permission beyond
-// a live session: it carries no data, only the clock.
+// schoolZone is the school's wall clock. Colombia has no daylight saving,
+// so a fixed offset is exact and needs no tzdata in the container.
+var schoolZone = time.FixedZone("COT", -5*60*60)
+
+// handleToday answers the server's calendar day in the school zone. No
+// permission beyond a live session: it carries no data, only the clock.
+// A UTC date would flip to "tomorrow" on Friday nights; the school day
+// is what Colombia lives, so the zone is fixed here, never the device.
 func handleToday(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
-		iso := now.Format("2006-01-02")
-		wd := int(now.Weekday())
+		local := now.In(schoolZone)
+		iso := local.Format("2006-01-02")
+		wd := int(local.Weekday())
 		if wd == 0 {
 			wd = 7
 		}
