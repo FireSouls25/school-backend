@@ -126,7 +126,9 @@ type Config struct {
 	UserRetentionDays int
 	// AuthSecret signs login tokens. Required in production; in
 	// development an empty value means a random per-boot secret (logins
-	// die with the process, never with a shipped default).
+	// die with the process, never with a shipped default). It may come
+	// from AUTH_SECRET_FILE (file-mounted secrets, AWS/EKS volumes),
+	// which takes precedence over AUTH_SECRET.
 	AuthSecret string
 	// AuthTTL is the legacy login token lifetime (access fallback).
 	// Prefer AUTH_ACCESS_TTL/AUTH_REFRESH_TTL. Zero means the default.
@@ -247,6 +249,13 @@ func FromEnv() (Config, error) {
 		cfg.UserRetentionDays = days
 	}
 	cfg.AuthSecret = os.Getenv("AUTH_SECRET")
+	if file := strings.TrimSpace(os.Getenv("AUTH_SECRET_FILE")); file != "" {
+		secret, err := readSecretFile(file)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.AuthSecret = strings.TrimRight(secret, "\r\n")
+	}
 	if raw := strings.TrimSpace(os.Getenv("AUTH_ACCESS_TTL")); raw != "" {
 		ttl, err := time.ParseDuration(raw)
 		if err != nil || ttl <= 0 {

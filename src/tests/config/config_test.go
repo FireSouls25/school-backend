@@ -20,6 +20,7 @@ func clearEnv(t *testing.T) {
 		"BOOTSTRAP_OWNER_USERNAME", "BOOTSTRAP_OWNER_EMAIL",
 		"BOOTSTRAP_OWNER_PASSWORD", "BOOTSTRAP_OWNER_PASSWORD_FILE",
 		"USER_RETENTION_DAYS",
+		"AUTH_SECRET", "AUTH_SECRET_FILE",
 		"TRUSTED_PROXIES", "AUTH_ACCESS_TTL", "AUTH_REFRESH_TTL", "AUTH_TTL",
 	} {
 		t.Setenv(key, "")
@@ -198,6 +199,34 @@ func TestBootstrapMissingFileFails(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("BOOTSTRAP_ADMIN_USERNAME", "directora")
 	t.Setenv("BOOTSTRAP_ADMIN_PASSWORD_FILE", filepath.Join(t.TempDir(), "absent"))
+
+	if _, err := config.FromEnv(); err == nil {
+		t.Error("FromEnv() = nil error, want failure for a missing secret file")
+	}
+}
+
+func TestAuthSecretFromFile(t *testing.T) {
+	clearEnv(t)
+	secret := filepath.Join(t.TempDir(), "auth_secret")
+	if err := os.WriteFile(secret, []byte("rot-secret-from-file\n"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	t.Setenv("AUTH_SECRET", "env-secret")
+	t.Setenv("AUTH_SECRET_FILE", secret)
+
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	// The file takes precedence and only the trailing newline is stripped.
+	if cfg.AuthSecret != "rot-secret-from-file" {
+		t.Errorf("AuthSecret = %q, want %q", cfg.AuthSecret, "rot-secret-from-file")
+	}
+}
+
+func TestAuthSecretMissingFileFails(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("AUTH_SECRET_FILE", filepath.Join(t.TempDir(), "absent"))
 
 	if _, err := config.FromEnv(); err == nil {
 		t.Error("FromEnv() = nil error, want failure for a missing secret file")
