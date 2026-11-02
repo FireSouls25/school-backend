@@ -84,7 +84,10 @@ func (s *SchoolYearsStore) loadRanges(ctx context.Context, y *schoolyears.School
 		return fmt.Errorf("postgres: list school year periods: %w", err)
 	}
 	defer rows.Close()
-	ranges := make([]schoolyears.PeriodRange, 0)
+	// Keep ranges nil when the year has no dated periods: Create/Update
+	// preserve nil via append([]PeriodRange(nil), ...), and DeepEqual
+	// tells nil apart from an empty slice.
+	var ranges []schoolyears.PeriodRange
 	for rows.Next() {
 		var start, end time.Time
 		if err := rows.Scan(&start, &end); err != nil {
