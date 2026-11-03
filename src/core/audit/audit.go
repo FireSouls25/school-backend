@@ -31,6 +31,8 @@ type Resource string
 const (
 	ResourceStudent    Resource = "student"
 	ResourceWarning    Resource = "warning"
+	// ResourceObservation marks a convivencia observation record.
+	ResourceObservation Resource = "observation"
 	ResourceSession    Resource = "session"
 	ResourceReport     Resource = "report"
 	ResourceSchedule   Resource = "schedule"
