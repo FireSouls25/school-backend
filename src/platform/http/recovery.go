@@ -73,6 +73,33 @@ func handleRecoverRequest(deps Dependencies, limit *loginLimiter) http.HandlerFu
 // handleRecoverReset consumes a reset token and sets the new password.
 // Invalid, expired and reused tokens share 401 (no distinction); weak
 // passwords answer 400. Success revokes every refresh row server-side.
+// handleRecoverVerify names the account behind a reset token without
+// consuming it, so the reset screen shows whose password is changing.
+// Unknown, expired and used tokens share 401 with a consumed reset.
+func handleRecoverVerify(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		now := time.Now()
+		key := "recover|" + limit.clientIP(r)
+		ip := limit.clientIP(r)
+		if !limit.check(r.Context(), key, now) {
+			slog.Warn("recover throttled", "ip", ip)
+			WriteError(w, r, errRateLimited)
+			return
+		}
+		limit.record(r.Context(), key, ip, true, now)
+		if deps.Recovery == nil {
+			WriteError(w, r, errInternal)
+			return
+		}
+		username, masked, err := deps.Recovery.Verify(r.Context(), r.URL.Query().Get("token"))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"username": username, "email": masked})
+	}
+}
+
 func handleRecoverReset(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body recoverReset

@@ -39,7 +39,7 @@ func TestHealthz(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
@@ -49,6 +49,9 @@ func TestHealthz(t *testing.T) {
 	if body["version"] != "dev" {
 		t.Errorf("version = %q, want dev default", body["version"])
 	}
+	if _, ok := body["recoveryMail"]; !ok {
+		t.Errorf("body = %v, want recoveryMail flag", body)
+	}
 }
 
 func TestHealthzReportsBuild(t *testing.T) {
@@ -57,7 +60,7 @@ func TestHealthzReportsBuild(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}

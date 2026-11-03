@@ -118,6 +118,35 @@ func TestRecoverResetRotatesAndKillsSessions(t *testing.T) {
 	loginToken(t, h, "admin", "nuevaClave99")
 }
 
+func TestRecoverVerifyNamesAccount(t *testing.T) {
+	h, _, recSvc := recoverStack(t)
+	ctx := context.Background()
+
+	token, err := recSvc.Request(ctx, "admin")
+	if err != nil || token == "" {
+		t.Fatalf("service request = %q, %v", token, err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/v1/recover/verify?token="+token, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify code = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var out map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode verify: %v", err)
+	}
+	if out["username"] != "admin" || out["email"] != "a***@colegio.edu" {
+		t.Errorf("verify = %v, want masked account", out)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/v1/recover/verify?token=roto", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bogus verify code = %d, want 401", rec.Code)
+	}
+}
+
 func TestRecoverResetRejectsWeak(t *testing.T) {
 	h, _, recSvc := recoverStack(t)
 	token, err := recSvc.Request(context.Background(), "admin")

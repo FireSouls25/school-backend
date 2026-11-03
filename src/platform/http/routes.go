@@ -57,7 +57,8 @@ func MiddlewareCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 //     http.err_unauthorized (401) or http.err_forbidden (403). The SPA
 //     navigates back on 403, defaulting to the GET /v1/me home.
 func routes(r *chi.Mux, deps Dependencies) {
-	r.Get("/healthz", handleHealthz(deps.Version))
+	mailReady := deps.Recovery != nil && deps.Recovery.DeliveryConfigured()
+	r.Get("/healthz", handleHealthz(deps.Version, mailReady))
 
 	r.Post("/v1/login", handleLogin(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, loginLimitPerMinute, loginWindow)))
 	r.Post("/v1/refresh", handleRefresh(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, refreshLimitPerMinute, loginWindow)))
@@ -68,6 +69,7 @@ func routes(r *chi.Mux, deps Dependencies) {
 	// Password recovery: always-204 request (no enumeration), single-use
 	// reset. Throttled per IP like login.
 	r.Post("/v1/recover/request", handleRecoverRequest(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, recoverLimitPerMinute, loginWindow)))
+	r.Get("/v1/recover/verify", handleRecoverVerify(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, recoverLimitPerMinute, loginWindow)))
 	r.Post("/v1/recover/reset", handleRecoverReset(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, recoverLimitPerMinute, loginWindow)))
 
 	r.Route("/v1", func(r chi.Router) {

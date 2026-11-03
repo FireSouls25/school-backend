@@ -191,12 +191,54 @@ func (s *RecoveryService) Request(ctx context.Context, identifier string) (strin
 	// Deliver the link when a mailer is wired and the account has an
 	// address. Best effort and silent: the HTTP layer always answers
 	// 204, so delivery must never change the response (no enumeration,
-	// no confusion). Misconfiguration surfaces at boot, not per request.
+	// no confusion). Links use the hash-router shape (/#/recuperar/).
+	// Misconfiguration surfaces at boot, not per request.
 	if s.mailer != nil && s.baseURL != "" && strings.TrimSpace(u.Email) != "" {
-		link := s.baseURL + "/recuperar/" + token
+		link := s.baseURL + "/#/recuperar/" + token
 		_ = s.mailer.SendResetLink(ctx, u.Email, link)
 	}
 	return token, nil
+}
+
+// Verify resolves a raw token to its account without consuming it, so
+// the reset screen can name the account before the user commits. The
+// username always travels; the email goes masked. Unknown, expired or
+// used tokens share ErrInvalidRecoveryToken with Reset.
+func (s *RecoveryService) Verify(ctx context.Context, rawToken string) (username, maskedEmail string, err error) {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return "", "", ErrInvalidRecoveryToken
+	}
+	rec, err := s.resets.LookupByHash(ctx, hashRecoveryToken(rawToken))
+	if err != nil {
+		return "", "", ErrInvalidRecoveryToken
+	}
+	if rec.UsedAt != nil || !rec.ExpiresAt.After(time.Now()) {
+		return "", "", ErrInvalidRecoveryToken
+	}
+	u, err := s.users.ByID(ctx, rec.UserID)
+	if err != nil {
+		return "", "", ErrInvalidRecoveryToken
+	}
+	return u.Username, maskEmail(u.Email), nil
+}
+
+// maskEmail keeps the first letter of the local part ("c***@dom.com"):
+// enough to recognize the inbox, useless to harvest it.
+func maskEmail(email string) string {
+	email = strings.TrimSpace(email)
+	at := strings.Index(email, "@")
+	if at <= 0 {
+		return ""
+	}
+	return email[:1] + "***" + email[at:]
+}
+
+// DeliveryConfigured reports whether reset links actually leave the
+// server (mailer plus public base URL). The console reads it to warn
+// instead of promising mail that will never arrive.
+func (s *RecoveryService) DeliveryConfigured() bool {
+	return s.mailer != nil && strings.TrimSpace(s.baseURL) != ""
 }
 
 // Reset consumes a raw token and sets the new password: version bump

@@ -38,10 +38,15 @@ func (m *ResendMailer) SendResetLink(ctx context.Context, to, link string) error
 		From:    m.from,
 		To:      []string{to},
 		Subject: "Recupera tu contraseña — Observador Estudiantil",
-		Html: fmt.Sprintf("<p>Solicitaste restablecer tu contraseña.</p>"+
-			"<p><a href=\"%s\">Pulsa aquí para elegir una nueva</a>. El enlace vence en una hora.</p>"+
-			"<p>Si no fuiste tú, ignora este mensaje.</p>", link),
-		Text: "Solicitaste restablecer tu contraseña. Abre este enlace (vence en una hora): " + link,
+		Html: `<!doctype html><html lang="es"><body style="font-family:sans-serif;color:#222;max-width:560px;margin:0 auto;padding:24px">` +
+			`<h2 style="margin:0 0 12px">Recupera tu contraseña</h2>` +
+			`<p>Solicitaste restablecer la contraseña de tu cuenta del <strong>Observador Estudiantil</strong>.</p>` +
+			`<p><a href="` + link + `" style="display:inline-block;background:#1b6c80;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none">Elegir una contraseña nueva</a></p>` +
+			`<p style="color:#666;font-size:14px">El enlace vence en una hora y solo sirve una vez. Si no fuiste tú, ignora este mensaje.</p>` +
+			`</body></html>`,
+		Text: "Solicitaste restablecer tu contraseña del Observador Estudiantil.\n\n" +
+			"Abre este enlace (vence en una hora, un solo uso):\n" + link + "\n\n" +
+			"Si no fuiste tú, ignora este mensaje.",
 	}
 	sent, err := m.client.Emails.SendWithContext(ctx, params)
 	if err != nil {

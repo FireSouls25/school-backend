@@ -27,12 +27,14 @@ func Router(deps Dependencies, i18nSvc *i18n.Service) http.Handler {
 
 // handleHealthz reports service liveness plus the build marker. Empty
 // versions read as dev so tests and local runs need no configuration.
-func handleHealthz(version string) http.HandlerFunc {
+// recoveryMail tells the console whether reset links actually leave the
+// server, so it warns instead of promising undeliverable mail.
+func handleHealthz(version string, recoveryMail bool) http.HandlerFunc {
 	if version == "" {
 		version = "dev"
 	}
 	return func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": version})
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": version, "recoveryMail": recoveryMail})
 	}
 }
 
