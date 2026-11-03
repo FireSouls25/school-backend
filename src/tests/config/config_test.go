@@ -233,6 +233,29 @@ func TestAuthSecretMissingFileFails(t *testing.T) {
 	}
 }
 
+func TestVersionDefaultsToDev(t *testing.T) {
+	clearEnv(t)
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.Version != "dev" {
+		t.Errorf("Version = %q, want dev default", cfg.Version)
+	}
+}
+
+func TestVersionFromEnv(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("APP_VERSION", "abc123")
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.Version != "abc123" {
+		t.Errorf("Version = %q, want abc123", cfg.Version)
+	}
+}
+
 func TestHalfConfiguredBootstrapFails(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("BOOTSTRAP_ADMIN_USERNAME", "directora")

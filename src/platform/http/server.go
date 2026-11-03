@@ -25,9 +25,15 @@ func Router(deps Dependencies, i18nSvc *i18n.Service) http.Handler {
 	return r
 }
 
-// handleHealthz reports service liveness.
-func handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+// handleHealthz reports service liveness plus the build marker. Empty
+// versions read as dev so tests and local runs need no configuration.
+func handleHealthz(version string) http.HandlerFunc {
+	if version == "" {
+		version = "dev"
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": version})
+	}
 }
 
 // Run starts the HTTP server and blocks until SIGINT or SIGTERM, then shuts

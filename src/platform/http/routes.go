@@ -57,7 +57,7 @@ func MiddlewareCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 //     http.err_unauthorized (401) or http.err_forbidden (403). The SPA
 //     navigates back on 403, defaulting to the GET /v1/me home.
 func routes(r *chi.Mux, deps Dependencies) {
-	r.Get("/healthz", handleHealthz)
+	r.Get("/healthz", handleHealthz(deps.Version))
 
 	r.Post("/v1/login", handleLogin(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, loginLimitPerMinute, loginWindow)))
 	r.Post("/v1/refresh", handleRefresh(deps, newLoginLimiter(deps.Throttle, deps.TrustedProxies, refreshLimitPerMinute, loginWindow)))

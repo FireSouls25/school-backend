@@ -46,6 +46,24 @@ func TestHealthz(t *testing.T) {
 	if body["status"] != "ok" {
 		t.Errorf("body = %v, want status ok", body)
 	}
+	if body["version"] != "dev" {
+		t.Errorf("version = %q, want dev default", body["version"])
+	}
+}
+
+func TestHealthzReportsBuild(t *testing.T) {
+	handler := httpapi.Router(httpapi.Dependencies{Version: "abc123"}, newI18n(t))
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["version"] != "abc123" {
+		t.Errorf("version = %q, want abc123", body["version"])
+	}
 }
 
 func TestLocaleMiddleware(t *testing.T) {

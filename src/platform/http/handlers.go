@@ -85,6 +85,9 @@ type Dependencies struct {
 	// RecoveryLogTokens logs raw reset tokens (development only, until
 	// mail/WhatsApp delivery lands). Never enable in production.
 	RecoveryLogTokens bool
+	// Version is the build marker reported by /healthz so the SPA can
+	// tell a maintenance rotation apart from a plain expiry.
+	Version string
 }
 
 // recordAudit trails one mutating action with its real outcome, so

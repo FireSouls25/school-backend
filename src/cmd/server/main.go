@@ -103,6 +103,7 @@ func main() {
 		Subjects:          application.Services.Subjects,
 		TAttendance:       application.Services.TAttendance,
 		AllowedOrigins:    cfg.AllowedOrigins,
+		Version:           cfg.Version,
 	}, i18nSvc)); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)

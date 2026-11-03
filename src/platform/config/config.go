@@ -142,6 +142,10 @@ type Config struct {
 	// AuthRecoveryTTL is the password-reset token lifetime. Zero means
 	// the default (1h).
 	AuthRecoveryTTL time.Duration
+	// Version is the build marker reported by /healthz (commit, image
+	// tag). The SPA compares it to detect maintenance rotations.
+	// Empty means development; APP_VERSION sets it in deployments.
+	Version string
 }
 
 // devPasswords are the passwords shipped in the demo data and docs. They
@@ -150,7 +154,7 @@ var devPasswords = []string{"admin123*", "docente123*", "temporal123*", "admin12
 
 // Default returns a Config with production-sane defaults for local work.
 func Default() Config {
-	return Config{Port: "8080", Env: EnvDevelopment, SeedDemo: true}
+	return Config{Port: "8080", Env: EnvDevelopment, SeedDemo: true, Version: "dev"}
 }
 
 // FromEnv builds a Config from environment variables, falling back to
@@ -249,6 +253,9 @@ func FromEnv() (Config, error) {
 		cfg.UserRetentionDays = days
 	}
 	cfg.AuthSecret = os.Getenv("AUTH_SECRET")
+	if v := strings.TrimSpace(os.Getenv("APP_VERSION")); v != "" {
+		cfg.Version = v
+	}
 	if file := strings.TrimSpace(os.Getenv("AUTH_SECRET_FILE")); file != "" {
 		secret, err := readSecretFile(file)
 		if err != nil {
