@@ -57,7 +57,7 @@ func TestCreateClassFlow(t *testing.T) {
 	// Validation carries stable codes.
 	for _, tc := range []struct{ name, body, code string }{
 		{"bad grade", `{"year":2026,"grade":12,"groupNo":1}`, "classes.err_invalid_grade"},
-		{"bad group", `{"year":2026,"grade":10,"groupNo":0}`, "classes.err_invalid_group"},
+		{"bad group", `{"year":2026,"grade":10,"groupNo":-1}`, "classes.err_invalid_group"},
 		{"unknown year", `{"year":2030,"grade":10,"groupNo":1}`, "schoolyears.err_not_found"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

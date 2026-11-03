@@ -46,6 +46,12 @@ func TestSubjectCRUD(t *testing.T) {
 	if _, err := svc.CreateSubject(ctx, subjects.Subject{Name: "matemáticas"}); !errors.Is(err, subjects.ErrDuplicateSubject) {
 		t.Errorf("duplicate name error = %v, want ErrDuplicateSubject", err)
 	}
+	// Folding ignores case, accents and padding; display keeps spelling.
+	for _, dup := range []string{"MATEMATICAS", "  Matemáticas ", "matemAticas"} {
+		if _, err := svc.CreateSubject(ctx, subjects.Subject{Name: dup}); !errors.Is(err, subjects.ErrDuplicateSubject) {
+			t.Errorf("duplicate name %q error = %v, want ErrDuplicateSubject", dup, err)
+		}
+	}
 	if _, err := svc.CreateSubject(ctx, subjects.Subject{Name: "  "}); !errors.Is(err, subjects.ErrInvalidName) {
 		t.Errorf("blank name error = %v, want ErrInvalidName", err)
 	}
@@ -261,7 +267,7 @@ func TestSubjectGradesAndColor(t *testing.T) {
 		t.Errorf("grades not normalized: %v", s.Grades)
 	}
 
-	for _, grades := range [][]int{{0}, {12}, {5, 12}, {-1, 3}} {
+	for _, grades := range [][]int{{-1}, {12}, {5, 12}, {-1, 3}} {
 		if _, err := svc.CreateSubject(ctx, subjects.Subject{Name: "X", Grades: grades}); !errors.Is(err, subjects.ErrInvalidGrades) {
 			t.Errorf("grades %v error = %v, want ErrInvalidGrades", grades, err)
 		}

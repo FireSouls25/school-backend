@@ -304,6 +304,15 @@ CREATE TABLE IF NOT EXISTS class_groups (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_class_groups_unique
     ON class_groups (school_year_id, grade, group_no);
 
+-- Grade 0 is preescolar and group 0 exists (00--0 Jardín): widen the
+-- original 1-based checks. DROP+ADD keeps existing databases working.
+ALTER TABLE class_groups DROP CONSTRAINT IF EXISTS class_groups_grade_check;
+ALTER TABLE class_groups ADD CONSTRAINT class_groups_grade_check
+    CHECK (grade >= 0 AND grade <= 11);
+ALTER TABLE class_groups DROP CONSTRAINT IF EXISTS class_groups_group_no_check;
+ALTER TABLE class_groups ADD CONSTRAINT class_groups_group_no_check
+    CHECK (group_no >= 0);
+
 CREATE TABLE IF NOT EXISTS enrollments (
     id             UUID PRIMARY KEY,
     student_id     UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,

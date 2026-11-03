@@ -6,13 +6,15 @@ package classes
 
 import "fmt"
 
-// MinGrade and MaxGrade bound Colombian school grades.
-const MinGrade = 1
+// MinGrade and MaxGrade bound Colombian school grades. Grade 0 is
+// preescolar (jardín/transición), which the real timetables include.
+const MinGrade = 0
 
 const MaxGrade = 11
 
-// MinGroupNo bounds group numbers within a grade.
-const MinGroupNo = 1
+// MinGroupNo bounds group numbers within a grade. Group 0 exists
+// (00--0 Jardín), so numbering starts at zero.
+const MinGroupNo = 0
 
 // ClassGroup is one classroom: grade+group within a school year.
 type ClassGroup struct {
@@ -22,7 +24,7 @@ type ClassGroup struct {
 	Slug string
 	// SchoolYearID references the school year. Opaque here.
 	SchoolYearID string
-	// Grade is the school grade, 1 to 11.
+	// Grade is the school grade, 0 (preescolar) to 11.
 	Grade int
 	// GroupNo is the group number within the grade (9-1 → 1).
 	GroupNo int

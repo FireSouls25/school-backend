@@ -37,7 +37,6 @@ func TestServiceCreateValidation(t *testing.T) {
 	}{
 		{"missing names", func(tc *teachers.Teacher) { tc.Names = "  " }, teachers.ErrInvalidName},
 		{"missing surnames", func(tc *teachers.Teacher) { tc.Surnames = "" }, teachers.ErrInvalidName},
-		{"missing document", func(tc *teachers.Teacher) { tc.DocumentID = "" }, teachers.ErrInvalidDocument},
 		{"bad email", func(tc *teachers.Teacher) { tc.Email = "not-an-email" }, teachers.ErrInvalidEmail},
 		{"future birthdate", func(tc *teachers.Teacher) {
 			tc.Birthdate = time.Now().Add(24 * time.Hour)
@@ -53,6 +52,59 @@ func TestServiceCreateValidation(t *testing.T) {
 				t.Errorf("Create error = %v, want %v", err, tc.want)
 			}
 		})
+	}
+}
+
+// DocumentID is optional: profiles load before HR shares cédulas.
+func TestServiceCreateWithoutDocument(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	p := validProfile()
+	p.DocumentID = ""
+	if _, err := svc.Create(ctx, p); err != nil {
+		t.Errorf("Create without document = %v, want nil", err)
+	}
+}
+
+// Duplicate detection folds case, accents and spaces; display keeps
+// the original spelling.
+func TestServiceCreateRejectsDuplicates(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	base := validProfile()
+	base.Names = "María"
+	base.Surnames = "García López"
+	if _, err := svc.Create(ctx, base); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	for _, dup := range [][2]string{
+		{"María", "García López"},
+		{"MARIA", "GARCIA LOPEZ"},
+		{"  María  ", "García  López"},
+	} {
+		p := validProfile()
+		p.Names, p.Surnames = dup[0], dup[1]
+		if _, err := svc.Create(ctx, p); !errors.Is(err, teachers.ErrDuplicateTeacher) {
+			t.Errorf("duplicate %q error = %v, want ErrDuplicateTeacher", dup, err)
+		}
+	}
+	// A different person still creates fine.
+	other := validProfile()
+	other.Names, other.Surnames = "María", "García Ruiz"
+	created, err := svc.Create(ctx, other)
+	if err != nil {
+		t.Fatalf("Create distinct: %v", err)
+	}
+	// Renaming onto an existing profile fails; keeping the name works.
+	created.Names, created.Surnames = "María", "García López"
+	if _, err := svc.Update(ctx, created); !errors.Is(err, teachers.ErrDuplicateTeacher) {
+		t.Errorf("Update onto duplicate error = %v, want ErrDuplicateTeacher", err)
+	}
+	created.Names, created.Surnames = "María", "García Ruiz"
+	if _, err := svc.Update(ctx, created); err != nil {
+		t.Errorf("Update unchanged = %v, want nil", err)
 	}
 }
 
@@ -86,6 +138,7 @@ func TestServiceCreateAssignsUUID(t *testing.T) {
 
 	// Create ignores an incoming inactive flag.
 	p.Active = false
+	p.Names, p.DocumentID = "Beto", "51999222"
 	c, err := svc.Create(ctx, p)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -197,6 +250,7 @@ func TestUpdateAndDelete(t *testing.T) {
 	}
 
 	ghost := validProfile()
+	ghost.Names, ghost.Surnames = "Gaspar", "Fantasma Ruiz"
 	ghost.ID = "00000000-0000-0000-0000-000000000001"
 	if _, err := svc.Update(ctx, ghost); !errors.Is(err, teachers.ErrNotFound) {
 		t.Errorf("Update unknown error = %v, want ErrNotFound", err)

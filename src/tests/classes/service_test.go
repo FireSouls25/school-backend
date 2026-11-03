@@ -24,9 +24,9 @@ func TestServiceCreateValidation(t *testing.T) {
 		want  error
 	}{
 		{"bad year id", classes.ClassGroup{SchoolYearID: "nope", Grade: 7, GroupNo: 1}, classes.ErrInvalidSchoolYear},
-		{"grade zero", classes.ClassGroup{SchoolYearID: yearID, Grade: 0, GroupNo: 1}, classes.ErrInvalidGrade},
+		{"grade negative", classes.ClassGroup{SchoolYearID: yearID, Grade: -1, GroupNo: 1}, classes.ErrInvalidGrade},
 		{"grade twelve", classes.ClassGroup{SchoolYearID: yearID, Grade: 12, GroupNo: 1}, classes.ErrInvalidGrade},
-		{"group zero", classes.ClassGroup{SchoolYearID: yearID, Grade: 7, GroupNo: 0}, classes.ErrInvalidGroup},
+		{"group negative", classes.ClassGroup{SchoolYearID: yearID, Grade: 7, GroupNo: -1}, classes.ErrInvalidGroup},
 	}
 
 	for _, tc := range cases {
@@ -42,6 +42,21 @@ func TestLabel(t *testing.T) {
 	g := classes.ClassGroup{Grade: 7, GroupNo: 1}
 	if got, want := g.Label(), "7-1"; got != want {
 		t.Errorf("Label = %q, want %q", got, want)
+	}
+}
+
+// Preschool exists in the real timetables (00--0 Jardín): grade and
+// group zero must create fine.
+func TestPreschoolGroup(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	got, err := svc.Create(ctx, classes.ClassGroup{SchoolYearID: yearID, Grade: 0, GroupNo: 0})
+	if err != nil {
+		t.Fatalf("Create 0-0: %v", err)
+	}
+	if got := got.Label(); got != "0-0" {
+		t.Errorf("Label = %q, want 0-0", got)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"grade/src/core/names"
 	"grade/src/core/slug"
 )
 
@@ -53,7 +54,27 @@ func (s *Service) Create(ctx context.Context, t Teacher) (Teacher, error) {
 	if err := validate(t); err != nil {
 		return Teacher{}, err
 	}
+	if err := s.ensureUniqueTeacher(ctx, t); err != nil {
+		return Teacher{}, err
+	}
 	return s.store.Create(ctx, t)
+}
+
+// ensureUniqueTeacher rejects a names+surnames pair already used by
+// another teacher, folding case, accents and spaces. Display keeps the
+// original spelling; only the comparison folds.
+func (s *Service) ensureUniqueTeacher(ctx context.Context, t Teacher) error {
+	all, err := s.store.List(ctx)
+	if err != nil {
+		return err
+	}
+	name := names.Fold(t.Names + " " + t.Surnames)
+	for _, other := range all {
+		if other.ID != t.ID && names.Fold(other.Names+" "+other.Surnames) == name {
+			return ErrDuplicateTeacher
+		}
+	}
+	return nil
 }
 
 // ByID returns the teacher with the given id.
@@ -91,6 +112,9 @@ func (s *Service) Update(ctx context.Context, t Teacher) (Teacher, error) {
 	}
 	t = normalize(t)
 	if err := validate(t); err != nil {
+		return Teacher{}, err
+	}
+	if err := s.ensureUniqueTeacher(ctx, t); err != nil {
 		return Teacher{}, err
 	}
 	return s.store.Update(ctx, t)
@@ -150,9 +174,9 @@ func validate(t Teacher) error {
 	if t.Names == "" || t.Surnames == "" {
 		return ErrInvalidName
 	}
-	if t.DocumentID == "" {
-		return ErrInvalidDocument
-	}
+	// DocumentID stays optional: the schedule import creates profiles
+	// before HR shares the cédulas, and fake numbers in production are
+	// worse than none. The column accepts '' and has no uniqueness.
 	if !t.Birthdate.IsZero() && t.Birthdate.After(time.Now()) {
 		return ErrInvalidBirth
 	}

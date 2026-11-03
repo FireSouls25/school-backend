@@ -9,9 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// minGrade and maxGrade bound the school years a subject may be taught in.
+// minGrade and maxGrade bound the school years a subject may be taught
+// in. Grade 0 is preescolar, present in the real timetables.
 const (
-	minGrade = 1
+	minGrade = 0
 	maxGrade = 11
 )
 

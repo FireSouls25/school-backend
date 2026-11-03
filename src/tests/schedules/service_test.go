@@ -88,7 +88,7 @@ func TestServiceCreateValidation(t *testing.T) {
 		{"inverted range", slot(groupA, teacherA, math, time.Monday, "08:00", "07:00"), schedules.ErrInvalidTime},
 		{"empty range", slot(groupA, teacherA, math, time.Monday, "08:00", "08:00"), schedules.ErrInvalidTime},
 		{"before school", slot(groupA, teacherA, math, time.Monday, "06:00", "07:00"), schedules.ErrOutsideSchoolHours},
-		{"after school", slot(groupA, teacherA, math, time.Monday, "13:00", "15:00"), schedules.ErrOutsideSchoolHours},
+		{"after school", slot(groupA, teacherA, math, time.Monday, "16:00", "18:00"), schedules.ErrOutsideSchoolHours},
 		{"too short", slot(groupA, teacherA, math, time.Monday, "08:00", "08:30"), schedules.ErrOutsideSchoolHours},
 		{"not teaching", slot(groupA, teacherA, physics, time.Monday, "07:00", "08:00"), schedules.ErrNotTeachingSubject},
 	}

@@ -12,12 +12,13 @@ import (
 const maxClock = Clock(24*60 - 1)
 
 // School hours bound every schedule entry: classes run from 07:00 and the
-// last slot ends at 14:00, with a one-hour minimum duration. Per-school
+// last slot ends at 17:00 (media ends 16:35), with a 45-minute minimum
+// duration (jardín slots run 50-55 minutes). Per-school
 // configuration may replace these constants later.
 const (
 	schoolDayStart = Clock(7 * 60)
-	schoolDayEnd   = Clock(14 * 60)
-	minDuration    = Clock(60)
+	schoolDayEnd   = Clock(17 * 60)
+	minDuration    = Clock(45)
 )
 
 // Service applies schedule policy and persists entries through a Store.

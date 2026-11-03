@@ -48,7 +48,7 @@ func TestScheduleFlow(t *testing.T) {
 	for _, tc := range []struct{ name, body string }{
 		{"bad clock", `{"classGroupID":"` + realGroupID + `","teacherID":"` + teacherSubject + `","subjectID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","weekday":1,"start":"7am","end":"08:00"}`},
 		{"too early", `{"classGroupID":"` + realGroupID + `","teacherID":"` + teacherSubject + `","subjectID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","weekday":1,"start":"06:00","end":"07:00"}`},
-		{"too late", `{"classGroupID":"` + realGroupID + `","teacherID":"` + teacherSubject + `","subjectID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","weekday":1,"start":"13:00","end":"15:00"}`},
+		{"too late", `{"classGroupID":"` + realGroupID + `","teacherID":"` + teacherSubject + `","subjectID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","weekday":1,"start":"16:00","end":"18:00"}`},
 		{"too short", `{"classGroupID":"` + realGroupID + `","teacherID":"` + teacherSubject + `","subjectID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","weekday":1,"start":"08:00","end":"08:30"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
