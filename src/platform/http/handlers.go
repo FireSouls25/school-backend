@@ -188,6 +188,8 @@ func homeFor(rs []roles.Role) string {
 		set[r] = true
 	}
 	switch {
+	case set[roles.RoleOwner]:
+		return "/admin"
 	case set[roles.RoleAdmin]:
 		return "/admin"
 	case set[roles.RoleTeacher]:

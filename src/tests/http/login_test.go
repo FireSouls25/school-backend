@@ -38,6 +38,11 @@ func loginStack(t *testing.T) http.Handler {
 		t.Fatalf("seed admin: %v", err)
 	}
 	must(roleSvc.Assign(ctx, adminUser.ID, roles.RoleAdmin))
+	ownerUser, err := usersSvc.Create(ctx, "owner", "owner@colegio.edu", "owner123*")
+	if err != nil {
+		t.Fatalf("seed owner: %v", err)
+	}
+	must(roleSvc.Assign(ctx, ownerUser.ID, roles.RoleOwner))
 	return httpapi.Router(httpapi.Dependencies{
 		Auth:             roleSvc,
 		Roles:            roleSvc,
@@ -96,6 +101,16 @@ func TestLoginFlow(t *testing.T) {
 	}
 	if body["home"] != "/admin" {
 		t.Errorf("home = %v, want /admin", body["home"])
+	}
+
+	// Owner lands in the admin console too (it holds every permission);
+	// without a mapped home the frontend pushed "/" and looked stuck.
+	code, body = loginAs(t, h, "owner", "owner123*")
+	if code != http.StatusOK {
+		t.Fatalf("owner status = %d, want 200: %v", code, body)
+	}
+	if body["home"] != "/admin" {
+		t.Errorf("owner home = %v, want /admin", body["home"])
 	}
 
 	req, _ := http.NewRequest(http.MethodGet, "/v1/me", nil)
