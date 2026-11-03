@@ -26,6 +26,9 @@ var (
 	ErrInvalidID = newError("teachers.err_invalid_id", "teachers: invalid id")
 	// ErrInvalidName is returned when names or surnames are missing.
 	ErrInvalidName = newError("teachers.err_invalid_name", "teachers: invalid name")
+	// ErrDuplicateTeacher is returned when another teacher already uses
+	// the same names+surnames, folding case, accents and spaces.
+	ErrDuplicateTeacher = newError("teachers.err_duplicate", "teachers: duplicate teacher")
 	// ErrInvalidDocument is returned when the identity document number is missing.
 	ErrInvalidDocument = newError("teachers.err_invalid_document", "teachers: invalid document")
 	// ErrInvalidBirth is returned when the birthdate is in the future.

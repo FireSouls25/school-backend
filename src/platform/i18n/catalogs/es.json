@@ -101,6 +101,7 @@
   "teachers.err_not_found": "Docente no encontrado",
   "teachers.err_invalid_id": "Identificador de docente inválido",
   "teachers.err_invalid_name": "Nombre del docente inválido",
+  "teachers.err_duplicate": "Ya existe un docente con ese nombre",
   "teachers.err_invalid_document": "Documento de identidad inválido",
   "teachers.err_invalid_birth": "Fecha de nacimiento inválida",
   "teachers.err_invalid_email": "Correo electrónico inválido",

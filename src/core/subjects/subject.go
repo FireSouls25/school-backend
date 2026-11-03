@@ -9,8 +9,9 @@
 package subjects
 
 import (
-	"strings"
 	"time"
+
+	"grade/src/core/names"
 )
 
 // Subject is one teachable matter (e.g. Matemáticas, Ciencias Sociales).
@@ -57,6 +58,7 @@ func (a Assignment) IsOpen() bool {
 }
 
 // normalizeName canonicalizes a subject name for comparison.
+// Display keeps the original spelling.
 func normalizeName(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
+	return names.Fold(s)
 }
