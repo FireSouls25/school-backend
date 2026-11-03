@@ -59,6 +59,10 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:1420}
+      # WhatsApp Cloud API (Meta). Empty = queue-only, no sending.
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
+      WHATSAPP_API_BASE: ${WHATSAPP_API_BASE:-}
     ports:
       - "${API_PORT:-8080}:8080"
 
