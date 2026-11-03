@@ -21,6 +21,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/observations"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
@@ -45,17 +46,18 @@ const maxBodyBytes = 1 << 20
 // Dependencies wires handlers to core services. Only the composition root
 // builds it.
 type Dependencies struct {
-	Auth       roles.Authorizer
-	Roles      roles.RoleGetter
-	RolesSvc   *roles.Service
-	Students   *students.Service
-	Teachers   *teachers.Service
-	Users      *users.Service
-	Warnings   *warnings.Service
-	Sessions   *sessions.Service
-	Statistics *statistics.Service
-	Dashboard  *statistics.DashboardService
-	Audit      *audit.Service
+	Auth         roles.Authorizer
+	Roles        roles.RoleGetter
+	RolesSvc     *roles.Service
+	Students     *students.Service
+	Teachers     *teachers.Service
+	Users        *users.Service
+	Warnings     *warnings.Service
+	Observations *observations.Service
+	Sessions     *sessions.Service
+	Statistics   *statistics.Service
+	Dashboard    *statistics.DashboardService
+	Audit        *audit.Service
 	// Tokens mints and verifies login tokens. Nil means no bearer
 	// support (tests without auth setup); the dev header still applies.
 	Tokens *auth.Service
@@ -120,7 +122,7 @@ func permissionsOf(rs []roles.Role) []roles.Permission {
 		for _, p := range r.Permissions() {
 			if !seen[p] {
 				seen[p] = true
-			out = append(out, p)
+				out = append(out, p)
 			}
 		}
 	}
@@ -283,7 +285,7 @@ func handleToday(deps Dependencies) http.HandlerFunc {
 // emailChangeRequest is the body for PUT /v1/me/email: the new address
 // plus the current password as proof of presence.
 type emailChangeRequest struct {
-	Email         string `json:"email"`
+	Email           string `json:"email"`
 	CurrentPassword string `json:"currentPassword"`
 }
 
@@ -2669,6 +2671,128 @@ type recentWarning struct {
 	StudentSlug string `json:"StudentSlug"`
 	ClassLabel  string `json:"ClassLabel"`
 	AuthorName  string `json:"AuthorName"`
+}
+
+// observationRequest is the teacher's input for one convivencia
+// observation: the situation (the server decides the kind from the
+// catalog), an optional note and an optional ISO day (default today).
+type observationRequest struct {
+	StudentID    string `json:"studentID"`
+	ClassGroupID string `json:"classGroupID,omitempty"`
+	SituationID  string `json:"situationID"`
+	Note         string `json:"note,omitempty"`
+	Date         string `json:"date,omitempty"`
+}
+
+// observationRow is an observation with the frozen display snapshots
+// the frontend list renders (student, class, kind badge, note side).
+type observationRow struct {
+	ID           string `json:"ID"`
+	StudentID    string `json:"StudentID"`
+	StudentName  string `json:"StudentName"`
+	TeacherID    string `json:"TeacherID"`
+	ClassGroupID string `json:"ClassGroupID"`
+	ClassLabel   string `json:"ClassLabel"`
+	Date         string `json:"Date"`
+	SituationID  string `json:"SituationID"`
+	Kind         int    `json:"Kind"`
+	Note         string `json:"Note"`
+}
+
+func toObservationRow(o observations.Observation) observationRow {
+	return observationRow{
+		ID: o.ID, StudentID: o.StudentID, StudentName: o.StudentName,
+		TeacherID: o.TeacherID, ClassGroupID: o.ClassGroupID, ClassLabel: o.ClassLabel,
+		Date: o.Date.Format("2006-01-02"), SituationID: o.SituationID,
+		Kind: int(o.Kind), Note: o.Note,
+	}
+}
+
+// handleObservationCatalog returns the fixed 65 situations (stable ids
+// plus the server-decided kind). Display texts live in the frontend.
+func handleObservationCatalog(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		out := make([]observations.Situation, 0, 65)
+		out = append(out, observations.Catalog()...)
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// handleRecordObservation records one convivencia observation for the
+// caller. The kind always comes from the catalog, never the body.
+func handleRecordObservation(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body observationRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		st, err := deps.Students.ByID(r.Context(), strings.TrimSpace(body.StudentID))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		classLabel := ""
+		if id := strings.TrimSpace(body.ClassGroupID); id != "" {
+			if teacherGroupScope(r, w, deps, id) {
+				return
+			}
+			if rejectClosedYearForGroup(r, w, deps, id) {
+				return
+			}
+			g, err := deps.Classes.ByID(r.Context(), id)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			classLabel = g.Label()
+		}
+		var day time.Time
+		if raw := strings.TrimSpace(body.Date); raw != "" {
+			d, err := time.Parse("2006-01-02", raw)
+			if err != nil {
+				WriteError(w, r, observations.ErrInvalidDate)
+				return
+			}
+			day = d
+		}
+		subject, _ := SubjectFrom(r.Context())
+		o, err := deps.Observations.Record(r.Context(), observations.Record{
+			StudentID:    st.ID,
+			StudentName:  strings.TrimSpace(st.Names + " " + st.Surnames),
+			TeacherID:    subject,
+			ClassGroupID: strings.TrimSpace(body.ClassGroupID),
+			ClassLabel:   classLabel,
+			SituationID:  body.SituationID,
+			Note:         body.Note,
+			Date:         day,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		recordAudit(deps, r, audit.ActionCreate, audit.ResourceObservation, o.ID, o.StudentID, http.StatusCreated)
+		writeJSON(w, http.StatusCreated, toObservationRow(o))
+	}
+}
+
+// handleMyObservations returns the caller's observations, newest first.
+func handleMyObservations(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		list, err := deps.Observations.Mine(r.Context(), subject)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		out := make([]observationRow, 0, len(list))
+		for _, o := range list {
+			out = append(out, toObservationRow(o))
+		}
+		if out == nil {
+			out = []observationRow{}
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
 }
 
 // handleWarningsRecent returns the latest llamados, newest first.

@@ -11,10 +11,11 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"grade/src/core/academics"
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
-	"grade/src/core/academics"
 	"grade/src/core/incidents"
+	"grade/src/core/observations"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
@@ -244,6 +245,7 @@ func testStack(t *testing.T) http.Handler {
 	studentsSvc := students.NewService(students.NewMemoryStore())
 	teachersSvc := teachers.NewService(teachers.NewMemoryStore())
 	warningsSvc := warnings.NewService(warnings.NewMemoryStore())
+	observationsSvc := observations.NewService(observations.NewMemoryStore())
 	sessionsSvc := sessions.NewService(sessions.NewMemoryStore())
 	yearsSvc := schoolyears.NewService(schoolyears.NewMemoryStore())
 	classesSvc := classes.NewService(classes.NewMemoryStore())
@@ -349,6 +351,7 @@ func testStack(t *testing.T) http.Handler {
 		Teachers:         teachersSvc,
 		Users:            users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost),
 		Warnings:         warningsSvc,
+		Observations:     observationsSvc,
 		Sessions:         sessionsSvc,
 		Statistics:       statsSvc,
 		Dashboard:        dashSvc,

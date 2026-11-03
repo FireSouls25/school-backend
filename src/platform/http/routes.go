@@ -149,6 +149,13 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/sessions/{id}", handleSessionDetail(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Post("/warnings/batch", handleIssueWarningBatch(deps))
+		// Convivencia observations: fixed catalog, server-decided kind.
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Get("/observations/catalog", handleObservationCatalog(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Post("/observations", handleRecordObservation(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Get("/observations", handleMyObservations(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Put("/warnings/{id}", handleCorrectWarning(deps))
 		// Academic alerts: teachers raise, admins and secretaries read,

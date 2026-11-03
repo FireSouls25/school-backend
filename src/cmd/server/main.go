@@ -84,6 +84,7 @@ func main() {
 		Teachers:          application.Services.Teachers,
 		Users:             application.Services.Users,
 		Warnings:          application.Services.Warnings,
+		Observations:      application.Services.Observations,
 		Sessions:          application.Services.Sessions,
 		Statistics:        application.Services.Statistics,
 		Dashboard:         application.Services.Dashboard,

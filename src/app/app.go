@@ -22,6 +22,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/observations"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
@@ -42,21 +43,22 @@ import (
 // Stores holds the persistence ports, already bound to a real adapter:
 // PostgreSQL when DATABASE_URL is set, in-memory otherwise (development).
 type Stores struct {
-	Students    students.Store
-	Attendance  attendance.Store
-	Incidents   incidents.Store
-	Academics   academics.Store
-	Warnings    warnings.Store
-	Audit       audit.Store
-	Teachers    teachers.Store
-	Subjects    subjects.Store
-	Years       schoolyears.Store
-	Classes     classes.Store
-	Enrollments enrollments.Store
-	Schedules   schedules.Store
-	Sessions    sessions.Store
-	TAttendance tattendance.Store
-	Users       users.Store
+	Students     students.Store
+	Attendance   attendance.Store
+	Incidents    incidents.Store
+	Academics    academics.Store
+	Warnings     warnings.Store
+	Observations observations.Store
+	Audit        audit.Store
+	Teachers     teachers.Store
+	Subjects     subjects.Store
+	Years        schoolyears.Store
+	Classes      classes.Store
+	Enrollments  enrollments.Store
+	Schedules    schedules.Store
+	Sessions     sessions.Store
+	TAttendance  tattendance.Store
+	Users        users.Store
 	// Roles is still in-memory when DATABASE_URL is empty; the Postgres
 	// adapter below takes over otherwise, so grants survive restarts.
 	Roles roles.Store
@@ -70,27 +72,28 @@ type Stores struct {
 
 // Services holds the application services built over those stores.
 type Services struct {
-	Students    *students.Service
-	Attendance  *attendance.Service
-	Incidents   *incidents.Service
-	Academics   *academics.Service
-	Warnings    *warnings.Service
-	Audit       *audit.Service
-	Teachers    *teachers.Service
-	Subjects    *subjects.Service
-	Years       *schoolyears.Service
-	Classes     *classes.Service
-	Enrollments *enrollments.Service
-	Schedules   *schedules.Service
-	Sessions    *sessions.Service
-	TAttendance *tattendance.Service
-	Statistics  *statistics.Service
-	Dashboard   *statistics.DashboardService
-	Users       *users.Service
-	Roles       *roles.Service
-	Auth        *auth.Service
-	Throttle    *throttle.Service
-	Recovery    *users.RecoveryService
+	Students     *students.Service
+	Attendance   *attendance.Service
+	Incidents    *incidents.Service
+	Academics    *academics.Service
+	Warnings     *warnings.Service
+	Observations *observations.Service
+	Audit        *audit.Service
+	Teachers     *teachers.Service
+	Subjects     *subjects.Service
+	Years        *schoolyears.Service
+	Classes      *classes.Service
+	Enrollments  *enrollments.Service
+	Schedules    *schedules.Service
+	Sessions     *sessions.Service
+	TAttendance  *tattendance.Service
+	Statistics   *statistics.Service
+	Dashboard    *statistics.DashboardService
+	Users        *users.Service
+	Roles        *roles.Service
+	Auth         *auth.Service
+	Throttle     *throttle.Service
+	Recovery     *users.RecoveryService
 }
 
 // App is the wired application.
@@ -115,6 +118,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Incidents:     incidents.NewMemoryStore(),
 		Academics:     academics.NewMemoryStore(),
 		Warnings:      warnings.NewMemoryStore(),
+		Observations:  observations.NewMemoryStore(),
 		Audit:         audit.NewMemoryStore(),
 		Teachers:      teachers.NewMemoryStore(),
 		Subjects:      subjects.NewMemoryStore(),
@@ -143,6 +147,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Incidents = pg.NewIncidentsStore(db)
 		s.Academics = pg.NewAcademicsStore(db)
 		s.Warnings = pg.NewWarningsStore(db)
+		s.Observations = pg.NewObservationsStore(db)
 		s.Audit = pg.NewAuditStore(db)
 		s.Teachers = pg.NewTeachersStore(db)
 		s.Subjects = pg.NewSubjectsStore(db)
@@ -174,6 +179,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	sessionsSvc := sessions.NewService(s.Sessions)
 	tattendanceSvc := tattendance.NewService(s.TAttendance)
 	warningsSvc := warnings.NewService(s.Warnings)
+	observationsSvc := observations.NewService(s.Observations)
 	incidentsSvc := incidents.NewService(s.Incidents)
 	academicsSvc := academics.NewService(s.Academics)
 	teachersSvc := teachers.NewService(s.Teachers)
@@ -203,20 +209,21 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Stores: s,
 		db:     db,
 		Services: Services{
-			Students:    students.NewService(s.Students),
-			Attendance:  attendance.NewService(s.Attendance),
-			Incidents:   incidentsSvc,
-			Academics:   academicsSvc,
-			Warnings:    warningsSvc,
-			Audit:       auditSvc,
-			Teachers:    teachersSvc,
-			Subjects:    subjectsSvc,
-			Years:       yearsSvc,
-			Classes:     classesSvc,
-			Enrollments: enrollmentsSvc,
-			Schedules:   schedulesSvc,
-			Sessions:    sessionsSvc,
-			TAttendance: tattendanceSvc,
+			Students:     students.NewService(s.Students),
+			Attendance:   attendance.NewService(s.Attendance),
+			Incidents:    incidentsSvc,
+			Academics:    academicsSvc,
+			Warnings:     warningsSvc,
+			Observations: observationsSvc,
+			Audit:        auditSvc,
+			Teachers:     teachersSvc,
+			Subjects:     subjectsSvc,
+			Years:        yearsSvc,
+			Classes:      classesSvc,
+			Enrollments:  enrollmentsSvc,
+			Schedules:    schedulesSvc,
+			Sessions:     sessionsSvc,
+			TAttendance:  tattendanceSvc,
 			Statistics: statistics.NewService(
 				sessAdapter,
 				statisticsWarnings{warningsSvc},

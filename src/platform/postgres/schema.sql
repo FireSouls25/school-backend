@@ -134,6 +134,24 @@ CREATE INDEX IF NOT EXISTS idx_academic_alerts_student ON academic_alerts (stude
 
 CREATE INDEX IF NOT EXISTS idx_incident_faults_student_id ON incident_faults (student_id);
 
+-- Convivencia observations: the teacher picks the situation, the
+-- server owns the kind. Names are frozen snapshots.
+CREATE TABLE IF NOT EXISTS observations (
+    id                UUID PRIMARY KEY,
+    student_id        UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    snap_student_name TEXT        NOT NULL DEFAULT '',
+    teacher_id        TEXT        NOT NULL,
+    class_group_id    TEXT        NOT NULL DEFAULT '',
+    snap_class_label  TEXT        NOT NULL DEFAULT '',
+    situation_id      TEXT        NOT NULL,
+    kind              SMALLINT    NOT NULL CHECK (kind IN (1, 2, 3)),
+    note              TEXT        NOT NULL DEFAULT '',
+    happened_on       DATE        NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_observations_teacher_id ON observations (teacher_id);
+
 CREATE TABLE IF NOT EXISTS warnings (
     id                   UUID PRIMARY KEY,
     student_id           UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,

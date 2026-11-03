@@ -182,6 +182,11 @@ var statusByCode = map[string]int{
 	"schedules.err_not_teaching_subject": http.StatusBadRequest,
 	"schedules.err_invalid_variant":      http.StatusBadRequest,
 	"schedules.err_invalid_joint":        http.StatusBadRequest,
+	"observations.err_not_found":         http.StatusNotFound,
+	"observations.err_invalid_id":        http.StatusBadRequest,
+	"observations.err_invalid_student":   http.StatusBadRequest,
+	"observations.err_invalid_situation": http.StatusBadRequest,
+	"observations.err_invalid_date":      http.StatusBadRequest,
 
 	"sessions.err_not_found":           http.StatusNotFound,
 	"sessions.err_invalid_id":          http.StatusBadRequest,
@@ -199,7 +204,7 @@ var statusByCode = map[string]int{
 	"sessions.err_invalid_student":     http.StatusBadRequest,
 	"sessions.err_not_enrolled":        http.StatusBadRequest,
 	"sessions.err_no_change":           http.StatusBadRequest,
-	"sessions.err_empty_defense":        http.StatusBadRequest,
+	"sessions.err_empty_defense":       http.StatusBadRequest,
 	"sessions.err_defense_needs_fault": http.StatusBadRequest,
 	"sessions.err_invalid_actor":       http.StatusBadRequest,
 
