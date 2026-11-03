@@ -96,6 +96,14 @@ func TestAbsenceEnqueuesGuardianNotice(t *testing.T) {
 	if last.Template != "atraso_hoy" {
 		t.Errorf("late template = %q, want atraso_hoy", last.Template)
 	}
+
+	// Evasions notify too, with their own template.
+	markBody(t, h, sessID, stID, "evasion")
+	pending = lastNotifyStore.Pending()
+	last = pending[len(pending)-1]
+	if last.Template != "evasion_hoy" {
+		t.Errorf("evasion template = %q, want evasion_hoy", last.Template)
+	}
 }
 
 func TestLateRecurringNotifiesOnceAMonth(t *testing.T) {

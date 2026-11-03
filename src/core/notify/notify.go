@@ -16,6 +16,8 @@ const (
 	KindLate Kind = "late"
 	// KindLateRecurring fires once a month when lates pile up.
 	KindLateRecurring Kind = "late-recurring"
+	// KindEvasion is a same-day skip reported like an absence.
+	KindEvasion Kind = "evasion"
 	// KindWarning carries a llamado de atención (moderate or severe).
 	KindWarning Kind = "warning"
 )
@@ -63,6 +65,8 @@ const (
 	TemplateAbsence = "falta_hoy"
 	// TemplateLate: {{1}} student, {{2}} date.
 	TemplateLate = "atraso_hoy"
+	// TemplateEvasion: {{1}} student, {{2}} date.
+	TemplateEvasion = "evasion_hoy"
 	// TemplateLateRecurring: {{1}} student, {{2}} count, {{3}} month.
 	TemplateLateRecurring = "atrasos_recurrentes"
 	// TemplateWarning: {{1}} student, {{2}} kind label, {{3}} date.

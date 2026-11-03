@@ -2176,7 +2176,7 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		if sess.ID != "" && (mark == sessions.MarkAbsence || mark == sessions.MarkLate) {
+		if sess.ID != "" && (mark == sessions.MarkAbsence || mark == sessions.MarkLate || mark == sessions.MarkEvasion) {
 			notifyAttendance(r.Context(), deps, sess, strings.TrimSpace(body.StudentID), mark)
 		}
 		writeJSON(w, http.StatusCreated, rev)
@@ -3614,24 +3614,29 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// notifyAttendance queues the guardian notice for a fresh absence or
-// late. Corrections back to present and justified absences stay silent:
-// the acudiente either saw the kid arrive or filed the permission. Best
-// effort: queue failures never fail the roll call.
+// notifyAttendance queues the guardian notice for a fresh absence,
+// late or evasion. Corrections back to present and justified absences
+// stay silent: the acudiente either saw the kid arrive or filed the
+// permission. Best effort: queue failures never fail the roll call.
 func notifyAttendance(ctx context.Context, deps Dependencies, sess sessions.Session, studentID string, mark sessions.Mark) {
 	if deps.Notify == nil || deps.Students == nil {
 		return
 	}
-	if mark != sessions.MarkAbsence && mark != sessions.MarkLate {
+	var template string
+	var kind notify.Kind
+	switch mark {
+	case sessions.MarkAbsence:
+		template, kind = notify.TemplateAbsence, notify.KindAbsence
+	case sessions.MarkLate:
+		template, kind = notify.TemplateLate, notify.KindLate
+	case sessions.MarkEvasion:
+		template, kind = notify.TemplateEvasion, notify.KindEvasion
+	default:
 		return
 	}
 	st, err := deps.Students.ByID(ctx, strings.TrimSpace(studentID))
 	if err != nil || strings.TrimSpace(st.Caregiver.Phone) == "" {
 		return
-	}
-	template, kind := notify.TemplateAbsence, notify.KindAbsence
-	if mark == sessions.MarkLate {
-		template, kind = notify.TemplateLate, notify.KindLate
 	}
 	day := sess.Date.UTC().Format("2006-01-02")
 	name := strings.TrimSpace(st.Names + " " + st.Surnames)
