@@ -41,6 +41,10 @@ type User struct {
 	// TokenVersion invalidates issued bearers. Bumps on password changes
 	// and active flips, so a stolen token dies on next rotation.
 	TokenVersion int64
+	// PasswordChanged reports whether the account owner already replaced
+	// the initial password (cédula by default here). False means the
+	// console must keep nudging the change on every fresh login.
+	PasswordChanged bool
 	// CreatedAt is the account creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the last modification time.

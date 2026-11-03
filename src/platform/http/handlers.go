@@ -144,6 +144,9 @@ type meResponse struct {
 	Active    bool   `json:"active"`
 	CreatedAt string `json:"createdAt"`
 	TeacherID string `json:"teacherID"`
+	// PasswordChanged reports whether the owner already replaced the
+	// initial password. The console nudges every fresh login until set.
+	PasswordChanged bool `json:"passwordChanged"`
 	// Teacher is the linked teaching profile, when the account has one.
 	Teacher *meTeacher `json:"teacher,omitempty"`
 }
@@ -230,6 +233,7 @@ func handleMe(deps Dependencies) http.HandlerFunc {
 				resp.Active = u.Active
 				resp.CreatedAt = u.CreatedAt.UTC().Format(time.RFC3339)
 				resp.TeacherID = u.TeacherID
+				resp.PasswordChanged = u.PasswordChanged
 			case errors.Is(err, users.ErrNotFound):
 				// Dev identity: no account row, nothing to enrich.
 			default:

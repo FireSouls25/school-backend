@@ -25,7 +25,7 @@ func NewUsersStore(db *DB) *UsersStore { return &UsersStore{db: db} }
 var _ users.Store = (*UsersStore)(nil)
 
 // userColumns is the full column list used by every user SELECT.
-const userColumns = `id, username, email, password_hash, active, teacher_id, token_version, created_at, updated_at, deleted_at`
+const userColumns = `id, username, email, password_hash, active, teacher_id, token_version, password_changed, created_at, updated_at, deleted_at`
 
 // scanUser maps the current row (in userColumns order) onto a User.
 func scanUser(scan func(dest ...any) error) (users.User, error) {
@@ -33,7 +33,7 @@ func scanUser(scan func(dest ...any) error) (users.User, error) {
 	var teacherID *string
 	var created, updated time.Time
 	var deletedAt *time.Time
-	err := scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Active, &teacherID, &u.TokenVersion, &created, &updated, &deletedAt)
+	err := scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Active, &teacherID, &u.TokenVersion, &u.PasswordChanged, &created, &updated, &deletedAt)
 	if err != nil {
 		return users.User{}, err
 	}
@@ -57,7 +57,7 @@ func teacherIDArg(u users.User) any {
 
 // userArgs flattens u into the INSERT argument order.
 func userArgs(u users.User) []any {
-	return []any{u.ID, u.Username, u.Email, u.PasswordHash, u.Active, teacherIDArg(u), u.TokenVersion, u.CreatedAt, u.UpdatedAt, u.DeletedAt}
+	return []any{u.ID, u.Username, u.Email, u.PasswordHash, u.Active, teacherIDArg(u), u.TokenVersion, u.PasswordChanged, u.CreatedAt, u.UpdatedAt, u.DeletedAt}
 }
 
 // translateUserWrite maps unique violations on the username/email indexes
@@ -75,8 +75,8 @@ func translateUserWrite(err error, what string) error {
 // Create implements users.Store.
 func (s *UsersStore) Create(ctx context.Context, u users.User) (users.User, error) {
 	row := s.db.pool.QueryRow(ctx, `
-		INSERT INTO users (id, username, email, password_hash, active, teacher_id, token_version, created_at, updated_at, deleted_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO users (id, username, email, password_hash, active, teacher_id, token_version, password_changed, created_at, updated_at, deleted_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING `+userColumns,
 		userArgs(u)...)
 	out, err := scanUser(row.Scan)
@@ -153,6 +153,19 @@ func (s *UsersStore) SetPasswordHash(ctx context.Context, id, hash string) error
 		`UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, id, hash)
 	if err != nil {
 		return fmt.Errorf("postgres: set user password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return users.ErrNotFound
+	}
+	return nil
+}
+
+// MarkPasswordChanged implements users.Store.
+func (s *UsersStore) MarkPasswordChanged(ctx context.Context, id string) error {
+	tag, err := s.db.pool.Exec(ctx,
+		`UPDATE users SET password_changed = TRUE, updated_at = now() WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("postgres: mark user password changed: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return users.ErrNotFound

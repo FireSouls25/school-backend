@@ -140,6 +140,20 @@ func (s *MemoryStore) BumpTokenVersion(_ context.Context, id string) (int64, err
 	return u.TokenVersion, nil
 }
 
+// MarkPasswordChanged implements Store.
+func (s *MemoryStore) MarkPasswordChanged(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[id]
+	if !ok {
+		return ErrNotFound
+	}
+	u.PasswordChanged = true
+	u.UpdatedAt = time.Now()
+	s.users[id] = u
+	return nil
+}
+
 // SoftDelete implements Store: it stamps DeletedAt and disables the
 // login without removing the row. Unknown users are a no-op;
 // already deleted ones report ErrAlreadyDeleted.

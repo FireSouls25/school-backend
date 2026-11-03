@@ -86,6 +86,9 @@ func TestMeCarriesAccountAndTeacherProfile(t *testing.T) {
 		Active    bool     `json:"active"`
 		CreatedAt string   `json:"createdAt"`
 		TeacherID string   `json:"teacherID"`
+		// Fresh accounts keep the initial password: the console nudges
+		// every fresh login until the first change.
+		PasswordChanged bool `json:"passwordChanged"`
 		Teacher   struct {
 			ID                string `json:"id"`
 			Names             string `json:"names"`
@@ -108,6 +111,9 @@ func TestMeCarriesAccountAndTeacherProfile(t *testing.T) {
 	}
 	if body.Username != "carlos.mendoza" || body.Email != "carlos@colegio.edu" || !body.Active {
 		t.Errorf("account = username %q email %q active %v", body.Username, body.Email, body.Active)
+	}
+	if body.PasswordChanged {
+		t.Error("seeded account PasswordChanged = true, want false until first change")
 	}
 	if body.CreatedAt == "" {
 		t.Error("createdAt is empty")

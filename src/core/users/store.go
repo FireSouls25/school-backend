@@ -46,6 +46,9 @@ type Store interface {
 	// when missing. Callers bump after password changes and active flips
 	// so previously minted bearers stop validating.
 	BumpTokenVersion(ctx context.Context, id string) (int64, error)
+	// MarkPasswordChanged records that the owner replaced the initial
+	// password. Console nudges rely on it; unknown ids fail.
+	MarkPasswordChanged(ctx context.Context, id string) error
 	// SoftDelete stamps DeletedAt on the user with the given id and
 	// disables the login, instead of removing the row, so history keeps
 	// resolving and Restore can bring the account back inside the

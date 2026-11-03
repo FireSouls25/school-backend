@@ -227,6 +227,9 @@ func (s *Service) SetPassword(ctx context.Context, id, newPassword string) error
 	if _, err := s.store.BumpTokenVersion(ctx, strings.TrimSpace(id)); err != nil {
 		return err
 	}
+	if err := s.store.MarkPasswordChanged(ctx, strings.TrimSpace(id)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -284,6 +287,9 @@ func (s *Service) ChangePassword(ctx context.Context, id, currentPassword, newPa
 		return err
 	}
 	if _, err := s.store.BumpTokenVersion(ctx, strings.TrimSpace(id)); err != nil {
+		return err
+	}
+	if err := s.store.MarkPasswordChanged(ctx, strings.TrimSpace(id)); err != nil {
 		return err
 	}
 	return nil

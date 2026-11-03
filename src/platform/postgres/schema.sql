@@ -464,6 +464,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version BIGINT NOT NULL DEFAULT
 -- survives until the retention window lapses, during which it can be
 -- restored; a scheduled purge hard-deletes expired rows.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
+-- Tracks whether the owner already replaced the initial password: the
+-- console nudges every fresh login until the first change.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at) WHERE deleted_at IS NOT NULL;
 
 -- Manual no-class days (locally moved holidays, emergencies).
