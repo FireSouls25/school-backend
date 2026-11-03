@@ -112,7 +112,7 @@ func TestRefreshRoundTripAndRotation(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	refresh, exp, err := svc.IssueRefresh(ctx, "subject-1", 3, now)
+	refresh, exp, err := svc.IssueRefresh(ctx, "subject-1", 3, now, now)
 	if err != nil {
 		t.Fatalf("IssueRefresh: %v", err)
 	}
@@ -148,11 +148,11 @@ func TestRefreshRevokedForUser(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	r1, _, err := svc.IssueRefresh(ctx, "subject-9", 0, now)
+	r1, _, err := svc.IssueRefresh(ctx, "subject-9", 0, now, now)
 	if err != nil {
 		t.Fatalf("IssueRefresh: %v", err)
 	}
-	r2, _, err := svc.IssueRefresh(ctx, "subject-9", 0, now)
+	r2, _, err := svc.IssueRefresh(ctx, "subject-9", 0, now, now)
 	if err != nil {
 		t.Fatalf("IssueRefresh: %v", err)
 	}
@@ -163,5 +163,42 @@ func TestRefreshRevokedForUser(t *testing.T) {
 		if _, err := svc.CheckRefresh(ctx, tok, now); !errors.Is(err, auth.ErrRevokedToken) {
 			t.Errorf("token %d error = %v, want ErrRevokedToken", i, err)
 		}
+	}
+}
+
+func TestRefreshMaxSessionAge(t *testing.T) {
+	svc := newService(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	// A session started over 30 days ago is rejected even though its
+	// refresh window is still valid: rotations slide the window, never
+	// the session start.
+	old, _, err := svc.IssueRefresh(ctx, "subject-1", 3, now, now.Add(-31*24*time.Hour))
+	if err != nil {
+		t.Fatalf("IssueRefresh: %v", err)
+	}
+	if _, err := svc.CheckRefresh(ctx, old, now); !errors.Is(err, auth.ErrExpiredToken) {
+		t.Errorf("old session error = %v, want ErrExpiredToken", err)
+	}
+	// A session started an hour ago stays valid and keeps its start.
+	fresh, _, err := svc.IssueRefresh(ctx, "subject-1", 3, now, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("IssueRefresh: %v", err)
+	}
+	claims, err := svc.CheckRefresh(ctx, fresh, now)
+	if err != nil {
+		t.Fatalf("CheckRefresh: %v", err)
+	}
+	if claims.StartedAt != now.Add(-time.Hour).UTC().Unix() {
+		t.Errorf("StartedAt = %d, want session start preserved", claims.StartedAt)
+	}
+	// Pre-cap tokens (zero start) are grandfathered once.
+	legacy, _, err := svc.IssueRefresh(ctx, "subject-1", 3, now, time.Time{})
+	if err != nil {
+		t.Fatalf("IssueRefresh: %v", err)
+	}
+	if _, err := svc.CheckRefresh(ctx, legacy, now); err != nil {
+		t.Errorf("grandfathered CheckRefresh = %v, want nil", err)
 	}
 }

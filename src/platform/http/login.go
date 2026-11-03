@@ -226,7 +226,7 @@ func handleLogin(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
-		refresh, refreshExp, err := deps.Tokens.IssueRefresh(r.Context(), u.ID, u.TokenVersion, now)
+		refresh, refreshExp, err := deps.Tokens.IssueRefresh(r.Context(), u.ID, u.TokenVersion, now, now)
 		if err != nil {
 			WriteError(w, r, err)
 			return
@@ -307,9 +307,14 @@ func handleRefresh(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 			return
 		}
 		// Rotation: revoke the presented token before issuing the next,
-		// so reuse of either fails closed.
+		// so reuse of either fails closed. The session start carries
+		// over; pre-cap tokens re-anchor here, starting their 30 days.
 		_ = deps.Tokens.Revoke(r.Context(), claims.Jti)
-		refresh, refreshExp, err := deps.Tokens.IssueRefresh(r.Context(), u.ID, u.TokenVersion, now)
+		startedAt := now
+		if claims.StartedAt != 0 {
+			startedAt = time.Unix(claims.StartedAt, 0).UTC()
+		}
+		refresh, refreshExp, err := deps.Tokens.IssueRefresh(r.Context(), u.ID, u.TokenVersion, now, startedAt)
 		if err != nil {
 			WriteError(w, r, err)
 			return

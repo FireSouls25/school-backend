@@ -36,6 +36,11 @@ type Claims struct {
 	Jti string `json:"jti"`
 	// Typ is access or refresh. Empty (pre-typ era) reads as access.
 	Typ string `json:"typ,omitempty"`
+	// StartedAt is the unix time the session began. Rotations preserve
+	// it so the absolute session cap applies despite sliding refresh
+	// windows. Zero means pre-cap era: grandfathered once, re-anchored
+	// by the caller on the next rotation.
+	StartedAt int64 `json:"sat,omitempty"`
 }
 
 // AccessTokenType marks short-lived API bearers. RefreshTokenType marks
@@ -44,6 +49,11 @@ const (
 	AccessTokenType  = "access"
 	RefreshTokenType = "refresh"
 )
+
+// MaxSessionAge caps a session absolutely: rotations slide the 7-day
+// refresh window, never the session start. Past it, rotation fails
+// with ErrExpiredToken and the user logs in again.
+const MaxSessionAge = 30 * 24 * time.Hour
 
 // Service mints and verifies access and refresh tokens with one shared
 // secret. Access tokens stay stateless (version-checked against users);
@@ -122,8 +132,10 @@ func (s *Service) MintAccess(subject string, roles []string, ver int64, now time
 
 // MintRefreshToken issues a long-lived rotation token for subject and
 // version. It carries no roles: refresh mints fresh access with live roles.
+// startedAt anchors the absolute session cap and is preserved across
+// rotations by the caller; zero means pre-cap era (grandfathered once).
 // The caller persists TokenHash(token) via IssueRefresh (or manually).
-func (s *Service) MintRefreshToken(subject string, ver int64, now time.Time) (token string, expiresAt time.Time, jti string, err error) {
+func (s *Service) MintRefreshToken(subject string, ver int64, now time.Time, startedAt time.Time) (token string, expiresAt time.Time, jti string, err error) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
 		return "", time.Time{}, "", ErrInvalidSubject
@@ -133,6 +145,10 @@ func (s *Service) MintRefreshToken(subject string, ver int64, now time.Time) (to
 	}
 	expiresAt = now.UTC().Add(s.refreshTTL)
 	jti = uuid.NewString()
+	var sat int64
+	if !startedAt.IsZero() {
+		sat = startedAt.UTC().Unix()
+	}
 	body, err := json.Marshal(Claims{
 		Subject:   subject,
 		IssuedAt:  now.UTC().Unix(),
@@ -140,6 +156,7 @@ func (s *Service) MintRefreshToken(subject string, ver int64, now time.Time) (to
 		Ver:       ver,
 		Jti:       jti,
 		Typ:       RefreshTokenType,
+		StartedAt: sat,
 	})
 	if err != nil {
 		return "", time.Time{}, "", fmt.Errorf("auth: encode claims: %w", err)
@@ -153,9 +170,11 @@ func (s *Service) MintRefreshToken(subject string, ver int64, now time.Time) (to
 }
 
 // IssueRefresh mints a refresh token and persists its hash. Rotation and
-// logout revoke it via Revoke/ RevokeAllForUser.
-func (s *Service) IssueRefresh(ctx context.Context, subject string, ver int64, now time.Time) (token string, expiresAt time.Time, err error) {
-	token, expiresAt, jti, err := s.MintRefreshToken(subject, ver, now)
+// logout revoke it via Revoke/ RevokeAllForUser. startedAt anchors the
+// absolute session cap: login passes now, rotation passes the presented
+// claims' start (or now for pre-cap tokens, re-anchoring them).
+func (s *Service) IssueRefresh(ctx context.Context, subject string, ver int64, now time.Time, startedAt time.Time) (token string, expiresAt time.Time, err error) {
+	token, expiresAt, jti, err := s.MintRefreshToken(subject, ver, now, startedAt)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -284,6 +303,12 @@ func (s *Service) CheckRefresh(ctx context.Context, token string, now time.Time)
 	}
 	if rec.UserID != claims.Subject || subtle.ConstantTimeCompare([]byte(rec.TokenHash), []byte(TokenHash(token))) != 1 {
 		return Claims{}, ErrInvalidToken
+	}
+	// Absolute session cap: rotations slide the refresh window, never
+	// the session start. Pre-cap tokens (zero start) are grandfathered
+	// once and re-anchored by the caller on rotation.
+	if sat := claims.StartedAt; sat != 0 && now.UTC().Unix()-sat > int64(MaxSessionAge/time.Second) {
+		return Claims{}, ErrExpiredToken
 	}
 	return claims, nil
 }
