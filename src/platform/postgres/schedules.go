@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"grade/src/core/schedules"
 )
@@ -25,33 +26,46 @@ var _ schedules.Store = (*SchedulesStore)(nil)
 
 // scheduleColumns is the full column list used by every entry SELECT.
 const scheduleColumns = `id, class_group_id, teacher_id, subject_id,
-	weekday, start_min, end_min`
+	weekday, start_min, end_min, joint_id`
 
 // scanEntry maps the current row (in scheduleColumns order) onto an Entry.
 func scanEntry(scan func(dest ...any) error) (schedules.Entry, error) {
 	var e schedules.Entry
 	var weekday int16
 	var start, end int32
+	var jointID *string
 	err := scan(&e.ID, &e.ClassGroupID, &e.TeacherID, &e.SubjectID,
-		&weekday, &start, &end)
+		&weekday, &start, &end, &jointID)
 	if err != nil {
 		return schedules.Entry{}, err
 	}
 	e.Weekday = int(weekday)
 	e.Start = schedules.Clock(start)
 	e.End = schedules.Clock(end)
+	if jointID != nil {
+		e.JointID = *jointID
+	}
 	return e, nil
+}
+
+// jointIDArg maps the empty link to a NULL UUID. pgtype is required:
+// plain nil encodes as empty string, rejected by UUID columns.
+func jointIDArg(e schedules.Entry) any {
+	if e.JointID == "" {
+		return pgtype.UUID{Valid: false}
+	}
+	return e.JointID
 }
 
 // Create implements schedules.Store.
 func (s *SchedulesStore) Create(ctx context.Context, e schedules.Entry) (schedules.Entry, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		INSERT INTO schedule_entries (id, class_group_id, teacher_id, subject_id,
-			weekday, start_min, end_min)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+			weekday, start_min, end_min, joint_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+scheduleColumns,
 		e.ID, e.ClassGroupID, e.TeacherID, e.SubjectID,
-		e.Weekday, int32(e.Start), int32(e.End))
+		e.Weekday, int32(e.Start), int32(e.End), jointIDArg(e))
 	out, err := scanEntry(row.Scan)
 	if err != nil {
 		switch {
@@ -154,11 +168,11 @@ func (s *SchedulesStore) Update(ctx context.Context, e schedules.Entry) (schedul
 	row := s.db.pool.QueryRow(ctx, `
 		UPDATE schedule_entries
 		SET class_group_id = $2, teacher_id = $3, subject_id = $4,
-			weekday = $5, start_min = $6, end_min = $7, updated_at = now()
+			weekday = $5, start_min = $6, end_min = $7, joint_id = $8, updated_at = now()
 		WHERE id = $1
 		RETURNING `+scheduleColumns,
 		e.ID, e.ClassGroupID, e.TeacherID, e.SubjectID,
-		e.Weekday, int32(e.Start), int32(e.End))
+		e.Weekday, int32(e.Start), int32(e.End), jointIDArg(e))
 	out, err := scanEntry(row.Scan)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return schedules.Entry{}, schedules.ErrNotFound

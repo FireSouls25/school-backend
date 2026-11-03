@@ -45,7 +45,11 @@ var (
 	// ErrNotTeachingSubject is returned when the teacher does not currently
 	// teach the subject.
 	ErrNotTeachingSubject = newError("schedules.err_not_teaching_subject", "schedules: teacher does not teach subject")
+	// ErrInvalidJoint is returned when a joint-workshop reference is
+	// missing, mixed or unusable (unknown entry, another teacher, no
+	// overlap, several joints at once).
+	ErrInvalidJoint = newError("schedules.err_invalid_joint", "schedules: invalid joint workshop")
 	// ErrOutsideSchoolHours is returned when a slot starts before 07:00,
-	// ends after 14:00, or lasts less than one hour.
+	// ends after 17:00, or lasts less than 45 minutes.
 	ErrOutsideSchoolHours = newError("schedules.err_outside_school_hours", "schedules: outside school hours")
 )

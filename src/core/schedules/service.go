@@ -35,10 +35,14 @@ func NewService(store Store, checker Checker) *Service {
 }
 
 // Create validates the slot, checks conflicts and persists it.
-// The ID field of e is ignored.
+// The ID field of e is ignored. A JointID never rides along: joint
+// workshops go through CreateJoint so the whole set is validated.
 func (s *Service) Create(ctx context.Context, e Entry) (Entry, error) {
 	e.ID = uuid.NewString()
 	e = normalize(e)
+	if e.JointID != "" {
+		return Entry{}, ErrInvalidJoint
+	}
 	if err := validate(e); err != nil {
 		return Entry{}, err
 	}
@@ -49,6 +53,92 @@ func (s *Service) Create(ctx context.Context, e Entry) (Entry, error) {
 		return Entry{}, err
 	}
 	return s.store.Create(ctx, e)
+}
+
+// CreateJoint creates one joint-workshop entry linked to existing ones:
+// same teacher, overlapping time, one entry per group, all sharing one
+// joint key. The new entry carries the joint onward; existing siblings
+// are tagged with it. Group overlaps still fail: joints span groups,
+// never collide inside one.
+func (s *Service) CreateJoint(ctx context.Context, e Entry, joinIDs []string) (Entry, error) {
+	e.ID = uuid.NewString()
+	e = normalize(e)
+	if len(joinIDs) == 0 {
+		return Entry{}, ErrInvalidJoint
+	}
+	if err := validate(e); err != nil {
+		return Entry{}, err
+	}
+	if err := s.checkTeaches(ctx, e); err != nil {
+		return Entry{}, err
+	}
+	siblings := make([]Entry, 0, len(joinIDs))
+	joint := ""
+	for _, id := range joinIDs {
+		other, err := s.store.ByID(ctx, strings.TrimSpace(id))
+		if err != nil {
+			return Entry{}, err
+		}
+		if other.TeacherID != e.TeacherID || !e.Overlaps(other) {
+			return Entry{}, ErrInvalidJoint
+		}
+		if other.JointID != "" {
+			if joint != "" && other.JointID != joint {
+				return Entry{}, ErrInvalidJoint
+			}
+			joint = other.JointID
+		}
+		siblings = append(siblings, other)
+	}
+	if joint == "" {
+		joint = uuid.NewString()
+	}
+	e.JointID = joint
+	if err := s.checkConflictsExcept(ctx, e, joinSet(joinIDs)); err != nil {
+		return Entry{}, err
+	}
+	created, err := s.store.Create(ctx, e)
+	if err != nil {
+		return Entry{}, err
+	}
+	for _, other := range siblings {
+		if other.JointID == joint {
+			continue
+		}
+		other.JointID = joint
+		if _, err := s.store.Update(ctx, other); err != nil {
+			return Entry{}, err
+		}
+	}
+	return created, nil
+}
+
+// Conflicts lists the teacher's entries overlapping the probe, excluding
+// the probe itself by id. It powers the joint-workshop offer: same
+// detection as creation, read-only. Only teacher, weekday and clocks
+// matter; group and subject are irrelevant to the probe.
+func (s *Service) Conflicts(ctx context.Context, probe Entry) ([]Entry, error) {
+	probe = normalize(probe)
+	if err := validateTeacherID(probe.TeacherID); err != nil {
+		return nil, err
+	}
+	if err := validateWeekday(probe.Weekday); err != nil {
+		return nil, err
+	}
+	if probe.Start < 0 || probe.Start > maxClock || probe.End < 0 || probe.End > maxClock || probe.Start >= probe.End {
+		return nil, ErrInvalidTime
+	}
+	owned, err := s.store.EntriesForTeacher(ctx, probe.TeacherID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Entry, 0)
+	for _, other := range owned {
+		if other.ID != probe.ID && probe.Overlaps(other) {
+			out = append(out, other)
+		}
+	}
+	return out, nil
 }
 
 // ByID returns the entry with the given id.
@@ -119,9 +209,19 @@ func (s *Service) TeachersOnWeekday(ctx context.Context, weekday time.Weekday) (
 }
 
 // Update replaces an existing entry, re-checking conflicts and pairing.
+// Joint membership is immutable here: the stored key carries over so an
+// edit never silently unlinks (or forges) a joint workshop.
 func (s *Service) Update(ctx context.Context, e Entry) (Entry, error) {
 	e.ID = strings.TrimSpace(e.ID)
+	if err := validateID(e.ID); err != nil {
+		return Entry{}, err
+	}
+	stored, err := s.store.ByID(ctx, e.ID)
+	if err != nil {
+		return Entry{}, err
+	}
 	e = normalize(e)
+	e.JointID = stored.JointID
 	if err := validate(e); err != nil {
 		return Entry{}, err
 	}
@@ -146,6 +246,7 @@ func normalize(e Entry) Entry {
 	e.ClassGroupID = strings.TrimSpace(e.ClassGroupID)
 	e.TeacherID = strings.TrimSpace(e.TeacherID)
 	e.SubjectID = strings.TrimSpace(e.SubjectID)
+	e.JointID = strings.TrimSpace(e.JointID)
 	return e
 }
 
@@ -179,13 +280,26 @@ func validate(e Entry) error {
 
 // checkConflicts rejects slots overlapping the teacher's or the group's
 // other entries. The entry itself is excluded, so updates are stable.
+// Entries sharing a joint key never clash on the teacher side.
 func (s *Service) checkConflicts(ctx context.Context, e Entry) error {
+	return s.checkConflictsExcept(ctx, e, nil)
+}
+
+// checkConflictsExcept is checkConflicts skipping extra ids: the joint
+// flow excludes the siblings it is about to tag.
+func (s *Service) checkConflictsExcept(ctx context.Context, e Entry, exclude map[string]bool) error {
 	owned, err := s.store.EntriesForTeacher(ctx, e.TeacherID)
 	if err != nil {
 		return err
 	}
 	for _, other := range owned {
-		if other.ID != e.ID && e.Overlaps(other) {
+		if other.ID == e.ID || exclude[other.ID] {
+			continue
+		}
+		if e.JointID != "" && other.JointID == e.JointID && e.Overlaps(other) {
+			continue
+		}
+		if e.Overlaps(other) {
 			return ErrTeacherConflict
 		}
 	}
@@ -199,6 +313,17 @@ func (s *Service) checkConflicts(ctx context.Context, e Entry) error {
 		}
 	}
 	return nil
+}
+
+// joinSet normalizes join ids into an exclusion set.
+func joinSet(ids []string) map[string]bool {
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // checkTeaches verifies the pairing against current subject assignments.

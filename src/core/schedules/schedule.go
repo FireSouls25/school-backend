@@ -59,6 +59,10 @@ type Entry struct {
 	Start Clock
 	// End is when the slot ends.
 	End Clock
+	// JointID links the entries of one joint workshop across salons:
+	// same teacher, overlapping time, one entry per group. Empty means
+	// a standalone entry. Only the joint flow assigns it.
+	JointID string
 }
 
 // Overlaps reports whether e collides with o: same weekday with

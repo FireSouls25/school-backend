@@ -180,6 +180,7 @@ var statusByCode = map[string]int{
 	"schedules.err_class_conflict":       http.StatusBadRequest,
 	"schedules.err_outside_school_hours": http.StatusBadRequest,
 	"schedules.err_not_teaching_subject": http.StatusBadRequest,
+	"schedules.err_invalid_joint":        http.StatusBadRequest,
 
 	"sessions.err_not_found":           http.StatusNotFound,
 	"sessions.err_invalid_id":          http.StatusBadRequest,

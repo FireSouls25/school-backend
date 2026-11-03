@@ -2825,37 +2825,41 @@ func handleTeacherAssignments(deps Dependencies) http.HandlerFunc {
 
 // scheduleRequest is the body for creating or replacing a schedule entry.
 // Start/End are "HH:MM" clocks; duration and school hours are enforced
-// by the service (07:00-14:00, minimum one hour).
+// by the service (07:00-17:00, minimum 45 minutes). JointWith links the
+// new entry to existing ones as a joint workshop (create only).
 type scheduleRequest struct {
-	ClassGroupID string `json:"classGroupID"`
-	TeacherID    string `json:"teacherID"`
-	SubjectID    string `json:"subjectID"`
-	Weekday      int    `json:"weekday"`
-	Start        string `json:"start"`
-	End          string `json:"end"`
+	ClassGroupID string   `json:"classGroupID"`
+	TeacherID    string   `json:"teacherID"`
+	SubjectID    string   `json:"subjectID"`
+	Weekday      int      `json:"weekday"`
+	Start        string   `json:"start"`
+	End          string   `json:"end"`
+	JointWith    []string `json:"jointWith,omitempty"`
 }
 
 // parseScheduleBody decodes and validates a schedule entry body. The ID
 // comes from the path on replace and is empty on create (assigned).
-func parseScheduleBody(w http.ResponseWriter, r *http.Request, id string) (schedules.Entry, bool) {
+// It also returns the joint-workshop links (create only; ignored and
+// never persisted on replace).
+func parseScheduleBody(w http.ResponseWriter, r *http.Request, id string) (schedules.Entry, []string, bool) {
 	var body scheduleRequest
 	if !decodeJSON(w, r, &body) {
-		return schedules.Entry{}, false
+		return schedules.Entry{}, nil, false
 	}
 	start, err := schedules.ParseClock(body.Start)
 	if err != nil {
 		WriteError(w, r, errBadRequest)
-		return schedules.Entry{}, false
+		return schedules.Entry{}, nil, false
 	}
 	end, err := schedules.ParseClock(body.End)
 	if err != nil {
 		WriteError(w, r, errBadRequest)
-		return schedules.Entry{}, false
+		return schedules.Entry{}, nil, false
 	}
 	return schedules.Entry{
 		ID: id, ClassGroupID: body.ClassGroupID, TeacherID: body.TeacherID,
 		SubjectID: body.SubjectID, Weekday: body.Weekday, Start: start, End: end,
-	}, true
+	}, body.JointWith, true
 }
 
 // handleListSchedule returns schedule entries filtered by teacher and/or
@@ -2956,14 +2960,26 @@ func ensureAssignment(ctx context.Context, deps Dependencies, teacherID, subject
 // handleCreateSchedule places one weekly slot. Overlaps (teacher or
 // class-group) and out-of-hours fail with stable 400 codes the console
 // renders inline; the teacher-subject pairing is assigned automatically.
+// With jointWith it links to existing entries as a joint workshop.
 func handleCreateSchedule(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		entry, ok := parseScheduleBody(w, r, "")
+		entry, jointWith, ok := parseScheduleBody(w, r, "")
 		if !ok {
 			return
 		}
 		if err := ensureAssignment(r.Context(), deps, entry.TeacherID, entry.SubjectID); err != nil {
 			WriteError(w, r, err)
+			return
+		}
+		if len(jointWith) > 0 {
+			created, err := deps.Schedules.CreateJoint(r.Context(), entry, jointWith)
+			if err != nil {
+				recordAudit(deps, r, audit.ActionCreate, audit.ResourceSchedule, "", "", statusForErr(err))
+				WriteError(w, r, err)
+				return
+			}
+			recordAudit(deps, r, audit.ActionCreate, audit.ResourceSchedule, created.ID, "", http.StatusCreated)
+			writeJSON(w, http.StatusCreated, created)
 			return
 		}
 		created, err := deps.Schedules.Create(r.Context(), entry)
@@ -2977,11 +2993,47 @@ func handleCreateSchedule(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// handleScheduleConflicts lists the teacher entries overlapping a probe
+// slot: the same detection creation runs, read-only, backing the joint
+// workshop offer in the console.
+func handleScheduleConflicts(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		teacherID := strings.TrimSpace(q.Get("teacherID"))
+		weekday, err := strconv.Atoi(strings.TrimSpace(q.Get("weekday")))
+		if teacherID == "" || err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		start, err := schedules.ParseClock(strings.TrimSpace(q.Get("start")))
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		end, err := schedules.ParseClock(strings.TrimSpace(q.Get("end")))
+		if err != nil {
+			WriteError(w, r, errBadRequest)
+			return
+		}
+		list, err := deps.Schedules.Conflicts(r.Context(), schedules.Entry{
+			TeacherID: teacherID, Weekday: weekday, Start: start, End: end,
+		})
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if list == nil {
+			list = []schedules.Entry{}
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
 // handleUpdateSchedule replaces one weekly slot, re-checking everything.
 // The ID comes from the path.
 func handleUpdateSchedule(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		entry, ok := parseScheduleBody(w, r, chi.URLParam(r, "id"))
+		entry, _, ok := parseScheduleBody(w, r, chi.URLParam(r, "id"))
 		if !ok {
 			return
 		}

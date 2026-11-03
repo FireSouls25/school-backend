@@ -355,6 +355,9 @@ CREATE INDEX IF NOT EXISTS idx_schedule_teacher_id ON schedule_entries (teacher_
 CREATE INDEX IF NOT EXISTS idx_schedule_group_id ON schedule_entries (class_group_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_subject_id ON schedule_entries (subject_id);
 
+-- Joint workshops: entries sharing joint_id are one lesson across salons.
+ALTER TABLE schedule_entries ADD COLUMN IF NOT EXISTS joint_id UUID;
+
 CREATE TABLE IF NOT EXISTS sessions (
     id             UUID PRIMARY KEY,
     class_group_id UUID        NOT NULL REFERENCES class_groups (id) ON DELETE RESTRICT,
