@@ -15,6 +15,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/notify"
 	"grade/src/core/observations"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
@@ -48,6 +49,8 @@ var (
 	otherStudent   string
 	sessionRouteID string
 	realGroupID    string
+	// lastNotifyStore exposes the test stack's outbox for assertions.
+	lastNotifyStore *notify.MemoryStore
 )
 
 func validStudent(id string) students.Student {
@@ -250,6 +253,9 @@ func testStack(t *testing.T) http.Handler {
 	yearsSvc := schoolyears.NewService(schoolyears.NewMemoryStore())
 	classesSvc := classes.NewService(classes.NewMemoryStore())
 	enrollmentsSvc := enrollments.NewService(enrollments.NewMemoryStore())
+	notifyStore := notify.NewMemoryStore()
+	notifySvc := notify.NewService(notifyStore)
+	lastNotifyStore = notifyStore
 	// Fixture catalog subject with the fixed id the schedule flows use.
 	// Seeded store-direct: the service assigns fresh ids.
 	subjectStore := subjects.NewMemoryStore()
@@ -358,6 +364,7 @@ func testStack(t *testing.T) http.Handler {
 		Classes:          classesSvc,
 		Years:            yearsSvc,
 		Enrollments:      enrollmentsSvc,
+		Notify:           notifySvc,
 		Schedules:        schedulesSvc,
 		Incidents:        incidentsSvc,
 		Academics:        academicsSvc,

@@ -21,6 +21,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/notify"
 	"grade/src/core/observations"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
@@ -54,6 +55,7 @@ type Dependencies struct {
 	Users        *users.Service
 	Warnings     *warnings.Service
 	Observations *observations.Service
+	Notify       *notify.Service
 	Sessions     *sessions.Service
 	Statistics   *statistics.Service
 	Dashboard    *statistics.DashboardService
@@ -1528,6 +1530,69 @@ func handleGetStudent(deps Dependencies) http.HandlerFunc {
 }
 
 // handleGetStudentWarnings returns one student's warning history.
+// lateRecurringRequest asks for the repeated-lates nudge to one guardian.
+type lateRecurringRequest struct {
+	StudentID string `json:"studentID"`
+}
+
+// lateRecurringResult reports the 30-day late count and whether a notice
+// went out (deduplicated per month).
+type lateRecurringResult struct {
+	Lates    int  `json:"lates"`
+	Notified bool `json:"notified"`
+}
+
+// lateRecurringThreshold is how many lates in 30 days earn the guardian
+// nudge. Below it the button still answers the count, but stays silent.
+const lateRecurringThreshold = 3
+
+// handleNotifyLateRecurring sends the repeated-lates template on demand:
+// a teacher-side button for students with chronic tardiness, separate
+// from the roll-call flow. Best effort like every other trigger.
+func handleNotifyLateRecurring(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body lateRecurringRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if deps.Notify == nil || deps.Students == nil || deps.Sessions == nil {
+			WriteError(w, r, errInternal)
+			return
+		}
+		st, err := deps.Students.ByID(r.Context(), strings.TrimSpace(body.StudentID))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if teacherStudentScope(r, w, deps, st) {
+			return
+		}
+		count, err := deps.Sessions.CountMarksSince(r.Context(), st.ID, sessions.MarkLate, time.Now().UTC().AddDate(0, 0, -30))
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		notified := false
+		if count >= lateRecurringThreshold && strings.TrimSpace(st.Caregiver.Phone) != "" {
+			month := time.Now().UTC().Format("2006-01")
+			name := strings.TrimSpace(st.Names + " " + st.Surnames)
+			ok, err := deps.Notify.Notify(r.Context(), notify.Draft{
+				To:       st.Caregiver.Phone,
+				Kind:     notify.KindLateRecurring,
+				Template: notify.TemplateLateRecurring,
+				Params:   []string{name, strconv.Itoa(count), month},
+				DedupKey: st.ID + "|" + month + "|late-recurring",
+			})
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			notified = ok
+		}
+		writeJSON(w, http.StatusOK, lateRecurringResult{Lates: count, Notified: notified})
+	}
+}
+
 func handleGetStudentWarnings(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		subject, _ := SubjectFrom(r.Context())
@@ -2090,8 +2155,10 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 		}
 		subject, _ := SubjectFrom(r.Context())
 		sessionID := chi.URLParam(r, "sessionID")
+		var sess sessions.Session
 		if deps.Sessions != nil {
-			if sess, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
+			if s, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
+				sess = s
 				if teacherGroupScope(r, w, deps, sess.ClassGroupID) {
 					return
 				}
@@ -2108,6 +2175,9 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 		if err != nil {
 			WriteError(w, r, err)
 			return
+		}
+		if sess.ID != "" && (mark == sessions.MarkAbsence || mark == sessions.MarkLate) {
+			notifyAttendance(r.Context(), deps, sess, strings.TrimSpace(body.StudentID), mark)
 		}
 		writeJSON(w, http.StatusCreated, rev)
 	}
@@ -3544,6 +3614,36 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// notifyAttendance queues the guardian notice for a fresh absence or
+// late. Corrections back to present and justified absences stay silent:
+// the acudiente either saw the kid arrive or filed the permission. Best
+// effort: queue failures never fail the roll call.
+func notifyAttendance(ctx context.Context, deps Dependencies, sess sessions.Session, studentID string, mark sessions.Mark) {
+	if deps.Notify == nil || deps.Students == nil {
+		return
+	}
+	if mark != sessions.MarkAbsence && mark != sessions.MarkLate {
+		return
+	}
+	st, err := deps.Students.ByID(ctx, strings.TrimSpace(studentID))
+	if err != nil || strings.TrimSpace(st.Caregiver.Phone) == "" {
+		return
+	}
+	template, kind := notify.TemplateAbsence, notify.KindAbsence
+	if mark == sessions.MarkLate {
+		template, kind = notify.TemplateLate, notify.KindLate
+	}
+	day := sess.Date.UTC().Format("2006-01-02")
+	name := strings.TrimSpace(st.Names + " " + st.Surnames)
+	_, _ = deps.Notify.Notify(ctx, notify.Draft{
+		To:       st.Caregiver.Phone,
+		Kind:     kind,
+		Template: template,
+		Params:   []string{name, sess.Date.UTC().Format("02/01/2006")},
+		DedupKey: studentID + "|" + day + "|" + string(mark),
+	})
+}
+
 // snapshotFor freezes a student profile into the snapshot stored with a
 // warning, following the same shape as the demo seed.
 func snapshotFor(st students.Student) warnings.StudentSnapshot {
@@ -3623,7 +3723,37 @@ func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		if deps.Notify != nil && (gravity == warnings.GravityModerate || gravity == warnings.GravitySevere) {
+			notifyWarnings(r.Context(), deps, out, gravity)
+		}
 		writeJSON(w, http.StatusCreated, out)
+	}
+}
+
+// notifyWarnings queues the guardian notice for moderate and severe
+// llamados (Tipo II/III). Mild ones stay in the console: pinging home
+// for every Tipo I would train families to ignore the channel.
+func notifyWarnings(ctx context.Context, deps Dependencies, list []warnings.Warning, gravity warnings.Gravity) {
+	if deps.Notify == nil {
+		return
+	}
+	kind := "Tipo II"
+	if gravity == warnings.GravitySevere {
+		kind = "Tipo III"
+	}
+	for _, w := range list {
+		phone := strings.TrimSpace(w.Snapshot.CaregiverPhone)
+		if phone == "" {
+			continue
+		}
+		name := strings.TrimSpace(w.Snapshot.Names + " " + w.Snapshot.Surnames)
+		_, _ = deps.Notify.Notify(ctx, notify.Draft{
+			To:       phone,
+			Kind:     notify.KindWarning,
+			Template: notify.TemplateWarning,
+			Params:   []string{name, kind, w.HappenedAt.UTC().Format("02/01/2006")},
+			DedupKey: w.ID,
+		})
 	}
 }
 

@@ -242,6 +242,47 @@ func (s *Service) LatestNotesForStudent(ctx context.Context, studentID string) (
 	return s.store.LatestNotesForStudent(ctx, strings.TrimSpace(studentID))
 }
 
+// CountMarksSince counts distinct sessions since the given day where the
+// student's latest mark equals the given one. A session counts once no
+// matter how many corrections it took: what matters is the final state.
+func (s *Service) CountMarksSince(ctx context.Context, studentID string, mark Mark, since time.Time) (int, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(studentID)); err != nil {
+		return 0, ErrInvalidStudent
+	}
+	sessions, err := s.store.SessionsForStudent(ctx, strings.TrimSpace(studentID))
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, sess := range sessions {
+		if sess.Date.Before(since) {
+			continue
+		}
+		if final, ok := s.finalMark(ctx, sess.ID, strings.TrimSpace(studentID)); ok && final == mark {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// finalMark folds one session's revisions to the student's current mark.
+func (s *Service) finalMark(ctx context.Context, sessionID, studentID string) (Mark, bool) {
+	revs, err := s.store.RevisionsForSession(ctx, sessionID)
+	if err != nil {
+		return "", false
+	}
+	var (
+		mark Mark
+		seen bool
+	)
+	for _, r := range revs {
+		if r.StudentID == studentID {
+			mark, seen = r.To, true
+		}
+	}
+	return mark, seen
+}
+
 // DefensesForStudent maps session id to the recorded defense text of one
 // student, across every session including them.
 func (s *Service) DefensesForStudent(ctx context.Context, studentID string) (map[string]string, error) {

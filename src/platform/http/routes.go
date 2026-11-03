@@ -151,6 +151,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/sessions/{id}", handleSessionDetail(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Post("/warnings/batch", handleIssueWarningBatch(deps))
+		// WhatsApp nudges: repeated-lates template on demand.
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
+			Post("/notify/late-recurring", handleNotifyLateRecurring(deps))
 		// Convivencia observations: fixed catalog, server-decided kind.
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Get("/observations/catalog", handleObservationCatalog(deps))

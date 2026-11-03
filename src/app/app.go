@@ -22,6 +22,7 @@ import (
 	"grade/src/core/classes"
 	"grade/src/core/enrollments"
 	"grade/src/core/incidents"
+	"grade/src/core/notify"
 	"grade/src/core/observations"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
@@ -39,6 +40,7 @@ import (
 	"grade/src/platform/config"
 	"grade/src/platform/mailer"
 	pg "grade/src/platform/postgres"
+	"grade/src/platform/whatsapp"
 )
 
 // Stores holds the persistence ports, already bound to a real adapter:
@@ -50,6 +52,7 @@ type Stores struct {
 	Academics    academics.Store
 	Warnings     warnings.Store
 	Observations observations.Store
+	Notify       notify.Store
 	Audit        audit.Store
 	Teachers     teachers.Store
 	Subjects     subjects.Store
@@ -79,6 +82,7 @@ type Services struct {
 	Academics    *academics.Service
 	Warnings     *warnings.Service
 	Observations *observations.Service
+	Notify       *notify.Service
 	Audit        *audit.Service
 	Teachers     *teachers.Service
 	Subjects     *subjects.Service
@@ -102,8 +106,20 @@ type App struct {
 	Config   config.Config
 	Stores   Stores
 	Services Services
+	// NotifySender delivers the WhatsApp outbox; nil means queue-only
+	// (no credentials configured yet).
+	NotifySender notify.Sender
 	// db is nil when the deployment uses the in-memory stores.
 	db *pg.DB
+}
+
+// FlushNotifications sends pending WhatsApp notices. Without a sender
+// it is a no-op reporting zeros.
+func (a *App) FlushNotifications(ctx context.Context) (sent, failed int, err error) {
+	if a.NotifySender == nil {
+		return 0, 0, nil
+	}
+	return a.Services.Notify.Flush(ctx, a.NotifySender, 25, 5)
 }
 
 // New wires stores and services for cfg. The schema is applied when
@@ -120,6 +136,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Academics:     academics.NewMemoryStore(),
 		Warnings:      warnings.NewMemoryStore(),
 		Observations:  observations.NewMemoryStore(),
+		Notify:        notify.NewMemoryStore(),
 		Audit:         audit.NewMemoryStore(),
 		Teachers:      teachers.NewMemoryStore(),
 		Subjects:      subjects.NewMemoryStore(),
@@ -149,6 +166,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Academics = pg.NewAcademicsStore(db)
 		s.Warnings = pg.NewWarningsStore(db)
 		s.Observations = pg.NewObservationsStore(db)
+		s.Notify = pg.NewNotifyStore(db)
 		s.Audit = pg.NewAuditStore(db)
 		s.Teachers = pg.NewTeachersStore(db)
 		s.Subjects = pg.NewSubjectsStore(db)
@@ -181,6 +199,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	tattendanceSvc := tattendance.NewService(s.TAttendance)
 	warningsSvc := warnings.NewService(s.Warnings)
 	observationsSvc := observations.NewService(s.Observations)
+	notifySvc := notify.NewService(s.Notify)
 	incidentsSvc := incidents.NewService(s.Incidents)
 	academicsSvc := academics.NewService(s.Academics)
 	teachersSvc := teachers.NewService(s.Teachers)
@@ -216,6 +235,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Academics:    academicsSvc,
 			Warnings:     warningsSvc,
 			Observations: observationsSvc,
+			Notify:       notifySvc,
 			Audit:        auditSvc,
 			Teachers:     teachersSvc,
 			Subjects:     subjectsSvc,
@@ -248,6 +268,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Throttle: throttle.NewService(s.Throttle),
 			Recovery: users.NewRecoveryService(usersSvc, s.Recovery, cfg.RecoveryTTL(), recoveryMailer(cfg), cfg.PublicURL),
 		},
+		NotifySender: notifySender(cfg),
 	}, nil
 }
 
@@ -268,6 +289,21 @@ func recoveryMailer(cfg config.Config) users.Mailer {
 		return nil
 	}
 	return m
+}
+
+// notifySender wires the WhatsApp Cloud API client when the token and
+// the business number are present. Half config warns at boot; no
+// credentials means queue-only (rows wait for a later deploy).
+func notifySender(cfg config.Config) notify.Sender {
+	if strings.TrimSpace(cfg.WhatsappToken) == "" || strings.TrimSpace(cfg.WhatsappPhoneID) == "" {
+		return nil
+	}
+	c, err := whatsapp.NewClient(cfg.WhatsappToken, cfg.WhatsappPhoneID, cfg.WhatsappAPIBase)
+	if err != nil {
+		slog.Warn("whatsapp misconfigured; notifications queue-only", "error", err)
+		return nil
+	}
+	return c
 }
 
 // Close releases the database connection, if any.

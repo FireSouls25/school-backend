@@ -152,6 +152,25 @@ CREATE TABLE IF NOT EXISTS observations (
 
 CREATE INDEX IF NOT EXISTS idx_observations_teacher_id ON observations (teacher_id);
 
+-- WhatsApp outbox: queued template sends with dedup collapsing retries
+-- and double taps into a single delivery.
+CREATE TABLE IF NOT EXISTS notification_outbox (
+    id         UUID PRIMARY KEY,
+    to_phone   TEXT        NOT NULL,
+    kind       TEXT        NOT NULL,
+    template   TEXT        NOT NULL,
+    language   TEXT        NOT NULL DEFAULT 'es',
+    params     JSONB       NOT NULL DEFAULT '[]',
+    dedup_key  TEXT        NOT NULL,
+    status     TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
+    attempts   INTEGER     NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sent_at    TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_dedup_key ON notification_outbox (dedup_key);
+CREATE INDEX IF NOT EXISTS idx_notify_pending ON notification_outbox (status, created_at);
+
 CREATE TABLE IF NOT EXISTS warnings (
     id                   UUID PRIMARY KEY,
     student_id           UUID        NOT NULL REFERENCES students (id) ON DELETE CASCADE,

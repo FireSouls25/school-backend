@@ -72,6 +72,20 @@ func main() {
 			}
 		}
 	}()
+	// WhatsApp outbox flush: roll-call saves only queue; this loop
+	// delivers every minute. No sender configured means queue-only.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			sent, failed, err := application.FlushNotifications(context.Background())
+			if err != nil {
+				slog.Error("notification flush failed", "error", err)
+			} else if sent+failed > 0 {
+				slog.Info("notification flush", "sent", sent, "failed", failed)
+			}
+		}
+	}()
 
 	addr := ":" + cfg.Port
 	slog.Info("starting server",
@@ -85,6 +99,7 @@ func main() {
 		Users:             application.Services.Users,
 		Warnings:          application.Services.Warnings,
 		Observations:      application.Services.Observations,
+		Notify:            application.Services.Notify,
 		Sessions:          application.Services.Sessions,
 		Statistics:        application.Services.Statistics,
 		Dashboard:         application.Services.Dashboard,

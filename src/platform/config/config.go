@@ -149,8 +149,15 @@ type Config struct {
 	// Resend's onboarding sender only reaches the account owner.
 	ResendFrom string
 	// PublicURL is the site origin used to build reset links
-	// (PUBLIC_URL + /recuperar/<token>). Empty disables the link.
+	// (PUBLIC_URL + /#/recuperar/<token>). Empty disables the link.
 	PublicURL string
+	// WhatsappToken is the Meta Cloud API system-user token. Empty
+	// disables sending (outbox keeps queueing for later).
+	WhatsappToken string
+	// WhatsappPhoneID is the business phone number id sending.
+	WhatsappPhoneID string
+	// WhatsappAPIBase overrides Meta's graph endpoint (tests, proxies).
+	WhatsappAPIBase string
 	// Version is the build marker reported by /healthz (commit, image
 	// tag). The SPA compares it to detect maintenance rotations.
 	// Empty means development; APP_VERSION sets it in deployments.
@@ -265,6 +272,16 @@ func FromEnv() (Config, error) {
 	cfg.ResendAPIKey = os.Getenv("RESEND_API_KEY")
 	cfg.ResendFrom = strings.TrimSpace(os.Getenv("RESEND_FROM"))
 	cfg.PublicURL = strings.TrimRight(strings.TrimSpace(os.Getenv("PUBLIC_URL")), "/")
+	cfg.WhatsappPhoneID = strings.TrimSpace(os.Getenv("WHATSAPP_PHONE_ID"))
+	cfg.WhatsappAPIBase = strings.TrimSpace(os.Getenv("WHATSAPP_API_BASE"))
+	cfg.WhatsappToken = os.Getenv("WHATSAPP_TOKEN")
+	if file := strings.TrimSpace(os.Getenv("WHATSAPP_TOKEN_FILE")); file != "" {
+		secret, err := readSecretFile(file)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.WhatsappToken = strings.TrimRight(secret, "\r\n")
+	}
 	if v := strings.TrimSpace(os.Getenv("APP_VERSION")); v != "" {
 		cfg.Version = v
 	}
