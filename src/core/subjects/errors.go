@@ -46,7 +46,7 @@ var (
 	// ErrHasSchedule is returned when deleting a subject referenced by
 	// schedule entries. Remove the entries first, or retire instead.
 	ErrHasSchedule = newError("subjects.err_has_schedule", "subjects: subject has schedule entries")
-	// ErrInvalidGrades is returned when a grade is outside 1-11 or duplicated.
+	// ErrInvalidGrades is returned when a grade is outside 0-11 or duplicated.
 	ErrInvalidGrades = newError("subjects.err_invalid_grades", "subjects: invalid grades")
 	// ErrInvalidColor is returned when the color is not #RRGGBB.
 	ErrInvalidColor = newError("subjects.err_invalid_color", "subjects: invalid color")

@@ -63,6 +63,9 @@ type Entry struct {
 	// same teacher, overlapping time, one entry per group. Empty means
 	// a standalone entry. Only the joint flow assigns it.
 	JointID string
+	// Variant names the subject child ("1", "2") when the catalog lists
+	// variants; empty otherwise. Display only: conflicts ignore it.
+	Variant string
 }
 
 // Overlaps reports whether e collides with o: same weekday with

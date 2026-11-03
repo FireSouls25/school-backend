@@ -49,6 +49,10 @@ var (
 	// missing, mixed or unusable (unknown entry, another teacher, no
 	// overlap, several joints at once).
 	ErrInvalidJoint = newError("schedules.err_invalid_joint", "schedules: invalid joint workshop")
+	// ErrInvalidVariant is returned when the entry names a variant the
+	// subject catalog does not list (or any variant for a subject
+	// without them).
+	ErrInvalidVariant = newError("schedules.err_invalid_variant", "schedules: invalid subject variant")
 	// ErrOutsideSchoolHours is returned when a slot starts before 07:00,
 	// ends after 17:00, or lasts less than 45 minutes.
 	ErrOutsideSchoolHours = newError("schedules.err_outside_school_hours", "schedules: outside school hours")

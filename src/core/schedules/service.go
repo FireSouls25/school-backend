@@ -52,6 +52,9 @@ func (s *Service) Create(ctx context.Context, e Entry) (Entry, error) {
 	if err := s.checkTeaches(ctx, e); err != nil {
 		return Entry{}, err
 	}
+	if err := s.checkVariant(ctx, e); err != nil {
+		return Entry{}, err
+	}
 	return s.store.Create(ctx, e)
 }
 
@@ -70,6 +73,9 @@ func (s *Service) CreateJoint(ctx context.Context, e Entry, joinIDs []string) (E
 		return Entry{}, err
 	}
 	if err := s.checkTeaches(ctx, e); err != nil {
+		return Entry{}, err
+	}
+	if err := s.checkVariant(ctx, e); err != nil {
 		return Entry{}, err
 	}
 	siblings := make([]Entry, 0, len(joinIDs))
@@ -231,6 +237,9 @@ func (s *Service) Update(ctx context.Context, e Entry) (Entry, error) {
 	if err := s.checkTeaches(ctx, e); err != nil {
 		return Entry{}, err
 	}
+	if err := s.checkVariant(ctx, e); err != nil {
+		return Entry{}, err
+	}
 	return s.store.Update(ctx, e)
 }
 
@@ -247,6 +256,7 @@ func normalize(e Entry) Entry {
 	e.TeacherID = strings.TrimSpace(e.TeacherID)
 	e.SubjectID = strings.TrimSpace(e.SubjectID)
 	e.JointID = strings.TrimSpace(e.JointID)
+	e.Variant = strings.TrimSpace(e.Variant)
 	return e
 }
 
@@ -324,6 +334,27 @@ func joinSet(ids []string) map[string]bool {
 		}
 	}
 	return out
+}
+
+// checkVariant enforces the catalog's numbered children: entries name
+// one of the listed variants, or none at all when the subject lists none.
+func (s *Service) checkVariant(ctx context.Context, e Entry) error {
+	variants, err := s.checker.VariantsOf(ctx, e.SubjectID)
+	if err != nil {
+		return err
+	}
+	if len(variants) == 0 {
+		if e.Variant != "" {
+			return ErrInvalidVariant
+		}
+		return nil
+	}
+	for _, v := range variants {
+		if v == e.Variant {
+			return nil
+		}
+	}
+	return ErrInvalidVariant
 }
 
 // checkTeaches verifies the pairing against current subject assignments.

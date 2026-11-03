@@ -215,7 +215,21 @@ func normalizeSubject(s Subject) Subject {
 	s.Description = strings.TrimSpace(s.Description)
 	s.Color = strings.TrimSpace(s.Color)
 	s.Grades = normalizeGrades(s.Grades)
+	s.Variants = normalizeVariants(s.Variants)
 	return s
+}
+
+// normalizeVariants trims, drops empties and duplicates, preserving order.
+func normalizeVariants(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if v = strings.TrimSpace(v); v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // normalizeGrades sorts ascending and drops duplicates and blanks.

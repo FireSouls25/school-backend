@@ -24,12 +24,16 @@ type Subject struct {
 	Code string
 	// Description is an optional free-text description.
 	Description string
-	// Grades lists the school years (1-11) the subject is taught in.
+	// Grades lists the school years (0-11) the subject is taught in.
 	// Sorted ascending, without duplicates.
 	Grades []int
 	// Color is the admin-chosen display color as #RRGGBB. It identifies
 	// the subject across the console (catalog, schedule board, agenda).
 	Color string
+	// Variants are numbered children ("1", "2", "3"): the same matter
+	// split by level or group. Empty means no variants; schedule
+	// entries name one when the catalog lists them.
+	Variants []string
 	// Active reports whether the subject is currently offered. Retiring a
 	// subject (Active=false) keeps its assignment history; deleting it is
 	// only allowed while it has none.

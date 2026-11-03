@@ -248,6 +248,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_subjects_lower_name ON subjects (lower(nam
 -- Catalog phase: which years a subject is taught in, and its console color.
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS grades INTEGER[] NOT NULL DEFAULT '{}';
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS color TEXT NOT NULL DEFAULT '';
+-- Numbered children ("1", "2") selectable per schedule entry.
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS variants TEXT[] NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS subject_assignments (
     id          UUID PRIMARY KEY,
@@ -357,6 +359,8 @@ CREATE INDEX IF NOT EXISTS idx_schedule_subject_id ON schedule_entries (subject_
 
 -- Joint workshops: entries sharing joint_id are one lesson across salons.
 ALTER TABLE schedule_entries ADD COLUMN IF NOT EXISTS joint_id UUID;
+-- Numbered subject child ("1", "2") chosen for the slot, if any.
+ALTER TABLE schedule_entries ADD COLUMN IF NOT EXISTS variant TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS sessions (
     id             UUID PRIMARY KEY,

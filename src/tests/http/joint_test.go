@@ -100,3 +100,45 @@ func TestJointWorkshopFlow(t *testing.T) {
 		t.Fatalf("bogus joint status = %d, want 404", rec.Code)
 	}
 }
+
+func TestVariantFlow(t *testing.T) {
+	h := scheduleStack(t)
+
+	// Materia con numeraciones hijas.
+	rec := doRequest(t, h, http.MethodPost, "/v1/subjects", adminSubject,
+		`{"name":"Oralidad y Comunicación","grades":[0],"variants":["1","2","3"]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create subject status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var subj map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &subj); err != nil {
+		t.Fatalf("decode subject: %v", err)
+	}
+	subjID, _ := subj["ID"].(string)
+	if vs, _ := subj["Variants"].([]any); len(vs) != 3 {
+		t.Fatalf("Variants = %v, want 3", subj["Variants"])
+	}
+
+	entry := func(variant string) string {
+		v := ""
+		if variant != "" {
+			v = `,"variant":"` + variant + `"`
+		}
+		return `{"classGroupID":"` + realGroupID + `","teacherID":"` + teacherSubject + `","subjectID":"` + subjID + `","weekday":2,"start":"07:00","end":"08:00"` + v + `}`
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/schedule", adminSubject, entry("2"))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("variant entry status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode entry: %v", err)
+	}
+	if created["Variant"] != "2" {
+		t.Errorf("Variant = %v, want 2", created["Variant"])
+	}
+	rec = doRequest(t, h, http.MethodPost, "/v1/schedule", adminSubject, entry("9"))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad variant status = %d, want 400", rec.Code)
+	}
+}

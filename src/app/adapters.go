@@ -42,6 +42,15 @@ func (c scheduleCounter) EntriesForSubject(ctx context.Context, subjectID string
 	return len(entries), nil
 }
 
+// VariantsOf implements schedules.Checker.
+func (c subjectChecker) VariantsOf(ctx context.Context, subjectID string) ([]string, error) {
+	subj, err := c.subjects.SubjectByID(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), subj.Variants...), nil
+}
+
 // Teaches implements schedules.Checker.
 func (c subjectChecker) Teaches(ctx context.Context, teacherID, subjectID string) (bool, error) {
 	current, err := c.subjects.CurrentForTeacher(ctx, teacherID)

@@ -2450,6 +2450,8 @@ type subjectRequest struct {
 	Grades      []int  `json:"grades"`
 	Color       string `json:"color"`
 	Active      bool   `json:"active"`
+	// Variants lists numbered children ("1", "2") selectable per entry.
+	Variants []string `json:"variants"`
 }
 
 // handleListSubjects returns the catalog alphabetically. Teachers read it
@@ -2490,7 +2492,7 @@ func handleCreateSubject(deps Dependencies) http.HandlerFunc {
 		}
 		subj, err := deps.Subjects.CreateSubject(r.Context(), subjects.Subject{
 			Name: body.Name, Code: body.Code, Description: body.Description,
-			Grades: body.Grades, Color: body.Color,
+			Grades: body.Grades, Color: body.Color, Variants: body.Variants,
 		})
 		if err != nil {
 			recordAudit(deps, r, audit.ActionCreate, audit.ResourceSubject, "", "", statusForErr(err))
@@ -2513,7 +2515,7 @@ func handleUpdateSubject(deps Dependencies) http.HandlerFunc {
 		subj, err := deps.Subjects.UpdateSubject(r.Context(), subjects.Subject{
 			ID: chi.URLParam(r, "id"), Name: body.Name, Code: body.Code,
 			Description: body.Description, Grades: body.Grades,
-			Color: body.Color, Active: body.Active,
+			Color: body.Color, Active: body.Active, Variants: body.Variants,
 		})
 		if err != nil {
 			recordAudit(deps, r, audit.ActionUpdate, audit.ResourceSubject, chi.URLParam(r, "id"), "", statusForErr(err))
@@ -2835,6 +2837,8 @@ type scheduleRequest struct {
 	Start        string   `json:"start"`
 	End          string   `json:"end"`
 	JointWith    []string `json:"jointWith,omitempty"`
+	// Variant names the subject child ("1", "2") when listed.
+	Variant string `json:"variant,omitempty"`
 }
 
 // parseScheduleBody decodes and validates a schedule entry body. The ID
@@ -2859,6 +2863,7 @@ func parseScheduleBody(w http.ResponseWriter, r *http.Request, id string) (sched
 	return schedules.Entry{
 		ID: id, ClassGroupID: body.ClassGroupID, TeacherID: body.TeacherID,
 		SubjectID: body.SubjectID, Weekday: body.Weekday, Start: start, End: end,
+		Variant: body.Variant,
 	}, body.JointWith, true
 }
 

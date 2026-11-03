@@ -26,7 +26,7 @@ var _ schedules.Store = (*SchedulesStore)(nil)
 
 // scheduleColumns is the full column list used by every entry SELECT.
 const scheduleColumns = `id, class_group_id, teacher_id, subject_id,
-	weekday, start_min, end_min, joint_id`
+	weekday, start_min, end_min, joint_id, variant`
 
 // scanEntry maps the current row (in scheduleColumns order) onto an Entry.
 func scanEntry(scan func(dest ...any) error) (schedules.Entry, error) {
@@ -35,7 +35,7 @@ func scanEntry(scan func(dest ...any) error) (schedules.Entry, error) {
 	var start, end int32
 	var jointID *string
 	err := scan(&e.ID, &e.ClassGroupID, &e.TeacherID, &e.SubjectID,
-		&weekday, &start, &end, &jointID)
+		&weekday, &start, &end, &jointID, &e.Variant)
 	if err != nil {
 		return schedules.Entry{}, err
 	}
@@ -61,11 +61,11 @@ func jointIDArg(e schedules.Entry) any {
 func (s *SchedulesStore) Create(ctx context.Context, e schedules.Entry) (schedules.Entry, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		INSERT INTO schedule_entries (id, class_group_id, teacher_id, subject_id,
-			weekday, start_min, end_min, joint_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			weekday, start_min, end_min, joint_id, variant)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING `+scheduleColumns,
 		e.ID, e.ClassGroupID, e.TeacherID, e.SubjectID,
-		e.Weekday, int32(e.Start), int32(e.End), jointIDArg(e))
+		e.Weekday, int32(e.Start), int32(e.End), jointIDArg(e), e.Variant)
 	out, err := scanEntry(row.Scan)
 	if err != nil {
 		switch {
@@ -168,11 +168,11 @@ func (s *SchedulesStore) Update(ctx context.Context, e schedules.Entry) (schedul
 	row := s.db.pool.QueryRow(ctx, `
 		UPDATE schedule_entries
 		SET class_group_id = $2, teacher_id = $3, subject_id = $4,
-			weekday = $5, start_min = $6, end_min = $7, joint_id = $8, updated_at = now()
+			weekday = $5, start_min = $6, end_min = $7, joint_id = $8, variant = $9, updated_at = now()
 		WHERE id = $1
 		RETURNING `+scheduleColumns,
 		e.ID, e.ClassGroupID, e.TeacherID, e.SubjectID,
-		e.Weekday, int32(e.Start), int32(e.End), jointIDArg(e))
+		e.Weekday, int32(e.Start), int32(e.End), jointIDArg(e), e.Variant)
 	out, err := scanEntry(row.Scan)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return schedules.Entry{}, schedules.ErrNotFound

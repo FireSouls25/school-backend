@@ -11,6 +11,9 @@ import (
 type Checker interface {
 	// Teaches reports whether teacherID has an open assignment for subjectID.
 	Teaches(ctx context.Context, teacherID, subjectID string) (bool, error)
+	// VariantsOf returns the numbered children the catalog lists for the
+	// subject, if any.
+	VariantsOf(ctx context.Context, subjectID string) ([]string, error)
 }
 
 // Store is the persistence port for schedule entries. Implementations must

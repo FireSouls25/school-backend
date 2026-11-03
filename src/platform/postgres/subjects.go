@@ -23,7 +23,7 @@ func NewSubjectsStore(db *DB) *SubjectsStore { return &SubjectsStore{db: db} }
 var _ subjects.Store = (*SubjectsStore)(nil)
 
 // subjectColumns is the full column list used by every subject SELECT.
-const subjectColumns = `id, name, code, description, grades, color, active`
+const subjectColumns = `id, name, code, description, grades, color, variants, active`
 
 // gradesToPG converts domain grades to the INTEGER[] driver type.
 func gradesToPG(grades []int) []int32 {
@@ -34,14 +34,23 @@ func gradesToPG(grades []int) []int32 {
 	return out
 }
 
+// stringsToPG converts domain string lists to the TEXT[] driver type,
+// never nil: NULL would violate the NOT NULL columns.
+func stringsToPG(in []string) []string {
+	out := make([]string, 0, len(in))
+	return append(out, in...)
+}
+
 // scanSubject maps the current row (in subjectColumns order) onto a Subject.
 func scanSubject(scan func(dest ...any) error) (subjects.Subject, error) {
 	var subj subjects.Subject
 	var grades []int32
-	err := scan(&subj.ID, &subj.Name, &subj.Code, &subj.Description, &grades, &subj.Color, &subj.Active)
+	var variants []string
+	err := scan(&subj.ID, &subj.Name, &subj.Code, &subj.Description, &grades, &subj.Color, &variants, &subj.Active)
 	if err != nil {
 		return subjects.Subject{}, err
 	}
+	subj.Variants = append([]string{}, variants...)
 	subj.Grades = make([]int, 0, len(grades))
 	for _, g := range grades {
 		subj.Grades = append(subj.Grades, int(g))
@@ -70,10 +79,10 @@ func scanAssignment(scan func(dest ...any) error) (subjects.Assignment, error) {
 // CreateSubject implements subjects.Store.
 func (s *SubjectsStore) CreateSubject(ctx context.Context, subj subjects.Subject) (subjects.Subject, error) {
 	row := s.db.pool.QueryRow(ctx, `
-		INSERT INTO subjects (id, name, code, description, grades, color, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO subjects (id, name, code, description, grades, color, variants, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+subjectColumns,
-		subj.ID, subj.Name, subj.Code, subj.Description, gradesToPG(subj.Grades), subj.Color, subj.Active)
+		subj.ID, subj.Name, subj.Code, subj.Description, gradesToPG(subj.Grades), subj.Color, stringsToPG(subj.Variants), subj.Active)
 	out, err := scanSubject(row.Scan)
 	if err != nil {
 		if isUniqueViolationOn(err, "subjects") {
@@ -124,10 +133,10 @@ func (s *SubjectsStore) ListSubjects(ctx context.Context) ([]subjects.Subject, e
 func (s *SubjectsStore) UpdateSubject(ctx context.Context, subj subjects.Subject) (subjects.Subject, error) {
 	row := s.db.pool.QueryRow(ctx, `
 		UPDATE subjects
-		SET name = $2, code = $3, description = $4, grades = $5, color = $6, active = $7, updated_at = now()
+		SET name = $2, code = $3, description = $4, grades = $5, color = $6, variants = $7, active = $8, updated_at = now()
 		WHERE id = $1
 		RETURNING `+subjectColumns,
-		subj.ID, subj.Name, subj.Code, subj.Description, gradesToPG(subj.Grades), subj.Color, subj.Active)
+		subj.ID, subj.Name, subj.Code, subj.Description, gradesToPG(subj.Grades), subj.Color, stringsToPG(subj.Variants), subj.Active)
 	out, err := scanSubject(row.Scan)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return subjects.Subject{}, subjects.ErrNotFound

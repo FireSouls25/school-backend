@@ -12,7 +12,9 @@ import (
 // fakeChecker is a schedules.Checker backed by an explicit allow-list.
 type fakeChecker struct {
 	teaches map[string]bool // "teacherID/subjectID" -> teaches
-	err     error
+	// variants lists numbered children per subjectID.
+	variants map[string][]string
+	err      error
 }
 
 func (f fakeChecker) Teaches(_ context.Context, teacherID, subjectID string) (bool, error) {
@@ -20,6 +22,13 @@ func (f fakeChecker) Teaches(_ context.Context, teacherID, subjectID string) (bo
 		return false, f.err
 	}
 	return f.teaches[teacherID+"/"+subjectID], nil
+}
+
+func (f fakeChecker) VariantsOf(_ context.Context, subjectID string) ([]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return append([]string(nil), f.variants[subjectID]...), nil
 }
 
 const (
@@ -232,5 +241,42 @@ func TestDelete(t *testing.T) {
 	}
 	if _, err := svc.ByID(ctx, e.ID); !errors.Is(err, schedules.ErrNotFound) {
 		t.Errorf("ByID after delete error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestEntryVariantValidation(t *testing.T) {
+	ctx := context.Background()
+	svc := schedules.NewService(schedules.NewMemoryStore(), fakeChecker{
+		teaches: map[string]bool{
+			teacherA + "/" + math:    true,
+			teacherA + "/" + physics: true,
+		},
+		variants: map[string][]string{math: {"1", "2"}},
+	})
+
+	withVariant := slot(groupA, teacherA, math, time.Monday, "07:00", "08:00")
+	withVariant.Variant = "2"
+	if _, err := svc.Create(ctx, withVariant); err != nil {
+		t.Errorf("Create variant = %v, want nil", err)
+	}
+	// Subject with variants requires one of them.
+	empty := slot(groupA, teacherA, math, time.Monday, "08:00", "09:00")
+	if _, err := svc.Create(ctx, empty); !errors.Is(err, schedules.ErrInvalidVariant) {
+		t.Errorf("empty variant error = %v, want ErrInvalidVariant", err)
+	}
+	bad := slot(groupA, teacherA, math, time.Monday, "08:00", "09:00")
+	bad.Variant = "9"
+	if _, err := svc.Create(ctx, bad); !errors.Is(err, schedules.ErrInvalidVariant) {
+		t.Errorf("bad variant error = %v, want ErrInvalidVariant", err)
+	}
+	// Subject without variants takes none.
+	plain := slot(groupA, teacherA, physics, time.Monday, "08:00", "09:00")
+	if _, err := svc.Create(ctx, plain); err != nil {
+		t.Errorf("plain entry = %v, want nil", err)
+	}
+	plain = slot(groupA, teacherA, physics, time.Monday, "10:20", "11:10")
+	plain.Variant = "1"
+	if _, err := svc.Create(ctx, plain); !errors.Is(err, schedules.ErrInvalidVariant) {
+		t.Errorf("stray variant error = %v, want ErrInvalidVariant", err)
 	}
 }

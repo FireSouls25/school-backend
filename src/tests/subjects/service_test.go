@@ -332,3 +332,18 @@ func TestAssignmentsForSubject(t *testing.T) {
 		t.Errorf("history = %+v, want chronological t1 then t2", hist)
 	}
 }
+
+func TestSubjectVariantsNormalize(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	s, err := svc.CreateSubject(ctx, subjects.Subject{
+		Name: "Oralidad", Variants: []string{" 2 ", "", "1", "2"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSubject: %v", err)
+	}
+	if len(s.Variants) != 2 || s.Variants[0] != "2" || s.Variants[1] != "1" {
+		t.Errorf("Variants = %v, want [2 1] trimmed and deduped", s.Variants)
+	}
+}

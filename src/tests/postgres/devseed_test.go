@@ -40,6 +40,14 @@ func (c pgTeachChecker) Teaches(ctx context.Context, teacherID, subjectID string
 	return false, nil
 }
 
+func (c pgTeachChecker) VariantsOf(ctx context.Context, subjectID string) ([]string, error) {
+	subj, err := c.subjects.SubjectByID(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), subj.Variants...), nil
+}
+
 // TestDevseedRoundTrip runs the demo seeder against the real schema and
 // then re-runs it, covering the parts memory stores cannot check: foreign
 // keys between the seeded records (school year → classes → enrollments,

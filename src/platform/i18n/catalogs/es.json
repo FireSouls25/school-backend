@@ -163,6 +163,7 @@
   "schedules.err_class_conflict": "El salón ya tiene clase a esa hora",
   "schedules.err_outside_school_hours": "La clase debe estar entre las 7:00 y las 17:00 y durar mínimo 45 minutos",
   "schedules.err_not_teaching_subject": "El docente no enseña esa materia actualmente",
+  "schedules.err_invalid_variant": "Esa numeración no existe para la materia",
   "schedules.err_invalid_joint": "Taller conjunto inválido: mismos docentes, horario traslapado y un solo grupo por bloque",
   "reason.absence": "Inasistencia",
   "reason.evasion": "Evasión",

@@ -40,6 +40,14 @@ func (c teachChecker) Teaches(ctx context.Context, teacherID, subjectID string) 
 	return false, nil
 }
 
+func (c teachChecker) VariantsOf(ctx context.Context, subjectID string) ([]string, error) {
+	subj, err := c.subjects.SubjectByID(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), subj.Variants...), nil
+}
+
 // memoryDeps wires every port the seeder needs to in-memory stores, so
 // the suite exercises the real services and their validation.
 type memoryDeps struct {

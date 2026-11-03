@@ -21,6 +21,7 @@ import (
 	"grade/src/core/sessions"
 	"grade/src/core/statistics"
 	"grade/src/core/students"
+	"grade/src/core/subjects"
 	"grade/src/core/teachers"
 	"grade/src/core/users"
 	"grade/src/core/warnings"
@@ -57,11 +58,25 @@ func validStudent(id string) students.Student {
 }
 
 // allowAllChecker is a schedules.Checker stub: every pairing teaches.
-// The day view never consults it; only entry creation does.
-type allowAllChecker struct{}
+// The day view never consults it; only entry creation does. Variants
+// resolve through the optional subjects service (wired in testStack).
+type allowAllChecker struct {
+	subjects *subjects.Service
+}
 
 func (allowAllChecker) Teaches(context.Context, string, string) (bool, error) {
 	return true, nil
+}
+
+func (c allowAllChecker) VariantsOf(ctx context.Context, subjectID string) ([]string, error) {
+	if c.subjects == nil {
+		return nil, nil
+	}
+	subj, err := c.subjects.SubjectByID(ctx, subjectID)
+	if err != nil {
+		return nil, nil
+	}
+	return subj.Variants, nil
 }
 
 // testSessions adapts the sessions service to statistics.SessionSource,
@@ -233,7 +248,16 @@ func testStack(t *testing.T) http.Handler {
 	yearsSvc := schoolyears.NewService(schoolyears.NewMemoryStore())
 	classesSvc := classes.NewService(classes.NewMemoryStore())
 	enrollmentsSvc := enrollments.NewService(enrollments.NewMemoryStore())
-	schedulesSvc := schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{})
+	// Fixture catalog subject with the fixed id the schedule flows use.
+	// Seeded store-direct: the service assigns fresh ids.
+	subjectStore := subjects.NewMemoryStore()
+	if _, err := subjectStore.CreateSubject(ctx, subjects.Subject{
+		ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Name: "Fixture", Active: true,
+	}); err != nil {
+		t.Fatalf("seed subject: %v", err)
+	}
+	subjectsSvc := subjects.NewService(subjectStore)
+	schedulesSvc := schedules.NewService(schedules.NewMemoryStore(), allowAllChecker{subjects: subjectsSvc})
 	incidentsSvc := incidents.NewService(incidents.NewMemoryStore())
 	academicsSvc := academics.NewService(academics.NewMemoryStore())
 	sessViews := testSessions{svc: sessionsSvc}
@@ -334,6 +358,7 @@ func testStack(t *testing.T) http.Handler {
 		Schedules:        schedulesSvc,
 		Incidents:        incidentsSvc,
 		Academics:        academicsSvc,
+		Subjects:         subjectsSvc,
 	}, newI18n(t))
 }
 
