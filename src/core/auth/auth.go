@@ -9,15 +9,14 @@ package auth
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -42,6 +41,35 @@ type Claims struct {
 	// by the caller on the next rotation.
 	StartedAt int64 `json:"sat,omitempty"`
 }
+
+// GetExpirationTime implements jwt.Claims over the unix fields, so the
+// library validates expiry against the caller-provided clock.
+func (c Claims) GetExpirationTime() (*jwt.NumericDate, error) {
+	if c.ExpiresAt == 0 {
+		return nil, nil
+	}
+	return jwt.NewNumericDate(time.Unix(c.ExpiresAt, 0).UTC()), nil
+}
+
+// GetIssuedAt implements jwt.Claims.
+func (c Claims) GetIssuedAt() (*jwt.NumericDate, error) {
+	if c.IssuedAt == 0 {
+		return nil, nil
+	}
+	return jwt.NewNumericDate(time.Unix(c.IssuedAt, 0).UTC()), nil
+}
+
+// GetNotBefore implements jwt.Claims: tokens are valid immediately.
+func (c Claims) GetNotBefore() (*jwt.NumericDate, error) { return nil, nil }
+
+// GetIssuer implements jwt.Claims: no issuer is minted.
+func (c Claims) GetIssuer() (string, error) { return "", nil }
+
+// GetSubject implements jwt.Claims.
+func (c Claims) GetSubject() (string, error) { return c.Subject, nil }
+
+// GetAudience implements jwt.Claims: no audience is minted.
+func (c Claims) GetAudience() (jwt.ClaimStrings, error) { return nil, nil }
 
 // AccessTokenType marks short-lived API bearers. RefreshTokenType marks
 // long-lived rotation tokens: they never open API routes, only /v1/refresh.
@@ -109,8 +137,7 @@ func (s *Service) MintAccess(subject string, roles []string, ver int64, now time
 		return "", time.Time{}, ErrInvalidSubject
 	}
 	expiresAt = now.UTC().Add(s.accessTTL)
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
-	body, err := json.Marshal(Claims{
+	body := Claims{
 		Subject:   subject,
 		Roles:     append([]string(nil), roles...),
 		IssuedAt:  now.UTC().Unix(),
@@ -118,16 +145,12 @@ func (s *Service) MintAccess(subject string, roles []string, ver int64, now time
 		Ver:       ver,
 		Jti:       uuid.NewString(),
 		Typ:       AccessTokenType,
-	})
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("auth: encode claims: %w", err)
 	}
-	payload := base64.RawURLEncoding.EncodeToString(body)
-	unsigned := header + "." + payload
-	mac := hmac.New(sha256.New, s.secret)
-	mac.Write([]byte(unsigned))
-	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	return unsigned + "." + sig, expiresAt, nil
+	token, err = jwt.NewWithClaims(jwt.SigningMethodHS256, body).SignedString(s.secret)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("auth: sign token: %w", err)
+	}
+	return token, expiresAt, nil
 }
 
 // MintRefreshToken issues a long-lived rotation token for subject and
@@ -149,7 +172,7 @@ func (s *Service) MintRefreshToken(subject string, ver int64, now time.Time, sta
 	if !startedAt.IsZero() {
 		sat = startedAt.UTC().Unix()
 	}
-	body, err := json.Marshal(Claims{
+	body := Claims{
 		Subject:   subject,
 		IssuedAt:  now.UTC().Unix(),
 		ExpiresAt: expiresAt.Unix(),
@@ -157,16 +180,12 @@ func (s *Service) MintRefreshToken(subject string, ver int64, now time.Time, sta
 		Jti:       jti,
 		Typ:       RefreshTokenType,
 		StartedAt: sat,
-	})
-	if err != nil {
-		return "", time.Time{}, "", fmt.Errorf("auth: encode claims: %w", err)
 	}
-	payload := base64.RawURLEncoding.EncodeToString(body)
-	unsigned := headerFor(payload) + "." + payload
-	mac := hmac.New(sha256.New, s.secret)
-	mac.Write([]byte(unsigned))
-	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	return unsigned + "." + sig, expiresAt, jti, nil
+	token, err = jwt.NewWithClaims(jwt.SigningMethodHS256, body).SignedString(s.secret)
+	if err != nil {
+		return "", time.Time{}, "", fmt.Errorf("auth: sign token: %w", err)
+	}
+	return token, expiresAt, jti, nil
 }
 
 // IssueRefresh mints a refresh token and persists its hash. Rotation and
@@ -207,53 +226,33 @@ func (s *Service) DeleteExpired(ctx context.Context, now time.Time) error {
 }
 
 // Verify checks signature, shape and expiry, returning the claims.
+// Parsing and signature checks run on golang-jwt; the HS256 method is
+// pinned so "none"/confusion tokens fail. Unknown payload fields are
+// ignored by the library (previously rejected); the security-relevant
+// strictness lives in the method pin, the type checks below and the
+// server-side revocation list.
 func (s *Service) Verify(token string, now time.Time) (Claims, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return Claims{}, ErrInvalidToken
-	}
-	var header struct {
-		Alg string `json:"alg"`
-	}
-	rawHeader, err := base64.RawURLEncoding.DecodeString(parts[0])
+	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithTimeFunc(func() time.Time { return now }),
+	)
+	parsed, err := parser.ParseWithClaims(token, &Claims{}, func(*jwt.Token) (any, error) {
+		return s.secret, nil
+	})
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return Claims{}, ErrExpiredToken
+		}
 		return Claims{}, ErrInvalidToken
 	}
-	if err := json.Unmarshal(rawHeader, &header); err != nil || header.Alg != "HS256" {
-		return Claims{}, ErrInvalidToken
-	}
-	mac := hmac.New(sha256.New, s.secret)
-	mac.Write([]byte(parts[0] + "." + parts[1]))
-	want, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return Claims{}, ErrInvalidToken
-	}
-	if subtle.ConstantTimeCompare(mac.Sum(nil), want) != 1 {
-		return Claims{}, ErrInvalidToken
-	}
-	rawBody, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return Claims{}, ErrInvalidToken
-	}
-	var claims Claims
-	dec := json.NewDecoder(strings.NewReader(string(rawBody)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&claims); err != nil {
+	claims, ok := parsed.Claims.(*Claims)
+	if !ok || !parsed.Valid {
 		return Claims{}, ErrInvalidToken
 	}
 	if strings.TrimSpace(claims.Subject) == "" {
 		return Claims{}, ErrInvalidToken
 	}
-	if now.UTC().Unix() >= claims.ExpiresAt {
-		return Claims{}, ErrExpiredToken
-	}
-	return claims, nil
-}
-
-// headerFor builds the JOSE header for a payload.
-func headerFor(payload string) string {
-	_ = payload
-	return base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	return *claims, nil
 }
 
 // VerifyAccess verifies and requires an access token.
