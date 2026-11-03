@@ -50,8 +50,8 @@ func seedLinkedTeacher(t *testing.T, usersSvc *users.Service, teachersSvc *teach
 		Phone: "3001234567", Email: "carlos@colegio.edu",
 		Address: "Calle 10 # 5-20", Birthplace: "Medellín",
 		MedicalConditions: "Ninguna",
-		Birthdate: time.Date(1990, 5, 20, 0, 0, 0, 0, time.UTC),
-		Sex:       teachers.SexMale,
+		Birthdate:         time.Date(1990, 5, 20, 0, 0, 0, 0, time.UTC),
+		Sex:               teachers.SexMale,
 	})
 	if err != nil {
 		t.Fatalf("create teacher: %v", err)
@@ -89,7 +89,7 @@ func TestMeCarriesAccountAndTeacherProfile(t *testing.T) {
 		// Fresh accounts keep the initial password: the console nudges
 		// every fresh login until the first change.
 		PasswordChanged bool `json:"passwordChanged"`
-		Teacher   struct {
+		Teacher         struct {
 			ID                string `json:"id"`
 			Names             string `json:"names"`
 			Surnames          string `json:"surnames"`

@@ -26,7 +26,7 @@ func recoverStack(t *testing.T) (http.Handler, *users.Service, *users.RecoverySe
 	if err != nil {
 		t.Fatalf("tokens: %v", err)
 	}
-	recSvc := users.NewRecoveryService(usersSvc, users.NewMemoryRecoveryStore(), time.Hour)
+	recSvc := users.NewRecoveryService(usersSvc, users.NewMemoryRecoveryStore(), time.Hour, nil, "")
 	if _, err := usersSvc.Create(ctx, "admin", "admin@colegio.edu", "admin123*"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}

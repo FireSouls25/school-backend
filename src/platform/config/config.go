@@ -142,6 +142,15 @@ type Config struct {
 	// AuthRecoveryTTL is the password-reset token lifetime. Zero means
 	// the default (1h).
 	AuthRecoveryTTL time.Duration
+	// ResendAPIKey sends password-reset mail via Resend. Empty disables
+	// delivery (dev log only); production should set it with ResendFrom.
+	ResendAPIKey string
+	// ResendFrom is the verified sender (e.g. no-reply@fractalschool.app).
+	// Resend's onboarding sender only reaches the account owner.
+	ResendFrom string
+	// PublicURL is the site origin used to build reset links
+	// (PUBLIC_URL + /recuperar/<token>). Empty disables the link.
+	PublicURL string
 	// Version is the build marker reported by /healthz (commit, image
 	// tag). The SPA compares it to detect maintenance rotations.
 	// Empty means development; APP_VERSION sets it in deployments.
@@ -253,6 +262,9 @@ func FromEnv() (Config, error) {
 		cfg.UserRetentionDays = days
 	}
 	cfg.AuthSecret = os.Getenv("AUTH_SECRET")
+	cfg.ResendAPIKey = os.Getenv("RESEND_API_KEY")
+	cfg.ResendFrom = strings.TrimSpace(os.Getenv("RESEND_FROM"))
+	cfg.PublicURL = strings.TrimRight(strings.TrimSpace(os.Getenv("PUBLIC_URL")), "/")
 	if v := strings.TrimSpace(os.Getenv("APP_VERSION")); v != "" {
 		cfg.Version = v
 	}

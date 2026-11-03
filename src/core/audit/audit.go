@@ -29,16 +29,16 @@ const (
 type Resource string
 
 const (
-	ResourceStudent    Resource = "student"
-	ResourceWarning    Resource = "warning"
+	ResourceStudent Resource = "student"
+	ResourceWarning Resource = "warning"
 	// ResourceObservation marks a convivencia observation record.
 	ResourceObservation Resource = "observation"
-	ResourceSession    Resource = "session"
-	ResourceReport     Resource = "report"
-	ResourceSchedule   Resource = "schedule"
-	ResourceSubject    Resource = "subject"
-	ResourceAssignment Resource = "assignment"
-	ResourceGroup      Resource = "group"
+	ResourceSession     Resource = "session"
+	ResourceReport      Resource = "report"
+	ResourceSchedule    Resource = "schedule"
+	ResourceSubject     Resource = "subject"
+	ResourceAssignment  Resource = "assignment"
+	ResourceGroup       Resource = "group"
 	// ResourceYear marks school-year lifecycle events (close, reopen).
 	ResourceYear Resource = "year"
 	// ResourceTeacherAttendance marks the daily roll of teachers.

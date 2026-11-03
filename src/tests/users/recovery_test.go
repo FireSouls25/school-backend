@@ -11,7 +11,7 @@ import (
 func newRecovery(t *testing.T) (*users.Service, *users.RecoveryService) {
 	t.Helper()
 	svc := newService()
-	rec := users.NewRecoveryService(svc, users.NewMemoryRecoveryStore(), time.Hour)
+	rec := users.NewRecoveryService(svc, users.NewMemoryRecoveryStore(), time.Hour, nil, "")
 	return svc, rec
 }
 
@@ -86,10 +86,10 @@ func TestRecoveryExpiredRejected(t *testing.T) {
 	ctx := context.Background()
 	seedActive(t, svc)
 
-	fast := users.NewRecoveryService(svc, users.NewMemoryRecoveryStore(), -time.Second)
+	fast := users.NewRecoveryService(svc, users.NewMemoryRecoveryStore(), -time.Second, nil, "")
 	_ = fast
 	// Expiry is simulated with a nanosecond-lived service.
-	short := users.NewRecoveryService(svc, users.NewMemoryRecoveryStore(), time.Nanosecond)
+	short := users.NewRecoveryService(svc, users.NewMemoryRecoveryStore(), time.Nanosecond, nil, "")
 	tok2, err := short.Request(ctx, "admin")
 	if err != nil || tok2 == "" {
 		t.Fatalf("request = %q, %v", tok2, err)

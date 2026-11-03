@@ -123,24 +123,34 @@ func hashRecoveryToken(raw string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// Mailer delivers password-reset links. Implementations must never log
+// the token or the link; delivery failures are the caller's to handle.
+type Mailer interface {
+	// SendResetLink mails the reset link to the account address.
+	SendResetLink(ctx context.Context, to, link string) error
+}
+
 // RecoveryService issues and consumes single-use reset tokens over an
 // account Service and a RecoveryStore.
 type RecoveryService struct {
-	users  *Service
-	resets RecoveryStore
-	ttl    time.Duration
+	users   *Service
+	resets  RecoveryStore
+	ttl     time.Duration
+	mailer  Mailer
+	baseURL string
 }
 
 // NewRecoveryService wires recovery onto the account service. A nil store
-// gets memory; non-positive TTL defaults to one hour.
-func NewRecoveryService(usersSvc *Service, store RecoveryStore, ttl time.Duration) *RecoveryService {
+// gets memory; non-positive TTL defaults to one hour. Mailer and baseURL
+// are optional: nil mailer means no delivery (dev log only).
+func NewRecoveryService(usersSvc *Service, store RecoveryStore, ttl time.Duration, mailer Mailer, baseURL string) *RecoveryService {
 	if store == nil {
 		store = NewMemoryRecoveryStore()
 	}
 	if ttl <= 0 {
 		ttl = DefaultRecoveryTTL
 	}
-	return &RecoveryService{users: usersSvc, resets: store, ttl: ttl}
+	return &RecoveryService{users: usersSvc, resets: store, ttl: ttl, mailer: mailer, baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/")}
 }
 
 // Request mints a reset token for identifier (username or email when it
@@ -178,6 +188,14 @@ func (s *RecoveryService) Request(ctx context.Context, identifier string) (strin
 		return "", err
 	}
 	_ = s.resets.DeleteExpired(ctx, now)
+	// Deliver the link when a mailer is wired and the account has an
+	// address. Best effort and silent: the HTTP layer always answers
+	// 204, so delivery must never change the response (no enumeration,
+	// no confusion). Misconfiguration surfaces at boot, not per request.
+	if s.mailer != nil && s.baseURL != "" && strings.TrimSpace(u.Email) != "" {
+		link := s.baseURL + "/recuperar/" + token
+		_ = s.mailer.SendResetLink(ctx, u.Email, link)
+	}
 	return token, nil
 }
 

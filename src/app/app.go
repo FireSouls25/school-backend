@@ -37,6 +37,7 @@ import (
 	"grade/src/core/warnings"
 	"grade/src/devseed"
 	"grade/src/platform/config"
+	"grade/src/platform/mailer"
 	pg "grade/src/platform/postgres"
 )
 
@@ -245,9 +246,28 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Roles:    roles.NewService(s.Roles),
 			Auth:     authSvc,
 			Throttle: throttle.NewService(s.Throttle),
-			Recovery: users.NewRecoveryService(usersSvc, s.Recovery, cfg.RecoveryTTL()),
+			Recovery: users.NewRecoveryService(usersSvc, s.Recovery, cfg.RecoveryTTL(), recoveryMailer(cfg), cfg.PublicURL),
 		},
 	}, nil
+}
+
+// recoveryMailer wires Resend when the key is present. Half config
+// (key without sender or public URL) warns at boot instead of failing
+// silently per request; no key means dev-log delivery only.
+func recoveryMailer(cfg config.Config) users.Mailer {
+	if strings.TrimSpace(cfg.ResendAPIKey) == "" {
+		return nil
+	}
+	if strings.TrimSpace(cfg.ResendFrom) == "" || strings.TrimSpace(cfg.PublicURL) == "" {
+		slog.Warn("RESEND_API_KEY without RESEND_FROM or PUBLIC_URL; recovery mail disabled")
+		return nil
+	}
+	m, err := mailer.NewResendMailer(cfg.ResendAPIKey, cfg.ResendFrom)
+	if err != nil {
+		slog.Warn("resend misconfigured; recovery mail disabled", "error", err)
+		return nil
+	}
+	return m
 }
 
 // Close releases the database connection, if any.
