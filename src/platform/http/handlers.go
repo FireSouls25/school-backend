@@ -886,11 +886,12 @@ func handleTeacherRoll(deps Dependencies) http.HandlerFunc {
 
 // teacherHistoryCard is one day roll for the history feed.
 type teacherHistoryCard struct {
-	Day     string `json:"Day"`
-	Total   int    `json:"Total"`
-	Present int    `json:"Present"`
-	Absent  int    `json:"Absent"`
-	Late    int    `json:"Late"`
+	Day         string `json:"Day"`
+	Total       int    `json:"Total"`
+	Present     int    `json:"Present"`
+	Absent      int    `json:"Absent"`
+	Late        int    `json:"Late"`
+	Replacement int    `json:"Replacement"`
 }
 
 // handleTeacherAttendanceRange returns one card per recorded day inside
@@ -935,6 +936,8 @@ func handleTeacherAttendanceRange(deps Dependencies) http.HandlerFunc {
 				card.Absent++
 			case tattendance.StatusLate:
 				card.Late++
+			case tattendance.StatusReplacement:
+				card.Replacement++
 			}
 		}
 		out := make([]teacherHistoryCard, 0, len(order))

@@ -598,3 +598,11 @@ ALTER TABLE teacher_attendance ADD CONSTRAINT teacher_attendance_status_check
 ALTER TABLE teacher_attendance_revisions DROP CONSTRAINT IF EXISTS teacher_attendance_revisions_new_status_check;
 ALTER TABLE teacher_attendance_revisions ADD CONSTRAINT teacher_attendance_revisions_new_status_check
     CHECK (new_status IN ('present', 'absent', 'late', 'permission'));
+
+-- Reemplazo docente: la falta cubierta por un sustituto es un estado propio.
+ALTER TABLE teacher_attendance DROP CONSTRAINT IF EXISTS teacher_attendance_status_check;
+ALTER TABLE teacher_attendance ADD CONSTRAINT teacher_attendance_status_check
+    CHECK (status IN ('present', 'absent', 'late', 'permission', 'replacement'));
+ALTER TABLE teacher_attendance_revisions DROP CONSTRAINT IF EXISTS teacher_attendance_revisions_new_status_check;
+ALTER TABLE teacher_attendance_revisions ADD CONSTRAINT teacher_attendance_revisions_new_status_check
+    CHECK (new_status IN ('present', 'absent', 'late', 'permission', 'replacement'));

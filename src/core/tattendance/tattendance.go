@@ -22,6 +22,9 @@ const (
 	// StatusPermission means the teacher missed the day under an approved
 	// permission (falta con permiso), recorded with its motive.
 	StatusPermission Status = "permission"
+	// StatusReplacement means the teacher missed the day but a substitute
+	// covered the class (reemplazo), recorded with who replaced them.
+	StatusReplacement Status = "replacement"
 )
 
 // Parse converts a case-insensitive, whitespace-trimmed string into a
@@ -36,6 +39,8 @@ func Parse(s string) (Status, error) {
 		return StatusLate, nil
 	case "permission", "permiso", "con permiso", "con-permiso":
 		return StatusPermission, nil
+	case "replacement", "reemplazo", "con reemplazo", "con-reemplazo":
+		return StatusReplacement, nil
 	}
 	return "", ErrUnknownStatus
 }
@@ -87,6 +92,8 @@ type Summary struct {
 	Late    int
 	// Excused counts days under an approved permission.
 	Excused int
+	// Replacement counts days covered by a substitute.
+	Replacement int
 }
 
 // Revision is one change to a mark: the status before and after, who

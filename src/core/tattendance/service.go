@@ -36,7 +36,7 @@ func (s *Service) RecordDay(ctx context.Context, in DayInput) ([]Mark, error) {
 		if status == "" {
 			status = StatusPresent
 		}
-		if status != StatusPresent && status != StatusAbsent && status != StatusLate && status != StatusPermission {
+		if status != StatusPresent && status != StatusAbsent && status != StatusLate && status != StatusPermission && status != StatusReplacement {
 			return nil, ErrUnknownStatus
 		}
 		teacherID := strings.TrimSpace(dm.TeacherID)
@@ -123,6 +123,8 @@ func (s *Service) History(ctx context.Context, teacherID string, from, to time.T
 			sum.Late++
 		case StatusPermission:
 			sum.Excused++
+		case StatusReplacement:
+			sum.Replacement++
 		}
 	}
 	return marks, sum, revisions, nil

@@ -154,3 +154,54 @@ func TestTeacherDayRevisionsFlow(t *testing.T) {
 		t.Fatalf("latest = %v, want resolved names and timestamp", revs[0])
 	}
 }
+
+func TestTeacherReplacementFlow(t *testing.T) {
+	h, profID := tattendanceStack(t)
+	today := time.Now().UTC().Format("2006-01-02")
+
+	// "reemplazo" records a replacement with who covered the class.
+	rec := doRequest(t, h, http.MethodPost, "/v1/teachers/attendance", adminSubject,
+		fmt.Sprintf(`{"day":%q,"marks":[{"teacherID":%q,"status":"reemplazo","note":"Cubrió Ana Ríos"}]}`, today, profID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("record status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	// Day roll keeps the stable id.
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/attendance?date="+today, adminSubject, "")
+	var day []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &day); err != nil {
+		t.Fatalf("decode day: %v", err)
+	}
+	if len(day) != 1 || day[0]["Status"] != "replacement" {
+		t.Fatalf("day = %v, want the replacement", day)
+	}
+
+	// History summary counts replacements apart from absences.
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/"+profID+"/attendance", adminSubject, "")
+	var hist struct {
+		Summary map[string]int `json:"Summary"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &hist); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if hist.Summary["Replacement"] != 1 || hist.Summary["Absent"] != 0 {
+		t.Fatalf("summary = %v, want one replacement and no absence", hist.Summary)
+	}
+
+	// Range cards carry the replacement bucket too.
+	rec = doRequest(t, h, http.MethodGet, "/v1/teachers/attendance/history?from="+today+"&to="+today, adminSubject, "")
+	var cards []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &cards); err != nil {
+		t.Fatalf("decode cards: %v", err)
+	}
+	if len(cards) != 1 || cards[0]["Replacement"] != float64(1) || cards[0]["Total"] != float64(1) {
+		t.Fatalf("cards = %v, want the single replacement day", cards)
+	}
+
+	// Unknown statuses still fail.
+	rec = doRequest(t, h, http.MethodPost, "/v1/teachers/attendance", adminSubject,
+		fmt.Sprintf(`{"day":%q,"marks":[{"teacherID":%q,"status":"desaparecido"}]}`, today, profID))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown status = %d, want 400", rec.Code)
+	}
+}
