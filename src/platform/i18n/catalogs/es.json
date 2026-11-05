@@ -106,6 +106,8 @@
   "teachers.err_invalid_birth": "Fecha de nacimiento inválida",
   "teachers.err_invalid_email": "Correo electrónico inválido",
   "teachers.err_invalid_sex": "Sexo inválido",
+  "teachers.err_invalid_area_head": "Materia de jefatura inválida",
+  "teachers.err_direction_conflict": "El docente ya dirige un salón; no puede ser jefe de área a la vez",
   "teachers.err_photo_too_large": "La foto supera el tamaño máximo",
   "teachers.err_photo_not_found": "Este docente aún no tiene foto",
   "subjects.err_not_found": "Materia no encontrada",

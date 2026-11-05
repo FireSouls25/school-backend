@@ -37,4 +37,9 @@ var (
 	ErrInvalidEmail = newError("teachers.err_invalid_email", "teachers: invalid email")
 	// ErrInvalidSex is returned when the sex is neither empty nor a known value.
 	ErrInvalidSex = newError("teachers.err_invalid_sex", "teachers: invalid sex")
+	// ErrInvalidAreaHead is returned when the area-head subject id is malformed.
+	ErrInvalidAreaHead = newError("teachers.err_invalid_area_head", "teachers: invalid area head")
+	// ErrDirectionConflict is returned when a teacher would be both
+	// homeroom director and area head at once.
+	ErrDirectionConflict = newError("teachers.err_direction_conflict", "teachers: homeroom and area head conflict")
 )

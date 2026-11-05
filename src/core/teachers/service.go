@@ -161,6 +161,7 @@ func normalize(t Teacher) Teacher {
 	t.Sex = strings.ToLower(trim(t.Sex))
 	t.MedicalConditions = trim(t.MedicalConditions)
 	t.HomeroomClassID = trim(t.HomeroomClassID)
+	t.AreaHeadSubjectID = trim(t.AreaHeadSubjectID)
 	return t
 }
 
@@ -187,6 +188,14 @@ func validate(t Teacher) error {
 	}
 	if t.Sex != "" && t.Sex != SexFemale && t.Sex != SexMale {
 		return ErrInvalidSex
+	}
+	if t.AreaHeadSubjectID != "" {
+		if _, err := uuid.Parse(t.AreaHeadSubjectID); err != nil {
+			return ErrInvalidAreaHead
+		}
+	}
+	if t.HomeroomClassID != "" && t.AreaHeadSubjectID != "" {
+		return ErrDirectionConflict
 	}
 	return nil
 }

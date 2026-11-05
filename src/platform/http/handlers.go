@@ -169,6 +169,7 @@ type meTeacher struct {
 	Sex               string `json:"sex"`
 	MedicalConditions string `json:"medicalConditions"`
 	HomeroomClassID   string `json:"homeroomClassID"`
+	AreaHeadSubjectID string `json:"areaHeadSubjectID"`
 	Active            bool   `json:"active"`
 }
 
@@ -183,7 +184,8 @@ func meTeacherFrom(t teachers.Teacher) *meTeacher {
 		DocumentID: t.DocumentID, Phone: t.Phone, Email: t.Email,
 		Address: t.Address, Birthplace: t.Birthplace,
 		MedicalConditions: t.MedicalConditions, HomeroomClassID: t.HomeroomClassID,
-		Birthdate: birth, Sex: t.Sex, Active: t.Active,
+		AreaHeadSubjectID: t.AreaHeadSubjectID,
+		Birthdate:         birth, Sex: t.Sex, Active: t.Active,
 	}
 }
 
@@ -530,6 +532,7 @@ type teacherUpdate struct {
 	Sex               *string    `json:"Sex"`
 	MedicalConditions *string    `json:"MedicalConditions"`
 	HomeroomClassID   *string    `json:"HomeroomClassID"`
+	AreaHeadSubjectID *string    `json:"AreaHeadSubjectID"`
 	Active            *bool      `json:"Active"`
 }
 
@@ -562,6 +565,7 @@ func handleUpdateTeacher(deps Dependencies) http.HandlerFunc {
 		applyIfSet(&current.Sex, body.Sex)
 		applyIfSet(&current.MedicalConditions, body.MedicalConditions)
 		applyIfSet(&current.HomeroomClassID, body.HomeroomClassID)
+		applyIfSet(&current.AreaHeadSubjectID, body.AreaHeadSubjectID)
 		if body.Active != nil {
 			current.Active = *body.Active
 		}

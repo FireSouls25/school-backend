@@ -174,6 +174,34 @@ func TestHomeroomDirectorFlag(t *testing.T) {
 	}
 }
 
+func TestAreaHeadDirection(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+	subjectID := "11111111-1111-4111-8111-111111111111"
+
+	p := validProfile()
+	p.HomeroomClassID = ""
+	p.AreaHeadSubjectID = subjectID
+	got, err := svc.Create(ctx, p)
+	if err != nil {
+		t.Fatalf("Create area head: %v", err)
+	}
+	if !got.IsAreaHead() || got.IsHomeroomDirector() {
+		t.Error("area head should head an area and direct no class")
+	}
+
+	p.HomeroomClassID = "9-1"
+	if _, err := svc.Create(ctx, p); !errors.Is(err, teachers.ErrDirectionConflict) {
+		t.Errorf("both directions error = %v, want ErrDirectionConflict", err)
+	}
+
+	p.HomeroomClassID = ""
+	p.AreaHeadSubjectID = "not-a-uuid"
+	if _, err := svc.Create(ctx, p); !errors.Is(err, teachers.ErrInvalidAreaHead) {
+		t.Errorf("bad subject error = %v, want ErrInvalidAreaHead", err)
+	}
+}
+
 func TestFullNameAndAge(t *testing.T) {
 	p := validProfile()
 	if got, want := p.FullName(), "Mendoza Ruiz Carlos"; got != want {

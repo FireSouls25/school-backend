@@ -41,6 +41,11 @@ type Teacher struct {
 	// de grupo (e.g. "9-1"). Empty means the teacher leads no class-group.
 	// Opaque here; the classes capability owns its format.
 	HomeroomClassID string
+	// AreaHeadSubjectID names the subject the teacher heads as jefe de
+	// área (UUID of the subject). Empty means no area leadership.
+	// Never set together with HomeroomClassID: a teacher is either a
+	// homeroom director or an area head, not both.
+	AreaHeadSubjectID string
 	// Active reports whether the teacher is currently working. Retiring a
 	// teacher sets it to false instead of deleting the profile, so history
 	// keeps resolving.
@@ -62,6 +67,11 @@ const (
 // IsHomeroomDirector reports whether the teacher leads a class-group.
 func (t Teacher) IsHomeroomDirector() bool {
 	return strings.TrimSpace(t.HomeroomClassID) != ""
+}
+
+// IsAreaHead reports whether the teacher heads a subject area.
+func (t Teacher) IsAreaHead() bool {
+	return strings.TrimSpace(t.AreaHeadSubjectID) != ""
 }
 
 // AgeAt returns the teacher's age in full years at ref. The second value

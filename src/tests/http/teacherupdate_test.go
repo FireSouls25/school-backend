@@ -91,6 +91,28 @@ func TestUpdateTeacherRejectsInvalidSex(t *testing.T) {
 	}
 }
 
+func TestUpdateTeacherAreaHeadConflict(t *testing.T) {
+	h, _, teachersSvc, _ := meProfileStack(t)
+	id := seedTeacher(t, teachersSvc)
+
+	rec := doRequest(t, h, http.MethodPut, "/v1/teachers/"+id, adminSubject, `{"HomeroomClassID":"9-1"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("homeroom status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(t, h, http.MethodPut, "/v1/teachers/"+id, adminSubject, `{"AreaHeadSubjectID":"11111111-1111-4111-8111-111111111111"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if code := decodeTeacherError(t, rec.Body.Bytes()); code != "teachers.err_direction_conflict" {
+		t.Errorf("code = %q, want teachers.err_direction_conflict", code)
+	}
+	// Clearing the homeroom frees the teacher for area leadership.
+	rec = doRequest(t, h, http.MethodPut, "/v1/teachers/"+id, adminSubject, `{"HomeroomClassID":"","AreaHeadSubjectID":"11111111-1111-4111-8111-111111111111"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("area head status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestUpdateTeacherDeniedWithoutPermission(t *testing.T) {
 	h, _, teachersSvc, _ := meProfileStack(t)
 	id := seedTeacher(t, teachersSvc)

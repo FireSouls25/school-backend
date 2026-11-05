@@ -222,6 +222,7 @@ CREATE TABLE IF NOT EXISTS teachers (
     sex                 TEXT        NOT NULL DEFAULT '',
     medical_conditions  TEXT        NOT NULL DEFAULT '',
     homeroom_class_id   TEXT        NOT NULL DEFAULT '',
+    area_head_subject_id TEXT       NOT NULL DEFAULT '',
     active              BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -234,6 +235,8 @@ ALTER TABLE teachers ADD COLUMN IF NOT EXISTS photo BYTEA;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS sex TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_teachers_homeroom_class_id ON teachers (homeroom_class_id);
+-- Jefe de área: subject UUID the teacher heads; empty means none.
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS area_head_subject_id TEXT NOT NULL DEFAULT '';
 
 -- Daily roll of teachers: one explicit mark per teacher per day.
 CREATE TABLE IF NOT EXISTS teacher_attendance (
