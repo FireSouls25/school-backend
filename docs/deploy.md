@@ -153,6 +153,36 @@ deploy step is starting the new image.
 `.dockerignore` keeps `.env` and the docs out of the build context, so a
 local secret file cannot end up in an image layer.
 
+## Cloudflare Tunnel on the instance
+
+Public traffic (`https://api.fractalschool.app`) enters through a
+Cloudflare Tunnel, not an open port. On the instance it runs as
+`grado-tunnel.service` (enabled at boot, `Restart=always`, token from
+`CLOUDFLARED_TOKEN` in `/etc/grado.env`):
+
+```ini
+# /etc/systemd/system/grado-tunnel.service
+[Unit]
+Description=cloudflared tunnel grado
+After=grado-api.service
+[Service]
+Restart=always
+EnvironmentFile=/etc/grado.env
+ExecStart=/usr/local/bin/cloudflared tunnel run --token ${CLOUDFLARED_TOKEN}
+[Install]
+WantedBy=multi-user.target
+```
+
+Verified 2026-11-05: active since boot, tunnel connections registered.
+The deploy rollout runs `systemctl enable --now grado-tunnel` so a deploy
+never leaves it down. Diagnose with (token never printed):
+
+```sh
+systemctl status grado-tunnel.service --no-pager | head -8
+grep -c '^CLOUDFLARED_TOKEN=..' /etc/grado.env   # 1 = token present
+journalctl -u grado-tunnel.service --no-pager -n 30
+```
+
 ## What still needs work before real data
 
 Honest status, so nobody assumes this is production-ready:

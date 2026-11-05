@@ -72,7 +72,7 @@ jobs:
             --instance-ids "${{ env.INSTANCE_ID }}" \
             --document-name AWS-RunShellScript \
             --timeout-seconds 600 \
-            --parameters "{\"commands\":[\"set -e\",\"aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REPO }}\",\"docker pull $IMG\",\"docker tag $IMG grado-api:prod\",\"sed -i '/^APP_VERSION=/d' /etc/grado.env && echo APP_VERSION=$TAG >> /etc/grado.env\",\"systemctl restart grado-api\",\"sleep 12\",\"curl -s http://127.0.0.1:8080/healthz\"]}" \
+            --parameters "{\"commands\":[\"set -e\",\"aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REPO }}\",\"docker pull $IMG\",\"docker tag $IMG grado-api:prod\",\"sed -i '/^APP_VERSION=/d' /etc/grado.env && echo APP_VERSION=$TAG >> /etc/grado.env\",\"systemctl restart grado-api\",\"systemctl enable --now grado-tunnel\",\"sleep 12\",\"curl -s http://127.0.0.1:8080/healthz\"]}" \
             --query Command.CommandId --output text)
           echo "command=$CMD_ID"
           for i in $(seq 1 20); do
