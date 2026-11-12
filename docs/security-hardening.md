@@ -37,6 +37,10 @@ entrega real de correos de recuperación, ni la base de datos.
 | 4 | Throttle por identificador+IP, sin límite global por IP | Media | **Corregido** (60/min por IP) |
 | 5 | `TRUSTED_PROXIES` sin verificar en producción | Media si está vacío | **Corregido** 2026-11-12 (incluye el gateway de Docker `172.17.0.1`) |
 | 6 | Cabeceras de endurecimiento ausentes y versión expuesta | Baja | **Corregido** salvo `/healthz` (la SPA usa `version`) |
+| 8 | Docentes leían la ficha completa (salud, acudientes) de cualquier estudiante | Alta (Ley 1581) | **Corregido** 2026-11-12 (solo identidad sin `manage-students`) |
+| 9 | Alertas académicas de un estudiante sin acotar al curso del docente | Media | **Corregido** 2026-11-12 |
+| 10 | Go 1.26.5 con 17 CVE de la librería estándar; Alpine 3.20 sin soporte | Media | **Corregido** (Go 1.26.11, Alpine 3.24, `govulncheck` limpio) |
+| 11 | Fotos aceptaban cualquier contenido (HTML, SVG) | Baja | **Corregido** (solo JPG/PNG/WebP/GIF por bytes reales) |
 | 7 | `X-Forwarded-For` tomado por la izquierda (falsificable) | Alta al fijar `TRUSTED_PROXIES` | **Corregido** (se toma el salto confiable más a la derecha) |
 
 ## Lo que está bien (verificado)
