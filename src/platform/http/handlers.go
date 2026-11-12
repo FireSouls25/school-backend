@@ -1559,7 +1559,36 @@ func handleGetStudent(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		if !fullStudentProfile(r.Context(), deps.Auth, subject, id) {
+			st = studentIdentity(st)
+		}
 		writeJSON(w, http.StatusOK, st)
+	}
+}
+
+// fullStudentProfile reports whether the caller may read the whole
+// record: contact data, guardians and health (sensitive data under Ley
+// 1581). Only those who manage the record (secretaría, directivos) and
+// the student themself do; a teacher sees the identity alone.
+func fullStudentProfile(ctx context.Context, auth roles.Authorizer, subject, studentID string) bool {
+	if subject == studentID {
+		return true
+	}
+	ok, err := auth.Can(ctx, subject, roles.PermissionManageStudents)
+	return err == nil && ok
+}
+
+// studentIdentity keeps only what identifies a student in class: names,
+// group and lifecycle. Everything else stays with the record's managers.
+func studentIdentity(st students.Student) students.Student {
+	return students.Student{
+		ID:       st.ID,
+		Slug:     st.Slug,
+		Names:    st.Names,
+		Surnames: st.Surnames,
+		ClassID:  st.ClassID,
+		IsNew:    st.IsNew,
+		Status:   st.Status,
 	}
 }
 
