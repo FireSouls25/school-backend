@@ -84,6 +84,7 @@ type Services struct {
 	Academics    *academics.Service
 	Warnings     *warnings.Service
 	Observations *observations.Service
+	Permits      *permits.Service
 	Notify       *notify.Service
 	Audit        *audit.Service
 	Teachers     *teachers.Service
