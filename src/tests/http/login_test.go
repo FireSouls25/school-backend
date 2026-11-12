@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,5 +228,62 @@ func TestSecurityHeaders(t *testing.T) {
 		if got := health.Header().Get("Cache-Control"); got != "" {
 			t.Errorf("healthz Cache-Control = %q, want unset", got)
 		}
+	}
+}
+
+// The web SPA keeps its refresh token in the HttpOnly cookie only: an
+// injected script on that origin can never read it from JSON. Native
+// webviews (another site, no cookie) still get the body copy.
+func TestRefreshTokenCookieOnlyForWebOrigin(t *testing.T) {
+	const web = "https://fractalschool.app"
+	h := loginStackWith(t, func(d *httpapi.Dependencies) {
+		d.CookieOnlyOrigins = []string{web}
+		d.AllowedOrigins = []string{web, "https://tauri.localhost"}
+	})
+	login := func(origin string) (*httptest.ResponseRecorder, map[string]any) {
+		req := httptest.NewRequest(http.MethodPost, "/v1/login", strings.NewReader(`{"identifier":"admin","password":"admin123*"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec, out
+	}
+
+	rec, out := login(web)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("web login status = %d", rec.Code)
+	}
+	if v, ok := out["refreshToken"]; ok && v != "" {
+		t.Errorf("web body refreshToken = %v, want omitted", v)
+	}
+	if refreshCookie(rec).Value == "" {
+		t.Error("web login set no refresh cookie")
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Errorf("Allow-Credentials = %q, want true", got)
+	}
+
+	// The cookie alone rotates the pair, again without a body copy.
+	req := httptest.NewRequest(http.MethodPost, "/v1/refresh", strings.NewReader(`{}`))
+	req.Header.Set("Origin", web)
+	req.AddCookie(refreshCookie(rec))
+	rot := httptest.NewRecorder()
+	h.ServeHTTP(rot, req)
+	var rotated map[string]any
+	_ = json.Unmarshal(rot.Body.Bytes(), &rotated)
+	if rot.Code != http.StatusOK || rotated["token"] == "" {
+		t.Fatalf("cookie refresh status = %d %s", rot.Code, rot.Body.String())
+	}
+	if v, ok := rotated["refreshToken"]; ok && v != "" {
+		t.Errorf("web refresh body refreshToken = %v, want omitted", v)
+	}
+
+	_, native := login("https://tauri.localhost")
+	if native["refreshToken"] == "" || native["refreshToken"] == nil {
+		t.Error("native login lost the body refresh token")
 	}
 }

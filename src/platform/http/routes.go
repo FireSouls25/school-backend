@@ -31,6 +31,10 @@ func MiddlewareCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 				return
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+			// Credentials let the allowed SPA send and receive the HttpOnly
+			// refresh cookie. Safe only because the origin is an exact
+			// allow-list match, never a wildcard or a reflected unknown.
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Vary", "Origin")
 			if r.Method == http.MethodOptions {
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")

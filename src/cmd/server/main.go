@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -125,6 +126,7 @@ func main() {
 		RecoveryLogTokens: !cfg.Env.IsProduction(),
 		AllowDevIdentity:  !cfg.Env.IsProduction(),
 		SecureCookies:     cfg.Env.IsProduction(),
+		CookieOnlyOrigins: cookieOnlyOrigins(cfg.PublicURL),
 		Subjects:          application.Services.Subjects,
 		TAttendance:       application.Services.TAttendance,
 		AllowedOrigins:    cfg.AllowedOrigins,
@@ -133,4 +135,14 @@ func main() {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+// cookieOnlyOrigins turns PUBLIC_URL (the web SPA) into the origin whose
+// refresh token travels only in the HttpOnly cookie.
+func cookieOnlyOrigins(publicURL string) []string {
+	u, err := url.Parse(strings.TrimSpace(publicURL))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return nil
+	}
+	return []string{u.Scheme + "://" + u.Host}
 }

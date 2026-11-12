@@ -89,6 +89,10 @@ type Dependencies struct {
 	// RecoveryLogTokens logs raw reset tokens (development only, until
 	// mail/WhatsApp delivery lands). Never enable in production.
 	RecoveryLogTokens bool
+	// CookieOnlyOrigins are browser origins that keep the refresh token
+	// in the HttpOnly cookie only (never echoed in JSON). Production sets
+	// the web SPA (PUBLIC_URL); native webviews keep the JSON copy.
+	CookieOnlyOrigins []string
 	// SecureCookies forces Secure on the refresh cookie and enables
 	// HSTS. True in production, where TLS ends at Cloudflare and the
 	// process only sees plain HTTP.

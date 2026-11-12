@@ -43,8 +43,23 @@ type refreshRequest struct {
 type refreshResponse struct {
 	Token            string `json:"token"`
 	ExpiresAt        string `json:"expiresAt"`
-	RefreshToken     string `json:"refreshToken"`
+	RefreshToken     string `json:"refreshToken,omitempty"`
 	RefreshExpiresAt string `json:"refreshExpiresAt"`
+}
+
+// bodyRefresh is the refresh token to echo in JSON: empty for browser
+// origins that run on the cookie alone (the web SPA), so a script
+// injected into that page can never read a long-lived token. Native
+// clients (Tauri webviews live on another site, where the SameSite
+// cookie does not travel) still get it in the body.
+func bodyRefresh(deps Dependencies, r *http.Request, token string) string {
+	origin := r.Header.Get("Origin")
+	for _, o := range deps.CookieOnlyOrigins {
+		if origin != "" && origin == o {
+			return ""
+		}
+	}
+	return token
 }
 
 // logoutRequest revokes refresh tokens. Empty revokes the presented one;
@@ -256,7 +271,7 @@ func handleLogin(deps Dependencies, limit, ipLimit *loginLimiter) http.HandlerFu
 		writeJSON(w, http.StatusOK, loginResponse{
 			Token:            token,
 			ExpiresAt:        expiresAt.UTC().Format(time.RFC3339),
-			RefreshToken:     refresh,
+			RefreshToken:     bodyRefresh(deps, r, refresh),
 			RefreshExpiresAt: refreshExp.UTC().Format(time.RFC3339),
 			Subject:          u.ID,
 			Roles:            rs,
@@ -344,7 +359,7 @@ func handleRefresh(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, refreshResponse{
 			Token:            access,
 			ExpiresAt:        accessExp.UTC().Format(time.RFC3339),
-			RefreshToken:     refresh,
+			RefreshToken:     bodyRefresh(deps, r, refresh),
 			RefreshExpiresAt: refreshExp.UTC().Format(time.RFC3339),
 		})
 	}
