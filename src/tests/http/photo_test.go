@@ -88,7 +88,7 @@ func TestStudentPhotoFlow(t *testing.T) {
 		t.Fatalf("bad base64 status = %d, want 400", rec.Code)
 	}
 	rec = doRequest(t, h, http.MethodPut, "/v1/students/"+studentID+"/photo", adminSubject,
-		`{"data":"`+strings.Repeat("A", 3<<20)+`"}`)
+		`{"data":"`+base64.StdEncoding.EncodeToString(append(append([]byte{}, tinyPNG...), make([]byte, 2<<20)...))+`"}`)
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized status = %d, want 413", rec.Code)
 	}
@@ -96,6 +96,14 @@ func TestStudentPhotoFlow(t *testing.T) {
 		`{"data":"`+strings.Repeat("A", 4<<20)+`"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("over-cap status = %d, want 400", rec.Code)
+	}
+	// Not an image: HTML or SVG disguised as a photo is refused.
+	for _, fake := range []string{"<html><script>alert(1)</script></html>", `<svg xmlns="http://www.w3.org/2000/svg"/>`} {
+		rec = doRequest(t, h, http.MethodPut, "/v1/students/"+studentID+"/photo", adminSubject,
+			`{"data":"data:image/png;base64,`+base64.StdEncoding.EncodeToString([]byte(fake))+`"}`)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "http.err_photo_format") {
+			t.Fatalf("fake image status = %d %s, want 400 photo format", rec.Code, rec.Body.String())
+		}
 	}
 
 	// Unknown students 404 on both verbs.

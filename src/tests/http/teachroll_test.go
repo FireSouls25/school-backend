@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -186,7 +187,8 @@ func TestTeacherPhotoFlow(t *testing.T) {
 		t.Fatalf("teacher upload status = %d, want 403", rec.Code)
 	}
 
-	rec = doRequest(t, h, http.MethodPut, "/v1/teachers/"+profID+"/photo", adminSubject, `{"data":"aGk="}`)
+	pngB64 := base64.StdEncoding.EncodeToString(tinyPNG)
+	rec = doRequest(t, h, http.MethodPut, "/v1/teachers/"+profID+"/photo", adminSubject, `{"data":"`+pngB64+`"}`)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("upload status = %d, want 204: %s", rec.Code, rec.Body.String())
 	}
@@ -198,7 +200,7 @@ func TestTeacherPhotoFlow(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode photo: %v", err)
 	}
-	if out["data"] != "aGk=" {
+	if out["data"] != pngB64 {
 		t.Fatalf("photo = %v, want the uploaded bytes", out)
 	}
 }

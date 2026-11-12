@@ -95,7 +95,7 @@ func TestProductionDisablesDemoData(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("DATABASE_URL", "postgres://localhost/gradedb")
 	t.Setenv("SEED_DEMO", "true")
-	t.Setenv("AUTH_SECRET", "prod-secret-for-suite-only")
+	t.Setenv("AUTH_SECRET", "prod-secret-for-suite-only-0123456789abcdef")
 
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -358,7 +358,7 @@ func TestOwnerBootstrapFromEnv(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("DATABASE_URL", "postgres://u:p@h/db?sslmode=disable")
-	t.Setenv("AUTH_SECRET", "test-secret-for-validation-only")
+	t.Setenv("AUTH_SECRET", "test-secret-for-validation-only-0123456789")
 	cfg, err = config.FromEnv()
 	if err != nil {
 		t.Fatalf("FromEnv: %v", err)

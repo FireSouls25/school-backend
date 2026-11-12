@@ -182,6 +182,7 @@
   "warning.gravity.moderate": "Tipo 2",
   "warning.gravity.severe": "Tipo 3",
   "http.err_bad_request": "Solicitud inválida",
+  "http.err_photo_format": "La foto debe ser una imagen JPG, PNG, WebP o GIF",
   "http.err_unauthorized": "Autenticación requerida",
   "http.err_forbidden": "Acceso denegado",
   "http.err_not_found": "Recurso no encontrado",

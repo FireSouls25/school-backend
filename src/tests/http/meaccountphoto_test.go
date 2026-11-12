@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"grade/src/core/roles"
@@ -34,8 +35,10 @@ func decodeMePhoto(t *testing.T, body []byte) map[string]string {
 }
 
 func bigPhotoPayload() string {
-	// ~3 MiB decoded: past the 2 MiB cap of every photo store.
-	return `{"data":"` + base64.StdEncoding.EncodeToString(make([]byte, 3<<20)) + `"}`
+	// A real PNG header plus ~2.2 MiB: a valid image past the 2 MiB cap
+	// of every photo store, still under the 4 MiB body limit.
+	big := append(append([]byte{}, tinyPNG...), make([]byte, 2<<20+200<<10)...)
+	return `{"data":"` + base64.StdEncoding.EncodeToString(big) + `"}`
 }
 
 func TestMyPhotoFallsThroughToAccount(t *testing.T) {
@@ -107,8 +110,8 @@ func TestMyPhotoStoredInAccountWithoutTeacher(t *testing.T) {
 
 	// Too big: honest 400 from the policy, nothing stored.
 	rec = doRequest(t, h, http.MethodPut, "/v1/me/photo", accountID, bigPhotoPayload())
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("big photo status = %d, want 400", rec.Code)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "photo_too_large") {
+		t.Fatalf("big photo status = %d %s, want 400 photo too large", rec.Code, rec.Body.String())
 	}
 }
 

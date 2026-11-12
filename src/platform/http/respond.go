@@ -22,6 +22,7 @@ type ErrorBody struct {
 // Codes not listed fall back to 500.
 var statusByCode = map[string]int{
 	"http.err_bad_request":  http.StatusBadRequest,
+	"http.err_photo_format": http.StatusBadRequest,
 	"http.err_unauthorized": http.StatusUnauthorized,
 	"http.err_forbidden":    http.StatusForbidden,
 	"http.err_not_found":    http.StatusNotFound,

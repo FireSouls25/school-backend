@@ -442,7 +442,23 @@ func decodePhotoBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
-// photoBytes strips an optional data-URL prefix and decodes base64.
+// errPhotoFormat renders 400 when an upload is not a raster image.
+var errPhotoFormat = codedError{"http.err_photo_format"}
+
+// photoTypes are the formats the SPA can show in <img>. Anything else
+// (HTML, SVG, PDF, executables renamed .jpg) is refused at the door, so
+// stored bytes always match what the photo endpoints claim to serve.
+var photoTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
+	"image/gif":  true,
+}
+
+// photoBytes strips an optional data-URL prefix, decodes base64 and
+// checks the real content type (sniffed from the bytes, never trusted
+// from the prefix). Errors are coded: bad base64 → 400 bad request,
+// wrong format → 400 photo format.
 func photoBytes(raw string) ([]byte, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -451,7 +467,14 @@ func photoBytes(raw string) ([]byte, error) {
 	if i := strings.Index(raw, ","); i >= 0 && strings.Contains(raw[:i], "base64") {
 		raw = raw[i+1:]
 	}
-	return base64.StdEncoding.DecodeString(raw)
+	data, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, errBadRequest
+	}
+	if !photoTypes[http.DetectContentType(data)] {
+		return nil, errPhotoFormat
+	}
+	return data, nil
 }
 
 // handlePutPhoto stores (or clears, when empty) a student photo.
@@ -463,7 +486,7 @@ func handlePutPhoto(deps Dependencies) http.HandlerFunc {
 		}
 		data, err := photoBytes(body.Data)
 		if err != nil {
-			WriteError(w, r, errBadRequest)
+			WriteError(w, r, err)
 			return
 		}
 		if err := deps.Students.PutPhoto(r.Context(), chi.URLParam(r, "id"), students.Photo{Data: data}); err != nil {
@@ -1023,7 +1046,7 @@ func handlePutTeacherPhoto(deps Dependencies) http.HandlerFunc {
 		}
 		data, err := photoBytes(body.Data)
 		if err != nil {
-			WriteError(w, r, errBadRequest)
+			WriteError(w, r, err)
 			return
 		}
 		if err := deps.Teachers.PutPhoto(r.Context(), chi.URLParam(r, "id"), teachers.Photo{Data: data}); err != nil {
@@ -1419,7 +1442,7 @@ func handlePutMyTeacherPhoto(deps Dependencies) http.HandlerFunc {
 		}
 		data, err := photoBytes(body.Data)
 		if err != nil {
-			WriteError(w, r, errBadRequest)
+			WriteError(w, r, err)
 			return
 		}
 		subject, _ := SubjectFrom(r.Context())
@@ -1498,7 +1521,7 @@ func handlePutMyPhoto(deps Dependencies) http.HandlerFunc {
 		}
 		data, err := photoBytes(body.Data)
 		if err != nil {
-			WriteError(w, r, errBadRequest)
+			WriteError(w, r, err)
 			return
 		}
 		subject, _ := SubjectFrom(r.Context())

@@ -41,6 +41,9 @@ func ParseTrustedProxies(raw string) (bool, error) {
 // fallback when AUTH_ACCESS_TTL is unset.
 const DefaultAuthTTL = 12 * time.Hour
 
+// MinAuthSecretLength is the shortest AUTH_SECRET production accepts.
+const MinAuthSecretLength = 32
+
 // DefaultAuthAccessTTL is the short API bearer lifetime: a stolen access
 // token dies on its own in minutes.
 const DefaultAuthAccessTTL = 15 * time.Minute
@@ -350,6 +353,11 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.AuthSecret) == "" {
 		return fmt.Errorf("config: AUTH_SECRET is required when APP_ENV=production")
+	}
+	// HS256 keys shorter than the hash output are guessable offline from
+	// any captured token: demand at least 32 bytes (openssl rand -base64 32).
+	if len(strings.TrimSpace(c.AuthSecret)) < MinAuthSecretLength {
+		return fmt.Errorf("config: AUTH_SECRET must be at least %d characters in production", MinAuthSecretLength)
 	}
 	return nil
 }
