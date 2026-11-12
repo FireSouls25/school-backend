@@ -2175,11 +2175,21 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 				if rejectClosedYearForGroup(r, w, deps, sess.ClassGroupID) {
 					return
 				}
+				// A prior permission outranks the teacher: present,
+				// absent, late and evasion are all rejected for a covered
+				// student. Only the permission mark itself is accepted.
+				if mark != sessions.MarkAbsencePermission && deps.Permits != nil {
+					if p, ok, err := deps.Permits.PermitOf(r.Context(), studentID, sess.ClassGroupID, sess.Date); err == nil && ok &&
+						(p.SubjectID == "" || sess.SubjectID == "" || p.SubjectID == sess.SubjectID) {
+						WriteError(w, r, permits.ErrLocked)
+						return
+					}
+				}
 			}
 		}
 		rev, err := deps.Sessions.RecordMark(
 			r.Context(), sessionID,
-			strings.TrimSpace(body.StudentID), mark, subject,
+			studentID, mark, subject,
 			strings.TrimSpace(body.Note),
 		)
 		if err != nil {
