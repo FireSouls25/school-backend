@@ -594,6 +594,26 @@ CREATE TABLE IF NOT EXISTS session_defenses (
 
 CREATE INDEX IF NOT EXISTS idx_session_defenses_session_id ON session_defenses (session_id);
 
+-- Permisos previos de asistencia: la secretar├¡a o la administraci├│n
+-- dejan cubierto a un estudiante antes de la clase. La lista del docente
+-- lo muestra en n├│mina pero bloqueado: el servidor no acepta presente
+-- ni falta porque el permiso manda. Un subject_id vac├¡o cubre todo el
+-- d├¡a del sal├│n.
+CREATE TABLE IF NOT EXISTS attendance_permits (
+    id             UUID PRIMARY KEY,
+    student_id     UUID NOT NULL REFERENCES students (id) ON DELETE CASCADE,
+    class_group_id UUID NOT NULL REFERENCES class_groups (id) ON DELETE CASCADE,
+    subject_id     TEXT NOT NULL DEFAULT '',
+    day            DATE NOT NULL,
+    reason         TEXT NOT NULL,
+    created_by     TEXT NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_permits_student_id ON attendance_permits (student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_permits_class_group_id ON attendance_permits (class_group_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_permits_day ON attendance_permits (day);
+
 -- Permiso docente: ampliar los CHECK de estado existentes.
 ALTER TABLE teacher_attendance DROP CONSTRAINT IF EXISTS teacher_attendance_status_check;
 ALTER TABLE teacher_attendance ADD CONSTRAINT teacher_attendance_status_check
