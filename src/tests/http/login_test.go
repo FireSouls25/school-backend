@@ -203,3 +203,29 @@ func TestLoginThrottlePerAddress(t *testing.T) {
 		t.Fatal("70 identifiers from one address never throttled")
 	}
 }
+
+// Every response is hardened; personal data under /v1 is never cached and
+// HSTS only goes out where TLS is guaranteed.
+func TestSecurityHeaders(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		h := loginStackWith(t, func(d *httpapi.Dependencies) { d.SecureCookies = secure })
+		api := doRequest(t, h, http.MethodPost, "/v1/login", "", `{"identifier":"admin","password":"admin123*"}`)
+		for k, want := range map[string]string{
+			"X-Content-Type-Options": "nosniff",
+			"X-Frame-Options":        "DENY",
+			"Referrer-Policy":        "no-referrer",
+			"Cache-Control":          "no-store",
+		} {
+			if got := api.Header().Get(k); got != want {
+				t.Errorf("%s = %q, want %q", k, got, want)
+			}
+		}
+		if got := api.Header().Get("Strict-Transport-Security") != ""; got != secure {
+			t.Errorf("HSTS present = %v, want %v", got, secure)
+		}
+		health := doRequest(t, h, http.MethodGet, "/healthz", "", "")
+		if got := health.Header().Get("Cache-Control"); got != "" {
+			t.Errorf("healthz Cache-Control = %q, want unset", got)
+		}
+	}
+}

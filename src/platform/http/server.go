@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,10 +22,37 @@ import (
 func Router(deps Dependencies, i18nSvc *i18n.Service) http.Handler {
 	r := chi.NewRouter()
 	r.Use(MiddlewareLocale(i18nSvc))
+	r.Use(MiddlewareSecurityHeaders(deps.SecureCookies))
 	r.Use(MiddlewareCORS(deps.AllowedOrigins))
 	r.Use(MiddlewareAccessLog)
 	routes(r, deps)
 	return r
+}
+
+// MiddlewareSecurityHeaders sets hardening headers on every response.
+// The API only serves JSON and photos to its own SPA, so nothing may
+// sniff, frame or leak referrers. Responses under /v1 carry personal data
+// of minors (Ley 1581): no-store keeps them out of browser and proxy
+// caches. HSTS only goes out when TLS is guaranteed (production behind
+// Cloudflare): over plain-HTTP development browsers would ignore it.
+func MiddlewareSecurityHeaders(hsts bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "no-referrer")
+			h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+			h.Set("Cross-Origin-Resource-Policy", "same-site")
+			if hsts {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			if strings.HasPrefix(r.URL.Path, "/v1/") {
+				h.Set("Cache-Control", "no-store")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // statusRecorder captures the status code for the access log.
