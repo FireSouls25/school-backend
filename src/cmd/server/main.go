@@ -48,7 +48,7 @@ func main() {
 	// school and one user's typos can lock everyone out.
 	if cfg.Env.IsProduction() && strings.TrimSpace(cfg.TrustedProxies) == "" {
 		slog.Warn("TRUSTED_PROXIES is empty in production: login throttling keys on the tunnel address, not the client",
-			"hint", "TRUSTED_PROXIES=127.0.0.1/32,::1/128")
+			"hint", "TRUSTED_PROXIES=127.0.0.1/32,::1/128,172.17.0.1/32")
 	}
 
 	// Legacy placeholder identities (X-Subject-ID), when configured.

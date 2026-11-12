@@ -185,8 +185,11 @@ journalctl -u grado-tunnel.service --no-pager -n 30
 
 Because the tunnel terminates TLS, the Go process sees plain HTTP:
 derive nothing security-sensitive from `r.TLS`. Force `Secure` on the
-refresh cookie in production, and set `TRUSTED_PROXIES=127.0.0.1/32,::1/128`
-so the throttle reads the real client from `X-Forwarded-For`. The
+refresh cookie in production, and set `TRUSTED_PROXIES=127.0.0.1/32,::1/128,172.17.0.1/32`
+so the throttle reads the real client from `X-Forwarded-For`. The API
+runs in Docker published on `127.0.0.1:8080`, so requests reach the
+container from the bridge gateway (`172.17.0.1`), not loopback: that
+address must be trusted too. Set on the instance 2026-11-12. The
 external review and its remediation checklist live in
 `docs/security-hardening.md`.
 

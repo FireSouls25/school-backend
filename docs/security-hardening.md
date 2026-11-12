@@ -31,11 +31,11 @@ entrega real de correos de recuperación, ni la base de datos.
 
 | # | Hallazgo | Severidad | Estado |
 |---|---|---|---|
-| 1 | HTTP sin redirección a HTTPS y sin HSTS | Media | HSTS en código; falta **Always Use HTTPS** en Cloudflare |
+| 1 | HTTP sin redirección a HTTPS y sin HSTS | Media | **Corregido** (HSTS en código y Always Use HTTPS en Cloudflare) |
 | 2 | Cookie de refresh sin `Secure` detrás del túnel | Media | **Corregido** (`SecureCookies` en producción) |
 | 3 | Enumeración de usuarios por tiempo de respuesta | Baja–Media | **Corregido** (bcrypt de descarte; correo en segundo plano) |
 | 4 | Throttle por identificador+IP, sin límite global por IP | Media | **Corregido** (60/min por IP) |
-| 5 | `TRUSTED_PROXIES` sin verificar en producción | Media si está vacío | Aviso al arrancar; falta confirmar el valor en la instancia |
+| 5 | `TRUSTED_PROXIES` sin verificar en producción | Media si está vacío | **Corregido** 2026-11-12 (incluye el gateway de Docker `172.17.0.1`) |
 | 6 | Cabeceras de endurecimiento ausentes y versión expuesta | Baja | **Corregido** salvo `/healthz` (la SPA usa `version`) |
 | 7 | `X-Forwarded-For` tomado por la izquierda (falsificable) | Alta al fijar `TRUSTED_PROXIES` | **Corregido** (se toma el salto confiable más a la derecha) |
 
@@ -268,7 +268,7 @@ valor desplegado.
 1. Confirmar en la instancia:
    `grep '^TRUSTED_PROXIES=' /etc/grado.env`.
 2. Si Cloudflare Tunnel entrega desde `127.0.0.1`/`::1`, configurar
-   `TRUSTED_PROXIES=127.0.0.1/32,::1/128` (el proxy local). Si en el
+   `TRUSTED_PROXIES=127.0.0.1/32,::1/128,172.17.0.1/32` (el proxy local). Si en el
    futuro se expone el origen a la red, usar los rangos de Cloudflare.
 3. Documentar el valor en `docs/deploy.md` junto al túnel y añadir una
    comprobación de arranque que avise en producción si está vacío.
@@ -347,9 +347,9 @@ tocar datos.
 
 ## Checklist de despliegue
 
-- [ ] Activar **Always Use HTTPS** en Cloudflare para la zona.
+- [x] Activar **Always Use HTTPS** en Cloudflare para la zona.
 - [x] Añadir HSTS (el API lo envía en producción; el SPA en `_headers`).
-- [ ] Fijar `TRUSTED_PROXIES=127.0.0.1/32,::1/128` (o el proxy real).
+- [x] Fijar `TRUSTED_PROXIES=127.0.0.1/32,::1/128,172.17.0.1/32` (o el proxy real).
 - [x] Forzar `Secure` en la cookie de refresh en producción.
 - [x] Igualar el tiempo de login para cuentas inexistentes.
 - [x] Añadir límite de login agregado por IP.
