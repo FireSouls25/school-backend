@@ -56,6 +56,7 @@ type Dependencies struct {
 	Users        *users.Service
 	Warnings     *warnings.Service
 	Observations *observations.Service
+	Permits      *permits.Service
 	Notify       *notify.Service
 	Sessions     *sessions.Service
 	Statistics   *statistics.Service
