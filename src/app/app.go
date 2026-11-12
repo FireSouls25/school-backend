@@ -53,6 +53,7 @@ type Stores struct {
 	Academics    academics.Store
 	Warnings     warnings.Store
 	Observations observations.Store
+	Permits      permits.Store
 	Notify       notify.Store
 	Audit        audit.Store
 	Teachers     teachers.Store
