@@ -3625,7 +3625,30 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		// Permits granted before the class open already marked: the
+		// teacher sees "Con permiso" from the first load.
+		applyPermitsToSession(r.Context(), deps, sess, subject)
 		writeJSON(w, http.StatusCreated, sess)
+	}
+}
+
+// applyPermitsToSession folds every prior permit of the session's group
+// and day into the fresh roll call. Best effort: marks that are already
+// on permission report no change and stay as they are.
+func applyPermitsToSession(ctx context.Context, deps Dependencies, sess sessions.Session, author string) {
+	if deps.Permits == nil || deps.Sessions == nil {
+		return
+	}
+	list, err := deps.Permits.ForGroupOnDate(ctx, sess.ClassGroupID, sess.Date)
+	if err != nil {
+		return
+	}
+	for _, p := range list {
+		if !p.AppliesTo(sess.ClassGroupID, sess.SubjectID) {
+			continue
+		}
+		_, _ = deps.Sessions.RecordMark(ctx, sess.ID, p.StudentID,
+			sessions.MarkAbsencePermission, author, p.Reason)
 	}
 }
 
