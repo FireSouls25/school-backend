@@ -594,11 +594,11 @@ CREATE TABLE IF NOT EXISTS session_defenses (
 
 CREATE INDEX IF NOT EXISTS idx_session_defenses_session_id ON session_defenses (session_id);
 
--- Permisos previos de asistencia: la secretar├¡a o la administraci├│n
+-- Permisos previos de asistencia: la secretaría o la administración
 -- dejan cubierto a un estudiante antes de la clase. La lista del docente
--- lo muestra en n├│mina pero bloqueado: el servidor no acepta presente
--- ni falta porque el permiso manda. Un subject_id vac├¡o cubre todo el
--- d├¡a del sal├│n.
+-- lo muestra en nómina pero bloqueado: el servidor no acepta presente
+-- ni falta porque el permiso manda. Un subject_id vacío cubre todo el
+-- día del salón.
 CREATE TABLE IF NOT EXISTS attendance_permits (
     id             UUID PRIMARY KEY,
     student_id     UUID NOT NULL REFERENCES students (id) ON DELETE CASCADE,
