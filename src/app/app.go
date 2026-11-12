@@ -170,6 +170,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Academics = pg.NewAcademicsStore(db)
 		s.Warnings = pg.NewWarningsStore(db)
 		s.Observations = pg.NewObservationsStore(db)
+		s.Permits = pg.NewPermitsStore(db)
 		s.Notify = pg.NewNotifyStore(db)
 		s.Audit = pg.NewAuditStore(db)
 		s.Teachers = pg.NewTeachersStore(db)
