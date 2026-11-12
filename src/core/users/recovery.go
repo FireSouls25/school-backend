@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -138,7 +139,17 @@ type RecoveryService struct {
 	ttl     time.Duration
 	mailer  Mailer
 	baseURL string
+
+	// sending tracks background deliveries (WaitDeliveries).
+	sending sync.WaitGroup
 }
+
+// mailTimeout bounds one background delivery attempt.
+const mailTimeout = 20 * time.Second
+
+// WaitDeliveries blocks until every background delivery started so far
+// has finished. Tests and graceful shutdown use it; requests never do.
+func (s *RecoveryService) WaitDeliveries() { s.sending.Wait() }
 
 // NewRecoveryService wires recovery onto the account service. A nil store
 // gets memory; non-positive TTL defaults to one hour. Mailer and baseURL
@@ -189,13 +200,23 @@ func (s *RecoveryService) Request(ctx context.Context, identifier string) (strin
 	}
 	_ = s.resets.DeleteExpired(ctx, now)
 	// Deliver the link when a mailer is wired and the account has an
-	// address. Best effort and silent: the HTTP layer always answers
-	// 204, so delivery must never change the response (no enumeration,
-	// no confusion). Links use the hash-router shape (/#/recuperar/).
-	// Misconfiguration surfaces at boot, not per request.
+	// address. Best effort, silent and in the background: the HTTP layer
+	// always answers 204, so delivery must change neither the response
+	// nor its timing (waiting on the mail provider only for real accounts
+	// would reveal which identifiers exist). Links use the hash-router
+	// shape (/#/recuperar/). Misconfiguration surfaces at boot.
 	if s.mailer != nil && s.baseURL != "" && strings.TrimSpace(u.Email) != "" {
 		link := s.baseURL + "/#/recuperar/" + token
-		_ = s.mailer.SendResetLink(ctx, u.Email, link)
+		to := u.Email
+		mctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mailTimeout)
+		s.sending.Add(1)
+		go func() {
+			defer s.sending.Done()
+			defer cancel()
+			if err := s.mailer.SendResetLink(mctx, to, link); err != nil {
+				slog.Warn("recovery mail failed", "error", err)
+			}
+		}()
 	}
 	return token, nil
 }

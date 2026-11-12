@@ -33,6 +33,7 @@ func TestRecoveryDeliversLinkWhenMailerWired(t *testing.T) {
 	if err != nil || tok == "" {
 		t.Fatalf("request = %q, %v", tok, err)
 	}
+	rec.WaitDeliveries()
 	if len(m.link) != 1 {
 		t.Fatalf("mails = %d, want 1", len(m.link))
 	}
@@ -59,6 +60,7 @@ func TestRecoveryVerifyNamesAccount(t *testing.T) {
 	if err != nil || tok == "" {
 		t.Fatalf("request = %q, %v", tok, err)
 	}
+	rec.WaitDeliveries()
 	username, masked, err := rec.Verify(ctx, tok)
 	if err != nil {
 		t.Fatalf("verify = %v", err)
@@ -92,6 +94,7 @@ func TestRecoveryMailFailureStaysSilent(t *testing.T) {
 	if tok, err := rec.Request(ctx, "admin"); err != nil || tok == "" {
 		t.Fatalf("request with broken mailer = %q, %v", tok, err)
 	}
+	rec.WaitDeliveries()
 }
 
 func TestRecoverySilentWithoutMailer(t *testing.T) {
@@ -106,4 +109,34 @@ func TestRecoverySilentWithoutMailer(t *testing.T) {
 	if tok, err := rec.Request(ctx, "nadie"); err != nil || tok != "" {
 		t.Fatalf("unknown request = %q, %v", tok, err)
 	}
+}
+
+// blockingMailer holds every delivery until released.
+type blockingMailer struct{ release chan struct{} }
+
+func (b blockingMailer) SendResetLink(context.Context, string, string) error {
+	<-b.release
+	return nil
+}
+
+// Waiting on the mail provider only for real accounts would let response
+// time reveal which identifiers exist: Request must not wait for it.
+func TestRecoveryRequestDoesNotWaitForMail(t *testing.T) {
+	svc, _ := newRecovery(t)
+	seedActive(t, svc)
+	m := blockingMailer{release: make(chan struct{})}
+	rec := users.NewRecoveryService(svc, users.NewMemoryRecoveryStore(), time.Hour, m, "https://fractalschool.app")
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = rec.Request(context.Background(), "admin")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Request blocked on mail delivery")
+	}
+	close(m.release)
+	rec.WaitDeliveries()
 }

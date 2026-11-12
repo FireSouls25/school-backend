@@ -2,8 +2,11 @@ package users
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -33,6 +36,21 @@ type Service struct {
 	store         Store
 	cost          int
 	retentionDays int
+
+	dummyOnce sync.Once
+	dummy     []byte
+}
+
+// burnCompare spends one bcrypt comparison against a throwaway hash, so
+// "no such account" costs the same as "wrong password" and response time
+// does not reveal which usernames exist.
+func (s *Service) burnCompare(password string) {
+	s.dummyOnce.Do(func() {
+		var raw [16]byte
+		_, _ = rand.Read(raw[:])
+		s.dummy, _ = bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(raw[:])), s.cost)
+	})
+	_ = bcrypt.CompareHashAndPassword(s.dummy, []byte(password))
 }
 
 // NewService wires a Service onto the provided Store, hashing passwords
@@ -167,10 +185,8 @@ func (s *Service) Authenticate(ctx context.Context, identifier, password string)
 	} else {
 		u, err = s.store.ByUsername(ctx, normalizeUsername(identifier))
 	}
-	if err != nil {
-		return User{}, ErrInvalidCredentials
-	}
-	if !u.Active || u.DeletedAt != nil {
+	if err != nil || !u.Active || u.DeletedAt != nil {
+		s.burnCompare(password)
 		return User{}, ErrInvalidCredentials
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
