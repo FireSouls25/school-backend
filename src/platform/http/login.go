@@ -66,6 +66,10 @@ const (
 	loginWindow           = time.Minute
 	refreshLimitPerMinute = 30
 	recoverLimitPerMinute = 5
+	// loginIPLimitPerMinute caps attempts per address across every
+	// identifier: the per-account limit alone lets one IP sweep usernames.
+	// High enough for a school NAT at the start of the day.
+	loginIPLimitPerMinute = 60
 )
 
 // loginLimiter caps guesses per key and window. Backed by the shared
@@ -131,15 +135,22 @@ func loginKey(l *loginLimiter, r *http.Request, identifier string) string {
 	return strings.ToLower(strings.TrimSpace(identifier)) + "|" + l.clientIP(r)
 }
 
+// loginIPKey scopes the aggregate budget to one address.
+func loginIPKey(l *loginLimiter, r *http.Request) string {
+	return "login|" + l.clientIP(r)
+}
+
 // refreshKey scopes rotation throttling per address.
 func refreshKey(l *loginLimiter, r *http.Request) string {
 	return "refresh|" + l.clientIP(r)
 }
 
-// setRefreshCookie stores the rotation token HttpOnly. Secure follows the
-// connection (dev over http keeps working); SameSite=Lax keeps top-level
-// navigation working while blocking third-party sends.
-func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expiresAt time.Time) {
+// setRefreshCookie stores the rotation token HttpOnly. Secure is forced in
+// production (secure=true): behind Cloudflare Tunnel the process sees
+// plain HTTP, so r.TLS alone would drop the flag. Development over http
+// keeps working. SameSite=Lax keeps top-level navigation working while
+// blocking third-party sends.
+func setRefreshCookie(w http.ResponseWriter, r *http.Request, secure bool, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    token,
@@ -147,19 +158,21 @@ func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expi
 		Expires:  expiresAt,
 		MaxAge:   int(time.Until(expiresAt).Seconds()),
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   secure || r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-// clearRefreshCookie drops the rotation cookie (logout).
-func clearRefreshCookie(w http.ResponseWriter) {
+// clearRefreshCookie drops the rotation cookie (logout) with the same
+// attributes it was set with.
+func clearRefreshCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    "",
 		Path:     "/v1",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -177,7 +190,7 @@ func refreshFromRequest(r *http.Request, body refreshRequest) string {
 // refresh token. Unknown identifier, wrong password and inactive account
 // all answer 401 with the same code (no enumeration); over-limit callers
 // get 429.
-func handleLogin(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
+func handleLogin(deps Dependencies, limit, ipLimit *loginLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body loginRequest
 		if !decodeJSON(w, r, &body) {
@@ -189,12 +202,19 @@ func handleLogin(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 		}
 		now := time.Now()
 		key := loginKey(limit, r, body.Identifier)
+		ipKey := loginIPKey(ipLimit, r)
 		ip := limit.clientIP(r)
+		if !ipLimit.check(r.Context(), ipKey, now) {
+			slog.Warn("login throttled by address", "ip", ip)
+			WriteError(w, r, errRateLimited)
+			return
+		}
 		if !limit.check(r.Context(), key, now) {
 			slog.Warn("login throttled", "identifier", strings.ToLower(strings.TrimSpace(body.Identifier)), "ip", ip)
 			WriteError(w, r, errRateLimited)
 			return
 		}
+		ipLimit.record(r.Context(), ipKey, ip, true, now)
 		u, err := deps.Users.Authenticate(r.Context(), body.Identifier, body.Password)
 		if err != nil {
 			limit.record(r.Context(), key, ip, false, now)
@@ -232,7 +252,7 @@ func handleLogin(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 			return
 		}
 		_ = deps.Tokens.DeleteExpired(r.Context(), now)
-		setRefreshCookie(w, r, refresh, refreshExp)
+		setRefreshCookie(w, r, deps.SecureCookies, refresh, refreshExp)
 		writeJSON(w, http.StatusOK, loginResponse{
 			Token:            token,
 			ExpiresAt:        expiresAt.UTC().Format(time.RFC3339),
@@ -320,7 +340,7 @@ func handleRefresh(deps Dependencies, limit *loginLimiter) http.HandlerFunc {
 			return
 		}
 		_ = deps.Tokens.DeleteExpired(r.Context(), now)
-		setRefreshCookie(w, r, refresh, refreshExp)
+		setRefreshCookie(w, r, deps.SecureCookies, refresh, refreshExp)
 		writeJSON(w, http.StatusOK, refreshResponse{
 			Token:            access,
 			ExpiresAt:        accessExp.UTC().Format(time.RFC3339),
@@ -341,7 +361,7 @@ func handleLogout(deps Dependencies) http.HandlerFunc {
 			}
 		}
 		if deps.Tokens == nil {
-			clearRefreshCookie(w)
+			clearRefreshCookie(w, deps.SecureCookies)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -365,7 +385,7 @@ func handleLogout(deps Dependencies) http.HandlerFunc {
 				return
 			}
 			_ = deps.Tokens.RevokeAllForUser(r.Context(), subject)
-			clearRefreshCookie(w)
+			clearRefreshCookie(w, deps.SecureCookies)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -377,7 +397,7 @@ func handleLogout(deps Dependencies) http.HandlerFunc {
 				slog.Warn("logout with invalid refresh", "error", err)
 			}
 		}
-		clearRefreshCookie(w)
+		clearRefreshCookie(w, deps.SecureCookies)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

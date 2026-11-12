@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +18,12 @@ import (
 )
 
 func loginStack(t *testing.T) http.Handler {
+	t.Helper()
+	return loginStackWith(t, nil)
+}
+
+// loginStackWith lets a test adjust the wiring (e.g. production cookies).
+func loginStackWith(t *testing.T, tweak func(*httpapi.Dependencies)) http.Handler {
 	t.Helper()
 	ctx := context.Background()
 	roleSvc := roles.NewService(roles.NewMemoryStore())
@@ -43,14 +50,18 @@ func loginStack(t *testing.T) http.Handler {
 		t.Fatalf("seed owner: %v", err)
 	}
 	must(roleSvc.Assign(ctx, ownerUser.ID, roles.RoleOwner))
-	return httpapi.Router(httpapi.Dependencies{
+	deps := httpapi.Dependencies{
 		Auth:             roleSvc,
 		Roles:            roleSvc,
 		RolesSvc:         roleSvc,
 		Users:            usersSvc,
 		Tokens:           tokens,
 		AllowDevIdentity: true,
-	}, newI18n(t))
+	}
+	if tweak != nil {
+		tweak(&deps)
+	}
+	return httpapi.Router(deps, newI18n(t))
 }
 
 func loginAs(t *testing.T, h http.Handler, identifier, password string) (int, map[string]any) {
@@ -140,5 +151,55 @@ func TestLoginThrottle(t *testing.T) {
 	}
 	if last != http.StatusTooManyRequests {
 		t.Fatalf("12th guess status = %d, want 429", last)
+	}
+}
+
+// Behind Cloudflare Tunnel the process sees plain HTTP: production must
+// still mark the refresh cookie Secure, on login and on logout.
+func TestRefreshCookieSecureInProduction(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		h := loginStackWith(t, func(d *httpapi.Dependencies) { d.SecureCookies = secure })
+		body := `{"identifier":"admin","password":"admin123*"}`
+		rec := doRequest(t, h, http.MethodPost, "/v1/login", "", body)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("login status = %d", rec.Code)
+		}
+		if got := refreshCookie(rec).Secure; got != secure {
+			t.Errorf("login cookie Secure = %v, want %v", got, secure)
+		}
+		out := doRequest(t, h, http.MethodPost, "/v1/logout", "", "")
+		if got := refreshCookie(out).Secure; got != secure {
+			t.Errorf("logout cookie Secure = %v, want %v", got, secure)
+		}
+	}
+}
+
+func refreshCookie(rec *httptest.ResponseRecorder) *http.Cookie {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "refresh_token" {
+			return c
+		}
+	}
+	return &http.Cookie{}
+}
+
+// One address sweeping usernames hits the aggregate budget even though
+// every identifier stays under its own limit.
+func TestLoginThrottlePerAddress(t *testing.T) {
+	h := loginStack(t)
+	limited := false
+	for i := 0; i < 70; i++ {
+		body, _ := json.Marshal(map[string]string{"identifier": fmt.Sprintf("nadie%d", i), "password": "x1234567"})
+		rec := doRequest(t, h, http.MethodPost, "/v1/login", "", string(body))
+		if rec.Code == http.StatusTooManyRequests {
+			if i < 60 {
+				t.Fatalf("throttled after %d attempts, want 60 allowed", i)
+			}
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("70 identifiers from one address never throttled")
 	}
 }

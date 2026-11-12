@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"grade/src/app"
@@ -41,6 +42,13 @@ func main() {
 	if err != nil {
 		slog.Error("invalid trusted proxies", "error", err)
 		os.Exit(1)
+	}
+	// Behind Cloudflare Tunnel every request arrives from loopback: with
+	// no trusted proxies the throttle sees one client for the whole
+	// school and one user's typos can lock everyone out.
+	if cfg.Env.IsProduction() && strings.TrimSpace(cfg.TrustedProxies) == "" {
+		slog.Warn("TRUSTED_PROXIES is empty in production: login throttling keys on the tunnel address, not the client",
+			"hint", "TRUSTED_PROXIES=127.0.0.1/32,::1/128")
 	}
 
 	// Legacy placeholder identities (X-Subject-ID), when configured.
@@ -116,6 +124,7 @@ func main() {
 		Recovery:          application.Services.Recovery,
 		RecoveryLogTokens: !cfg.Env.IsProduction(),
 		AllowDevIdentity:  !cfg.Env.IsProduction(),
+		SecureCookies:     cfg.Env.IsProduction(),
 		Subjects:          application.Services.Subjects,
 		TAttendance:       application.Services.TAttendance,
 		AllowedOrigins:    cfg.AllowedOrigins,

@@ -62,3 +62,24 @@ func TestClientIPTrustsOnlyProxies(t *testing.T) {
 		t.Error("invalid proxy accepted, want error")
 	}
 }
+
+// A client can send its own X-Forwarded-For; the proxy appends the real
+// address. Only the rightmost untrusted hop is believable.
+func TestClientIPIgnoresSpoofedForwardedFor(t *testing.T) {
+	trusted, err := throttle.ParseTrusted("127.0.0.1/32, 192.168.0.0/16")
+	if err != nil {
+		t.Fatalf("ParseTrusted: %v", err)
+	}
+	if got := throttle.ClientIP("127.0.0.1:1234", "6.6.6.6, 203.0.113.9", trusted); got != "203.0.113.9" {
+		t.Errorf("spoofed chain = %q, want real client 203.0.113.9", got)
+	}
+	if got := throttle.ClientIP("127.0.0.1:1234", "203.0.113.9, 192.168.1.10", trusted); got != "203.0.113.9" {
+		t.Errorf("chain through trusted hop = %q, want 203.0.113.9", got)
+	}
+	if got := throttle.ClientIP("127.0.0.1:1234", "203.0.113.9, basura", trusted); got != "127.0.0.1" {
+		t.Errorf("garbage hop = %q, want RemoteAddr host", got)
+	}
+	if _, err := throttle.ParseTrusted("no-es-ip"); err == nil {
+		t.Error("invalid proxy accepted, want error")
+	}
+}

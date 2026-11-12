@@ -138,9 +138,12 @@ func (s *Service) Record(ctx context.Context, key, ip string, success bool, now 
 const windowDefault = time.Hour
 
 // ClientIP resolves the caller IP: RemoteAddr by default; when the peer
-// is a trusted proxy, the leftmost X-Forwarded-For entry wins. Unknown
-// or unparsable values fall back to RemoteAddr (fail closed to a
-// throttleable key, never empty).
+// is a trusted proxy, X-Forwarded-For is walked from the right and the
+// first entry that is not itself a trusted proxy wins. Proxies such as
+// Cloudflare append the address they saw, so everything to the left is
+// whatever the client sent: taking the leftmost entry would let anyone
+// pick their own throttle key. Unknown or unparsable values fall back to
+// RemoteAddr (fail closed to a throttleable key, never empty).
 func ClientIP(remoteAddr, forwardedFor string, trusted *Nets) string {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
@@ -152,14 +155,17 @@ func ClientIP(remoteAddr, forwardedFor string, trusted *Nets) string {
 	if trusted == nil || !trusted.Contains(host) {
 		return host
 	}
-	first := strings.TrimSpace(strings.SplitN(forwardedFor, ",", 2)[0])
-	if first == "" {
-		return host
+	parts := strings.Split(forwardedFor, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		hop := strings.TrimSpace(parts[i])
+		if net.ParseIP(hop) == nil {
+			return host
+		}
+		if !trusted.Contains(hop) {
+			return hop
+		}
 	}
-	if ip := net.ParseIP(first); ip == nil {
-		return host
-	}
-	return first
+	return host
 }
 
 // Nets holds trusted proxy IPs/CIDRs for ClientIP.
