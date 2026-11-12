@@ -241,6 +241,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Academics:    academicsSvc,
 			Warnings:     warningsSvc,
 			Observations: observationsSvc,
+			Permits:      permitsSvc,
 			Notify:       notifySvc,
 			Audit:        auditSvc,
 			Teachers:     teachersSvc,
