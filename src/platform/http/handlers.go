@@ -2164,6 +2164,7 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 		}
 		subject, _ := SubjectFrom(r.Context())
 		sessionID := chi.URLParam(r, "sessionID")
+		studentID := strings.TrimSpace(body.StudentID)
 		var sess sessions.Session
 		if deps.Sessions != nil {
 			if s, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
