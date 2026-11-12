@@ -1840,6 +1840,18 @@ func handleStudentAcademicAlerts(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, errForbidden)
 			return
 		}
+		// Same scope as warnings and incidents: a pure teacher reads the
+		// alerts of students in the groups they teach, nobody else's.
+		if deps.Students != nil {
+			st, err := deps.Students.ByID(r.Context(), id)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			if teacherStudentScope(r, w, deps, st) {
+				return
+			}
+		}
 		list, err := deps.Academics.ForStudent(r.Context(), id)
 		if err != nil {
 			WriteError(w, r, err)
