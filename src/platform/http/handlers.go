@@ -3516,12 +3516,7 @@ func handleMySchedule(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		subject, _ := SubjectFrom(r.Context())
-		teacherID := subject
-		if deps.Users != nil {
-			if u, err := deps.Users.ByID(r.Context(), subject); err == nil && u.TeacherID != "" {
-				teacherID = u.TeacherID
-			}
-		}
+		teacherID := callerTeacherID(r.Context(), deps, subject)
 		entries, err := deps.Schedules.EntriesForTeacherOnDay(r.Context(), teacherID, time.Weekday(n))
 		if err != nil {
 			WriteError(w, r, err)
