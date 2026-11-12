@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 go build \
         -o /out/server ./src/cmd/server
 
 # --- runtime ---------------------------------------------------------------
-FROM alpine:3.20
+FROM alpine:3.24
 
 # ca-certificates: outbound TLS (Postgres, WhatsApp API later).
 # tzdata: Colombia dates (America/Bogota) are printed by the domain.
