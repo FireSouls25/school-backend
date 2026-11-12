@@ -2197,7 +2197,7 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		if sess.ID != "" && (mark == sessions.MarkAbsence || mark == sessions.MarkLate || mark == sessions.MarkEvasion) {
-			notifyAttendance(r.Context(), deps, sess, strings.TrimSpace(body.StudentID), mark)
+			notifyAttendance(r.Context(), deps, sess, studentID, mark)
 		}
 		writeJSON(w, http.StatusCreated, rev)
 	}
