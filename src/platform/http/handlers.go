@@ -558,7 +558,7 @@ type teacherUpdate struct {
 	Phone             *string    `json:"Phone"`
 	Address           *string    `json:"Address"`
 	Birthplace        *string    `json:"Birthplace"`
-	Birthdate         *time.Time `json:"Birthdate"`
+	Birthdate         *jsonDate  `json:"Birthdate"`
 	Email             *string    `json:"Email"`
 	Sex               *string    `json:"Sex"`
 	MedicalConditions *string    `json:"MedicalConditions"`
@@ -590,7 +590,7 @@ func handleUpdateTeacher(deps Dependencies) http.HandlerFunc {
 		applyIfSet(&current.Address, body.Address)
 		applyIfSet(&current.Birthplace, body.Birthplace)
 		if body.Birthdate != nil {
-			current.Birthdate = *body.Birthdate
+			current.Birthdate = body.Birthdate.Time
 		}
 		applyIfSet(&current.Email, body.Email)
 		applyIfSet(&current.Sex, body.Sex)
@@ -618,7 +618,7 @@ type myTeacherUpdate struct {
 	Phone             *string    `json:"Phone"`
 	Address           *string    `json:"Address"`
 	Birthplace        *string    `json:"Birthplace"`
-	Birthdate         *time.Time `json:"Birthdate"`
+	Birthdate         *jsonDate  `json:"Birthdate"`
 	Email             *string    `json:"Email"`
 	Sex               *string    `json:"Sex"`
 	MedicalConditions *string    `json:"MedicalConditions"`
@@ -648,7 +648,7 @@ func handleUpdateMyTeacher(deps Dependencies) http.HandlerFunc {
 		applyIfSet(&current.Address, body.Address)
 		applyIfSet(&current.Birthplace, body.Birthplace)
 		if body.Birthdate != nil {
-			current.Birthdate = *body.Birthdate
+			current.Birthdate = body.Birthdate.Time
 		}
 		applyIfSet(&current.Email, body.Email)
 		applyIfSet(&current.Sex, body.Sex)
@@ -2060,6 +2060,33 @@ type markRequest struct {
 	StudentID string `json:"studentID"`
 	Mark      string `json:"mark"`
 	Note      string `json:"note"`
+}
+
+// jsonDate accepts a calendar date as the SPA's date inputs produce it
+// ("2006-01-02") as well as a full RFC 3339 timestamp. Installed apps send
+// the short form and cannot be updated in place, so both stay valid.
+type jsonDate struct{ time.Time }
+
+func (d *jsonDate) UnmarshalJSON(b []byte) error {
+	var raw string
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		d.Time = time.Time{}
+		return nil
+	}
+	if t, err := time.Parse("2006-01-02", raw); err == nil {
+		d.Time = t
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return err
+	}
+	d.Time = t
+	return nil
 }
 
 // decodeJSON parses a bounded, strict JSON body.
