@@ -204,6 +204,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	tattendanceSvc := tattendance.NewService(s.TAttendance)
 	warningsSvc := warnings.NewService(s.Warnings)
 	observationsSvc := observations.NewService(s.Observations)
+	permitsSvc := permits.NewService(s.Permits)
 	notifySvc := notify.NewService(s.Notify)
 	incidentsSvc := incidents.NewService(s.Incidents)
 	academicsSvc := academics.NewService(s.Academics)
