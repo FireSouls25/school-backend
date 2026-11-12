@@ -106,5 +106,7 @@ See `docs/architecture.md` for the design principles,
 `docs/deploy.md` for setup and deployment,
 `docs/users.md` for login accounts and passwords,
 `docs/students.md` for the student profile and history feature,
-`docs/teachers.md` for teachers and subjects, and
-`docs/school.md` for years, class-groups and enrollments.
+`docs/teachers.md` for teachers and subjects,
+`docs/school.md` for years, class-groups and enrollments, and
+`docs/security-hardening.md` for the external security review and its
+remediation checklist.

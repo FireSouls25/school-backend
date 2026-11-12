@@ -183,6 +183,13 @@ grep -c '^CLOUDFLARED_TOKEN=..' /etc/grado.env   # 1 = token present
 journalctl -u grado-tunnel.service --no-pager -n 30
 ```
 
+Because the tunnel terminates TLS, the Go process sees plain HTTP:
+derive nothing security-sensitive from `r.TLS`. Force `Secure` on the
+refresh cookie in production, and set `TRUSTED_PROXIES=127.0.0.1/32,::1/128`
+so the throttle reads the real client from `X-Forwarded-For`. The
+external review and its remediation checklist live in
+`docs/security-hardening.md`.
+
 ## What still needs work before real data
 
 Honest status, so nobody assumes this is production-ready:
