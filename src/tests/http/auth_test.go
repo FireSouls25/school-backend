@@ -359,6 +359,7 @@ func testStack(t *testing.T) http.Handler {
 		Users:            users.NewServiceWithCost(users.NewMemoryStore(), bcrypt.MinCost),
 		Warnings:         warningsSvc,
 		Observations:     observationsSvc,
+		Permits:          permits.NewService(permits.NewMemoryStore()),
 		Sessions:         sessionsSvc,
 		Statistics:       statsSvc,
 		Dashboard:        dashSvc,
