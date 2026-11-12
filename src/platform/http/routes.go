@@ -137,6 +137,18 @@ func routes(r *chi.Mux, deps Dependencies) {
 		// student themself, checked inside the handler.
 		r.Get("/statistics/student/{studentID}", handleStudentReport(deps))
 
+		// Prior permissions: the office covers a student before class and
+		// the teacher list locks the marks. Omitted roll calls expose the
+		// blocks whose class ended without a call.
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/attendance/omitted", handleOmittedRollcalls(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
+			Get("/attendance/permits", handleListPermits(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordDefenses)).
+			Post("/attendance/permits", handleGrantPermit(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordDefenses)).
+			Delete("/attendance/permits/{id}", handleRevokePermit(deps))
+
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
 			Post("/sessions/{sessionID}/marks", handleRecordMark(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).
