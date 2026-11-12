@@ -24,6 +24,7 @@ import (
 	"grade/src/core/incidents"
 	"grade/src/core/notify"
 	"grade/src/core/observations"
+	"grade/src/core/permits"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
