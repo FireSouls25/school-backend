@@ -2,7 +2,7 @@
 # Two stages keep the toolchain (and its CVEs) out of the runtime image.
 
 # --- build -----------------------------------------------------------------
-FROM golang:1.26-alpine AS build
+FROM golang:1.26.11-alpine3.24 AS build
 
 WORKDIR /src
 
