@@ -139,6 +139,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Academics:     academics.NewMemoryStore(),
 		Warnings:      warnings.NewMemoryStore(),
 		Observations:  observations.NewMemoryStore(),
+		Permits:       permits.NewMemoryStore(),
 		Notify:        notify.NewMemoryStore(),
 		Audit:         audit.NewMemoryStore(),
 		Teachers:      teachers.NewMemoryStore(),
