@@ -2179,7 +2179,7 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 				// absent, late and evasion are all rejected for a covered
 				// student. Only the permission mark itself is accepted.
 				if mark != sessions.MarkAbsencePermission && deps.Permits != nil {
-					if p, ok, err := deps.Permits.PermitOf(r.Context(), studentID, sess.ClassGroupID, sess.Date); err == nil && ok &&
+					if p, ok, err := deps.Permits.PermitOf(r.Context(), studentID, sess.ClassGroupID, sess.Date.In(schoolZone)); err == nil && ok &&
 						(p.SubjectID == "" || sess.SubjectID == "" || p.SubjectID == sess.SubjectID) {
 						WriteError(w, r, permits.ErrLocked)
 						return
@@ -3639,7 +3639,7 @@ func applyPermitsToSession(ctx context.Context, deps Dependencies, sess sessions
 	if deps.Permits == nil || deps.Sessions == nil {
 		return
 	}
-	list, err := deps.Permits.ForGroupOnDate(ctx, sess.ClassGroupID, sess.Date)
+	list, err := deps.Permits.ForGroupOnDate(ctx, sess.ClassGroupID, sess.Date.In(schoolZone))
 	if err != nil {
 		return
 	}
