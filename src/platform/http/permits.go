@@ -208,7 +208,7 @@ func applyPermitToSessions(ctx context.Context, deps Dependencies, p permits.Per
 		return
 	}
 	for _, sess := range list {
-		if !sameSchoolDay(sess.Date, p.Date) || !p.AppliesTo(sess.ClassGroupID, sess.SubjectID) {
+		if !sameSchoolDay(sess.Date.In(schoolZone), p.Date) || !p.AppliesTo(sess.ClassGroupID, sess.SubjectID) {
 			continue
 		}
 		_, _ = deps.Sessions.RecordMark(ctx, sess.ID, p.StudentID,
@@ -314,7 +314,7 @@ func handleOmittedRollcalls(deps Dependencies) http.HandlerFunc {
 // (empty subject) or a permit-style call without subject covers it.
 func blockWasCalled(list []sessions.Session, groupID, subjectID string, day time.Time) bool {
 	for _, sess := range list {
-		if sess.ClassGroupID != groupID || !sameSchoolDay(sess.Date, day) {
+		if sess.ClassGroupID != groupID || !sameSchoolDay(sess.Date.In(schoolZone), day) {
 			continue
 		}
 		if sess.SubjectID == "" || subjectID == "" || sess.SubjectID == subjectID {
