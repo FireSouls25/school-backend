@@ -8,9 +8,14 @@ import (
 	"time"
 )
 
-// todayISO is the day the permission endpoints normalize against.
+// cot mirrors the server's school zone: Colombia, fixed UTC-5.
+var cot = time.FixedZone("COT", -5*60*60)
+
+// todayISO is the day the permission endpoints normalize against: the
+// school's wall clock (Colombia, UTC-5), never UTC, so an evening class
+// keeps the same calendar day the office used when granting the permit.
 func todayISO() string {
-	return time.Now().UTC().Format("2006-01-02")
+	return time.Now().In(cot).Format("2006-01-02")
 }
 
 // TestPriorPermitsFlow covers grant, listing by group and by student,
@@ -184,9 +189,10 @@ func TestOmittedRollcalls(t *testing.T) {
 		t.Errorf("future omitted len = %d, want 0", len(empty))
 	}
 
-	// Calling the class removes it from the omitted list.
+	// Calling the class removes it from the omitted list. Noon UTC is
+	// 07:00 in the school zone, so the session keeps the queried day.
 	rec = doRequest(t, h, http.MethodPost, "/v1/sessions/open", teacherSubject,
-		`{"classGroupID":"`+realGroupID+`","period":1,"date":"`+day+`T00:00:00Z","subjectID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}`)
+		`{"classGroupID":"`+realGroupID+`","period":1,"date":"2026-01-19T12:00:00Z","subjectID":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("open session status = %d, want 201: %s", rec.Code, rec.Body.String())
 	}
