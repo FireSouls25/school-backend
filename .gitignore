@@ -20,3 +20,6 @@ coverage.out
 .env.*
 # ...except the documented reference, which is meant to be committed.
 !.env.example
+
+# Índice local de opencode
+lancedb/
