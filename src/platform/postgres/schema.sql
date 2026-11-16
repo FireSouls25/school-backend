@@ -271,6 +271,11 @@ CREATE INDEX IF NOT EXISTS idx_teacher_attendance_revisions_teacher_day
 ALTER TABLE warnings ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_warnings_group_id ON warnings (group_id);
 
+-- Descargo del estudiante sobre cada llamado de atención.
+ALTER TABLE warnings ADD COLUMN IF NOT EXISTS defense    TEXT NOT NULL DEFAULT '';
+ALTER TABLE warnings ADD COLUMN IF NOT EXISTS defense_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE warnings ADD COLUMN IF NOT EXISTS defense_at TIMESTAMPTZ;
+
 
 CREATE TABLE IF NOT EXISTS subjects (
     id          UUID PRIMARY KEY,

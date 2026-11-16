@@ -106,6 +106,7 @@ var statusByCode = map[string]int{
 	"tattendance.err_empty_day":       http.StatusBadRequest,
 	"tattendance.err_invalid_range":   http.StatusBadRequest,
 	"warnings.err_not_found":          http.StatusNotFound,
+	"warnings.err_defense_too_long":   http.StatusBadRequest,
 
 	"academics.err_invalid_student":  http.StatusBadRequest,
 	"academics.err_invalid_teacher":  http.StatusBadRequest,

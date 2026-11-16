@@ -36,6 +36,12 @@ type Warning struct {
 	// GroupID correlates warnings issued in one batch; empty for single
 	// warnings.
 	GroupID string
+	// Defense is the student's written defense ("descargo") about this
+	// llamado; empty when none was recorded. DefenseBy and DefenseAt say
+	// who wrote it down and when.
+	Defense   string
+	DefenseBy string
+	DefenseAt time.Time
 }
 
 // Input carries the fields needed to issue a warning. The ID is assigned
@@ -122,4 +128,7 @@ type Store interface {
 	// RevisionsForWarning returns every correction of one warning,
 	// newest first.
 	RevisionsForWarning(ctx context.Context, warningID string) ([]Revision, error)
+	// SetDefense records (or, with empty text, clears) the student's
+	// defense about one warning and returns the updated warning.
+	SetDefense(ctx context.Context, id, text, by string, at time.Time) (Warning, error)
 }

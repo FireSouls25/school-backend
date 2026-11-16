@@ -183,6 +183,8 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/warnings/mine", handleMyWarnings(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).
 			Put("/warnings/{id}", handleCorrectWarning(deps))
+		r.With(RequirePermission(deps.Auth, roles.PermissionRecordDefenses)).
+			Post("/warnings/{id}/defense", handleWarningDefense(deps))
 		// Academic alerts: teachers raise, admins and secretaries read,
 		// admins review.
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordIncidents)).

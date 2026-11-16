@@ -61,6 +61,33 @@ func TestSituationWarningFlow(t *testing.T) {
 	if !hasID("/v1/students/"+studentID+"/warnings", aToken) {
 		t.Error("el llamado no aparece en la ficha del estudiante")
 	}
+	// Descargo del llamado: el docente lo registra en su salón y la ficha
+	// lo muestra; texto vacío lo borra.
+	code, raw = flowDo(t, h, http.MethodPost, "/v1/warnings/"+id+"/defense", dToken, `{"text":"No fui yo, estaba en enfermería"}`)
+	if code != http.StatusOK {
+		t.Fatalf("defense = %d, want 200: %s", code, raw)
+	}
+	defenseOf := func() string {
+		t.Helper()
+		_, r := flowDo(t, h, http.MethodGet, "/v1/students/"+studentID+"/warnings", aToken, "")
+		var list []map[string]any
+		_ = json.Unmarshal(r, &list)
+		for _, w := range list {
+			if w["ID"] == id {
+				d, _ := w["Defense"].(string)
+				return d
+			}
+		}
+		return "?"
+	}
+	if got := defenseOf(); got != "No fui yo, estaba en enfermería" {
+		t.Errorf("Defense = %q", got)
+	}
+	code, _ = flowDo(t, h, http.MethodPost, "/v1/warnings/"+id+"/defense", dToken, `{"text":""}`)
+	if code != http.StatusOK || defenseOf() != "" {
+		t.Errorf("clear defense = %d, defense %q", code, defenseOf())
+	}
+
 	// El admin no registró nada: su lista propia no trae el del docente.
 	if hasID("/v1/warnings/mine", aToken) {
 		t.Error("/v1/warnings/mine del admin trae un llamado ajeno")

@@ -40,4 +40,6 @@ var (
 	ErrEmptyBatch = newError("warnings.err_empty_batch", "warnings: empty batch")
 	// ErrNotFound is returned when the requested warning does not exist.
 	ErrNotFound = newError("warnings.err_not_found", "warnings: not found")
+	// ErrDefenseTooLong is returned when the defense exceeds its limit.
+	ErrDefenseTooLong = newError("warnings.err_defense_too_long", "warnings: defense too long")
 )

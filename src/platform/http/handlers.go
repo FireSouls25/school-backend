@@ -1738,6 +1738,44 @@ func handleCorrectWarning(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// warningDefenseRequest is the student's defense about one llamado;
+// empty text clears it.
+type warningDefenseRequest struct {
+	Text string `json:"text"`
+}
+
+// handleWarningDefense records the student's defense ("descargo") about
+// one llamado. Staff with record-defenses write it; a pure teacher only
+// for llamados of the groups they teach.
+func handleWarningDefense(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var body warningDefenseRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		current, err := deps.Warnings.WarningByID(r.Context(), id)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if teacherGroupScope(r, w, deps, current.ClassID) {
+			return
+		}
+		if rejectClosedYearForGroup(r, w, deps, current.ClassID) {
+			return
+		}
+		subject, _ := SubjectFrom(r.Context())
+		updated, err := deps.Warnings.Defend(r.Context(), current.ID, body.Text, subject)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		recordAudit(deps, r, audit.ActionUpdate, audit.ResourceWarning, updated.ID, updated.StudentID, http.StatusOK)
+		writeJSON(w, http.StatusOK, enrichWarning(r.Context(), deps, updated))
+	}
+}
+
 // warningRevisionRow is one llamado correction with its author resolved.
 type warningRevisionRow struct {
 	WarningID  string `json:"WarningID"`

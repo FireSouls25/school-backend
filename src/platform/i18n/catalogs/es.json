@@ -68,6 +68,7 @@
   "warnings.err_empty_description": "La descripción del llamado es obligatoria",
   "warnings.err_invalid_snapshot": "Datos del estudiante al momento del evento inválidos",
   "warnings.err_not_found": "Llamado de atención no encontrado",
+  "warnings.err_defense_too_long": "El descargo es demasiado largo (máximo 1000 caracteres)",
   "warnings.err_invalid_group": "Grupo de llamado inválido",
   "warnings.err_empty_batch": "El llamado debe incluir al menos un estudiante",
   "tattendance.err_unknown_status": "Estado de asistencia desconocido",

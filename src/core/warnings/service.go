@@ -172,6 +172,23 @@ func (s *Service) Correct(ctx context.Context, id string, in Update) (Warning, e
 	return updated, nil
 }
 
+// Defend records the student's defense about one warning; empty text
+// clears it. The author is the authenticated caller.
+func (s *Service) Defend(ctx context.Context, id, text, by string) (Warning, error) {
+	id = strings.TrimSpace(id)
+	if _, err := uuid.Parse(id); err != nil {
+		return Warning{}, ErrNotFound
+	}
+	text = strings.TrimSpace(text)
+	if len([]rune(text)) > maxDefenseRunes {
+		return Warning{}, ErrDefenseTooLong
+	}
+	return s.store.SetDefense(ctx, id, text, strings.TrimSpace(by), time.Now().UTC())
+}
+
+// maxDefenseRunes caps the defense text: a short statement, not a file.
+const maxDefenseRunes = 1000
+
 // RevisionsForWarning returns every correction of one warning, newest
 // first.
 func (s *Service) RevisionsForWarning(ctx context.Context, warningID string) ([]Revision, error) {

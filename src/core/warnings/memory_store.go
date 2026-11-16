@@ -64,6 +64,22 @@ func (s *MemoryStore) Update(_ context.Context, w Warning) (Warning, error) {
 	return w, nil
 }
 
+// SetDefense implements Store.
+func (s *MemoryStore) SetDefense(_ context.Context, id, text, by string, at time.Time) (Warning, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w, ok := s.warnings[id]
+	if !ok {
+		return Warning{}, ErrNotFound
+	}
+	w.Defense, w.DefenseBy, w.DefenseAt = text, by, at
+	if text == "" {
+		w.DefenseBy, w.DefenseAt = "", time.Time{}
+	}
+	s.warnings[id] = w
+	return w, nil
+}
+
 // AddRevision implements Store.
 func (s *MemoryStore) AddRevision(_ context.Context, r Revision) (Revision, error) {
 	s.mu.Lock()

@@ -27,18 +27,21 @@ var _ warnings.Store = (*WarningsStore)(nil)
 const warningColumns = `id, student_id, class_id, teacher_id, happened_at,
 	gravity, title, description, group_id,
 	snap_names, snap_surnames, snap_document_id, snap_class_id,
-	snap_birthdate, snap_age, snap_caregiver_name, snap_caregiver_phone`
+	snap_birthdate, snap_age, snap_caregiver_name, snap_caregiver_phone,
+	defense, defense_by, defense_at`
 
 // scanWarning maps the current row (in warningColumns order) onto a Warning.
 func scanWarning(scan func(dest ...any) error) (warnings.Warning, error) {
 	var w warnings.Warning
 	var gravity string
 	var birthdate *time.Time
+	var defenseAt *time.Time
 	err := scan(
 		&w.ID, &w.StudentID, &w.ClassID, &w.TeacherID, &w.HappenedAt,
 		&gravity, &w.Title, &w.Description, &w.GroupID,
 		&w.Snapshot.Names, &w.Snapshot.Surnames, &w.Snapshot.DocumentID, &w.Snapshot.ClassID,
 		&birthdate, &w.Snapshot.Age, &w.Snapshot.CaregiverName, &w.Snapshot.CaregiverPhone,
+		&w.Defense, &w.DefenseBy, &defenseAt,
 	)
 	if err != nil {
 		return warnings.Warning{}, err
@@ -46,6 +49,9 @@ func scanWarning(scan func(dest ...any) error) (warnings.Warning, error) {
 	w.Gravity = warnings.Gravity(gravity)
 	if birthdate != nil {
 		w.Snapshot.Birthdate = *birthdate
+	}
+	if defenseAt != nil {
+		w.DefenseAt = *defenseAt
 	}
 	return w, nil
 }
@@ -215,6 +221,29 @@ func (s *WarningsStore) Update(ctx context.Context, w warnings.Warning) (warning
 			return warnings.Warning{}, warnings.ErrNotFound
 		}
 		return warnings.Warning{}, fmt.Errorf("postgres: update warning: %w", err)
+	}
+	return out, nil
+}
+
+// SetDefense implements warnings.Store.
+func (s *WarningsStore) SetDefense(ctx context.Context, id, text, by string, at time.Time) (warnings.Warning, error) {
+	var atArg *time.Time
+	if text != "" {
+		atArg = &at
+	} else {
+		by = ""
+	}
+	row := s.db.pool.QueryRow(ctx, `
+		UPDATE warnings SET defense = $2, defense_by = $3, defense_at = $4
+		WHERE id = $1
+		RETURNING `+warningColumns,
+		id, text, by, atArg)
+	out, err := scanWarning(row.Scan)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return warnings.Warning{}, warnings.ErrNotFound
+		}
+		return warnings.Warning{}, fmt.Errorf("postgres: set warning defense: %w", err)
 	}
 	return out, nil
 }
