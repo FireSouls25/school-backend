@@ -130,3 +130,23 @@ func TestNoClassDaysValidationAndKind(t *testing.T) {
 		t.Fatalf("Create error = %v, want ErrInvalidHoliday", err)
 	}
 }
+
+// Vacations between periods are not school days: the gap between the
+// second and the third period (18 to 26 July) has no classes to omit.
+func TestIsSchoolDayRespectsPeriods(t *testing.T) {
+	y := rangedYear()
+	for _, tc := range []struct {
+		day  time.Time
+		want bool
+	}{
+		{date(2026, 4, 17), true},  // last day of period 1
+		{date(2026, 4, 18), false}, // gap between periods
+		{date(2026, 7, 22), false}, // mid-year vacation
+		{date(2026, 7, 27), true},  // period 3 starts
+		{date(2026, 11, 27), true}, // last day of the year
+	} {
+		if got := y.IsSchoolDay(tc.day); got != tc.want {
+			t.Errorf("IsSchoolDay(%s) = %v, want %v", tc.day.Format("2006-01-02"), got, tc.want)
+		}
+	}
+}

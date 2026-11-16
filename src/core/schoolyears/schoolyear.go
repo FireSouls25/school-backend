@@ -141,7 +141,8 @@ func (y SchoolYear) DayKind(t time.Time) (holiday, noClass bool) {
 }
 
 // IsSchoolDay reports whether t is a school day in the year: inside the
-// date range and neither a holiday nor a marked no-class day. Weekday
+// date range and one of its periods, and neither a holiday nor a marked
+// no-class day. Weekday
 // filtering composes on top using schedule entries, since some schools
 // teach on Saturdays. Explicit roll calls stay allowed on non-school
 // days: the call is deliberate, so it records and counts.
@@ -150,6 +151,25 @@ func (y SchoolYear) IsSchoolDay(t time.Time) bool {
 	if y.StartDate.IsZero() || y.EndDate.IsZero() || !containsDate(d, y.StartDate, y.EndDate) {
 		return false
 	}
+	if !y.InPeriod(d) {
+		return false
+	}
 	holiday, noClass := y.DayKind(d)
 	return !holiday && !noClass
+}
+
+// InPeriod reports whether t falls inside one of the year's period
+// ranges. Vacations between periods are not school days. A year without
+// ranges (legacy data) counts every day of its date range.
+func (y SchoolYear) InPeriod(t time.Time) bool {
+	if len(y.PeriodRanges) == 0 {
+		return true
+	}
+	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	for _, r := range y.PeriodRanges {
+		if !r.Start.IsZero() && !r.End.IsZero() && containsDate(d, toDate(r.Start), toDate(r.End)) {
+			return true
+		}
+	}
+	return false
 }
