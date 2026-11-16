@@ -20,6 +20,7 @@ func TestRolePermissions(t *testing.T) {
 			role: roles.RoleTeacher,
 			want: []roles.Permission{
 				roles.PermissionRecordAttendance,
+				roles.PermissionRecordDefenses,
 				roles.PermissionRecordIncidents,
 				roles.PermissionViewClassStats,
 				roles.PermissionViewStudents,

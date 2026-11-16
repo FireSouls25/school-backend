@@ -1,5 +1,5 @@
 // Uniforme y descargos: el docente registra faltas de uniforme (checkbox
-// por estudiante, activo por defecto) y la secretaría/admin registra la
+// por estudiante, activo por defecto) y la secretaría, el admin y el docente registran la
 // defensa escrita ante una falta. Ambos viajan a reportes e historial.
 package e2e_test
 
@@ -110,11 +110,11 @@ func TestUniformAndDefenseFlow(t *testing.T) {
 		t.Fatalf("report sin UniformOK=false en la sesión: %s", raw)
 	}
 
-	// Descargos: el docente no puede, la secretaría y el admin sí.
+	// Descargos: el docente en su propia clase, la secretaría y el admin.
 	code, raw = flowDo(t, h, http.MethodPost, "/v1/sessions/"+sessionID+"/defenses", dToken,
 		`{"studentID":"`+studentID+`","text":"Llegué tarde por el bus"}`)
-	if code != http.StatusForbidden {
-		t.Fatalf("defense docente = %d, want 403: %s", code, raw)
+	if code != http.StatusCreated {
+		t.Fatalf("defense docente = %d, want 201: %s", code, raw)
 	}
 	code, raw = flowDo(t, h, http.MethodPost, "/v1/sessions/"+sessionID+"/defenses", sToken,
 		`{"studentID":"`+studentID+`","text":"Se varó el bus de la vereda"}`)

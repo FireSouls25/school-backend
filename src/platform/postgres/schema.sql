@@ -609,3 +609,90 @@ ALTER TABLE teacher_attendance ADD CONSTRAINT teacher_attendance_status_check
 ALTER TABLE teacher_attendance_revisions DROP CONSTRAINT IF EXISTS teacher_attendance_revisions_new_status_check;
 ALTER TABLE teacher_attendance_revisions ADD CONSTRAINT teacher_attendance_revisions_new_status_check
     CHECK (new_status IN ('present', 'absent', 'late', 'permission', 'replacement'));
+
+-- Llamados unificados: los formularios guardaron entre el 3 y el 16 de
+-- noviembre de 2026 en observations, que solo leía la página del
+-- docente. Se copian a warnings (mismo id, idempotente) para que la
+-- lista del admin, la ficha, las estadísticas y los avisos los vean.
+-- El título es el texto de la situación del manual; la nota pasa a la
+-- descripción. Tipo I, II y III quedan como mild, moderate y severe.
+INSERT INTO warnings (id, student_id, class_id, teacher_id, happened_at,
+    gravity, title, description, snap_names, snap_surnames,
+    snap_document_id, snap_class_id, snap_birthdate, snap_age,
+    snap_caregiver_name, snap_caregiver_phone)
+SELECT o.id, o.student_id, o.class_group_id, o.teacher_id,
+    (o.happened_on + TIME '12:00') AT TIME ZONE 'America/Bogota',
+    CASE o.kind WHEN 3 THEN 'severe' WHEN 2 THEN 'moderate' ELSE 'mild' END,
+    COALESCE(c.text, o.situation_id), o.note, s.names, s.surnames,
+    s.document_id, s.class_id, s.birthdate, -1,
+    s.caregiver_name, s.caregiver_phone
+FROM observations o
+JOIN students s ON s.id = o.student_id
+LEFT JOIN (VALUES
+    ('s1-01', 'Ser descortés con cualquiera de los miembros de la comunidad educativa'),
+    ('s1-02', 'Incumplir con tareas, trabajos, lecciones, talleres o actividades programadas por el profesor'),
+    ('s1-03', 'Impuntualidad a clase o demás actividades programadas por la institución'),
+    ('s1-04', 'Quedarse en el aula de clase en horas de descanso o en otras actividades programadas'),
+    ('s1-05', 'No entregar en el tiempo estipulado al padre de familia o acudiente las citaciones que la institución envía'),
+    ('s1-06', 'Presentarse a la institución sin los uniformes respectivos o incompletos'),
+    ('s1-07', 'Promover el desorden y el desaseo en corredores, aulas, restaurante, cancha, patio, durante los cambios de hora o durante las diferentes actividades programadas por la institución'),
+    ('s1-08', 'Interrumpir las clases con intervenciones como chistes, gestos o actitudes inoportunas que promuevan la indisciplina y el desorden de otros estudiantes'),
+    ('s1-09', 'Realizar excesivas demostraciones de afecto con compañeros de igual o diferente sexo'),
+    ('s1-10', 'Consumir alimentos en horas de clase'),
+    ('s1-11', 'Esconder las pertenencias de los miembros de la comunidad educativa'),
+    ('s1-12', 'Ingresar radios, reproductores de sonido, juegos electrónicos, gorras, pañoletas, piercing y demás objetos que no correspondan a las necesidades del quehacer escolar'),
+    ('s1-13', 'Realizar apuestas y juegos de azar o comercializar cualquier clase de productos sin autorización de la institución'),
+    ('s1-14', 'Obstaculizar premeditadamente el ingreso o la salida de las instalaciones de los estudiantes u otro miembro de la comunidad'),
+    ('s2-01', 'Reincidir sistemáticamente en la comisión de una o varias situaciones del tipo I'),
+    ('s2-02', 'Amenazar y/o agredir de palabra o de hecho, a cualquier integrante de la comunidad educativa'),
+    ('s2-03', 'Injuria, difamación u ofensas graves contra los miembros de la comunidad educativa'),
+    ('s2-04', 'Agresión grave física o moral contra los demás miembros de la comunidad educativa'),
+    ('s2-05', 'Realizar actos de discriminación de raza, etnia, religión, sexo, creencias culturales, orientación sexual, condición económica, pensamiento político, diversidad funcional, entre otros'),
+    ('s2-06', 'Promover o participar en desórdenes que deriven en atropello y atentados contra la integridad de las personas y los bienes privados o públicos'),
+    ('s2-07', 'Daños graves causados por uso indebido o intencional en las instalaciones, materiales o documentos que pertenezcan a la comunidad educativa o en los bienes de otros miembros de la institución'),
+    ('s2-08', 'Burlarse de los miembros de la comunidad educativa ya sea con palabras, gestos o acciones irrespetuosas'),
+    ('s2-09', 'Cometer fraude en las evaluaciones y/o trabajos académicos'),
+    ('s2-10', 'Falsificar o sustraer documentos públicos (certificados, constancias, boletines, documentos reglamentarios u oficiales)'),
+    ('s2-11', 'Negarse a vestir correctamente los uniformes de la institución'),
+    ('s2-12', 'La práctica o incitación de actos que pongan en riesgo o peligro la integridad física o vida de los miembros de la comunidad educativa'),
+    ('s2-13', 'Conformar y/o pertenecer a pandillas dentro y fuera de la institución'),
+    ('s2-14', 'Participar en actos de delincuencia o vandalismo'),
+    ('s2-15', 'Evadirse de clase o de la institución'),
+    ('s2-16', 'El incumplimiento de las sanciones impuestas'),
+    ('s2-17', 'Las amenazas directas o indirectas contra cualquier miembro de la comunidad educativa'),
+    ('s2-18', 'Faltar a clases y a actividades propias de la institución sin causa justificada'),
+    ('s2-19', 'Comportamiento inmoral o práctica de escenas morbosas y vulgares'),
+    ('s2-20', 'Evidenciar marcado desinterés en su rendimiento académico e incumplimiento reiterado de las actas de compromiso'),
+    ('s2-21', 'No presentar actividades de apoyo o nivelación'),
+    ('s2-22', 'Entorpecer el buen desarrollo de clase'),
+    ('s2-23', 'Porte de cualquier tipo de armas dentro de la institución'),
+    ('s2-24', 'Porte, distribución o consumo de drogas alucinógenas'),
+    ('s2-25', 'Hurto dentro de las instalaciones de la institución'),
+    ('s2-26', 'Destrucción premeditada de los implementos escolares, cuadernos, libros o trabajos de sus compañeros'),
+    ('s2-27', 'El constreñimiento hacia miembros de la comunidad educativa'),
+    ('s2-28', 'Ingresar y/o salir de la institución por lugares no autorizados y diferentes a la puerta principal de acceso'),
+    ('s2-29', 'Presentarse a la institución en estado de embriaguez o bajo el efecto de sustancias psicotrópicas'),
+    ('s2-30', 'Pegar chicles o elementos adhesivos en las paredes, mobiliario, elementos de la sede respectiva, al igual que adherirlos sobre el cuerpo de algún miembro de la comunidad educativa'),
+    ('s2-31', 'Realizar grafitis obscenos, degradantes, calumniosos, burlescos o insultantes contra cualquier miembro de la comunidad educativa'),
+    ('s2-32', 'Activar el timbre o cualquier otro dispositivo que indica el cambio de clases, comienzo o conclusión de la jornada escolar sin ser autorizado previamente'),
+    ('s2-33', 'Desobedecer o asumir de manera agresiva, desafiante o altanera los llamados de atención que le haga un directivo o docente de la institución'),
+    ('s2-34', 'Incumplir con la presentación de los materiales necesarios para el trabajo en clase'),
+    ('s2-35', 'Omitir, tergiversar o falsear la información que la institución envía o recibe'),
+    ('s2-36', 'Desprestigiar el buen nombre de la institución con expresiones y actuaciones indebidas dentro y fuera de la misma'),
+    ('s2-37', 'Sobornar y/o chantajear'),
+    ('s2-38', 'Introducir a la institución folletos, revistas y otros medios de divulgación pornográfica'),
+    ('s2-39', 'Agredir de palabra o hecho a un directivo, docente, administrativo o estudiante de la institución, al igual que a cualquier persona ajena a esta que se encuentre en el interior de una sede'),
+    ('s2-40', 'Jugar dinero o realizar rifas o ventas sin autorización'),
+    ('s2-41', 'Las demás actitudes y comportamientos que atenten contra la sana convivencia dentro y fuera de la institución'),
+    ('s2-42', 'Negarse a realizar actividades programadas en clase por parte del docente o de quien haga sus veces en ausencia de éste'),
+    ('s2-43', 'Hacer uso inadecuado de las redes sociales: Facebook, Twitter, Instagram, WhatsApp, Tiktok, correos electrónicos o mensajes que atenten contra la dignidad de otras personas'),
+    ('s3-01', 'Reincidir sistemáticamente en la comisión de una o varias situaciones tipo II'),
+    ('s3-02', 'Causar lesiones personales a cualquier miembro de la comunidad educativa (amenazar y/o agredir de palabra o de hecho)'),
+    ('s3-03', 'La participación en actos de matoneo escolar, bullying o ciberacoso'),
+    ('s3-04', 'La ejecución de actos tendientes a generar anarquía general'),
+    ('s3-05', 'Causar actos de vandalismo en la institución, en la calle o en su comunidad'),
+    ('s3-06', 'Ejecutar de manera individual o colectiva actos o conductas tipificadas como delitos en el ordenamiento penal'),
+    ('s3-07', 'Ser declarado responsable de hurto o abuso de confianza por autoridad competente en el colegio o fuera de él'),
+    ('s3-08', 'Acosar, abusar o realizar actos sexuales, constreñir o inducir a actos sexuales abusivos')
+) AS c(id, text) ON c.id = o.situation_id
+ON CONFLICT (id) DO NOTHING;

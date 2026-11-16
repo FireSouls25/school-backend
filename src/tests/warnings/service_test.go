@@ -69,7 +69,6 @@ func TestIssueValidation(t *testing.T) {
 		{"zero date", func(in *warnings.Input) { in.HappenedAt = time.Time{} }, warnings.ErrInvalidDate},
 		{"bad gravity", func(in *warnings.Input) { in.Gravity = warnings.Gravity("huge") }, warnings.ErrUnknownGravity},
 		{"empty title", func(in *warnings.Input) { in.Title = "  " }, warnings.ErrEmptyTitle},
-		{"empty description", func(in *warnings.Input) { in.Description = "" }, warnings.ErrEmptyDescription},
 		{"snapshot without document", func(in *warnings.Input) {
 			in.Snapshot.DocumentID = ""
 		}, warnings.ErrInvalidSnapshot},

@@ -552,19 +552,19 @@ func handleUpdateStudent(deps Dependencies) http.HandlerFunc {
 // is optional so a partial form can never silently retire a teacher or
 // erase their contact data: what the body omits keeps its stored value.
 type teacherUpdate struct {
-	Names             *string    `json:"Names"`
-	Surnames          *string    `json:"Surnames"`
-	DocumentID        *string    `json:"DocumentID"`
-	Phone             *string    `json:"Phone"`
-	Address           *string    `json:"Address"`
-	Birthplace        *string    `json:"Birthplace"`
-	Birthdate         *jsonDate  `json:"Birthdate"`
-	Email             *string    `json:"Email"`
-	Sex               *string    `json:"Sex"`
-	MedicalConditions *string    `json:"MedicalConditions"`
-	HomeroomClassID   *string    `json:"HomeroomClassID"`
-	AreaHeadSubjectID *string    `json:"AreaHeadSubjectID"`
-	Active            *bool      `json:"Active"`
+	Names             *string   `json:"Names"`
+	Surnames          *string   `json:"Surnames"`
+	DocumentID        *string   `json:"DocumentID"`
+	Phone             *string   `json:"Phone"`
+	Address           *string   `json:"Address"`
+	Birthplace        *string   `json:"Birthplace"`
+	Birthdate         *jsonDate `json:"Birthdate"`
+	Email             *string   `json:"Email"`
+	Sex               *string   `json:"Sex"`
+	MedicalConditions *string   `json:"MedicalConditions"`
+	HomeroomClassID   *string   `json:"HomeroomClassID"`
+	AreaHeadSubjectID *string   `json:"AreaHeadSubjectID"`
+	Active            *bool     `json:"Active"`
 }
 
 // handleUpdateTeacher applies a partial update to a teacher profile.
@@ -615,13 +615,13 @@ func handleUpdateTeacher(deps Dependencies) http.HandlerFunc {
 // admin-managed through PUT /v1/teachers/{id}; unknown fields are
 // rejected by the decoder, so sending them answers 400, never silent.
 type myTeacherUpdate struct {
-	Phone             *string    `json:"Phone"`
-	Address           *string    `json:"Address"`
-	Birthplace        *string    `json:"Birthplace"`
-	Birthdate         *jsonDate  `json:"Birthdate"`
-	Email             *string    `json:"Email"`
-	Sex               *string    `json:"Sex"`
-	MedicalConditions *string    `json:"MedicalConditions"`
+	Phone             *string   `json:"Phone"`
+	Address           *string   `json:"Address"`
+	Birthplace        *string   `json:"Birthplace"`
+	Birthdate         *jsonDate `json:"Birthdate"`
+	Email             *string   `json:"Email"`
+	Sex               *string   `json:"Sex"`
+	MedicalConditions *string   `json:"MedicalConditions"`
 }
 
 // handleUpdateMyTeacher applies the self-service update to the caller's
@@ -3773,7 +3773,10 @@ func snapshotFor(st students.Student) warnings.StudentSnapshot {
 // students. Snapshots freeze from the current profiles; the teacher is
 // always the authenticated caller.
 type warningBatchRequest struct {
-	ClassID     string   `json:"classID"`
+	ClassID string `json:"classID"`
+	// SituationID picks the situation from the manual catalog. When set,
+	// the server decides the type from it and ignores Gravity.
+	SituationID string   `json:"situationID"`
 	Gravity     string   `json:"gravity"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
@@ -3794,10 +3797,25 @@ func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
 		if teacherGroupScope(r, w, deps, strings.TrimSpace(body.ClassID)) {
 			return
 		}
-		gravity, err := warnings.Parse(body.Gravity)
-		if err != nil {
-			WriteError(w, r, err)
-			return
+		var gravity warnings.Gravity
+		title := strings.TrimSpace(body.Title)
+		if sid := strings.TrimSpace(body.SituationID); sid != "" {
+			kind, ok := observations.KindOf(sid)
+			if !ok {
+				WriteError(w, r, observations.ErrInvalidSituation)
+				return
+			}
+			gravity = gravityOfKind(kind)
+			if title == "" {
+				title = sid
+			}
+		} else {
+			g, err := warnings.Parse(body.Gravity)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			gravity = g
 		}
 		happenedAt := time.Now().UTC()
 		if raw := strings.TrimSpace(body.HappenedAt); raw != "" {
@@ -3826,7 +3844,7 @@ func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
 			TeacherID:   subject,
 			HappenedAt:  happenedAt,
 			Gravity:     gravity,
-			Title:       strings.TrimSpace(body.Title),
+			Title:       title,
 			Description: strings.TrimSpace(body.Description),
 			Items:       items,
 		})
@@ -3838,6 +3856,60 @@ func handleIssueWarningBatch(deps Dependencies) http.HandlerFunc {
 			notifyWarnings(r.Context(), deps, out, gravity)
 		}
 		writeJSON(w, http.StatusCreated, out)
+	}
+}
+
+// gravityOfKind maps a manual situation type onto the stored gravity:
+// Tipo I is mild, Tipo II moderate and Tipo III severe. The UI shows
+// them as Tipo 1, 2 and 3.
+func gravityOfKind(k observations.Kind) warnings.Gravity {
+	switch k {
+	case observations.KindThree:
+		return warnings.GravitySevere
+	case observations.KindTwo:
+		return warnings.GravityModerate
+	default:
+		return warnings.GravityMild
+	}
+}
+
+// handleMyWarnings returns the llamados the caller registered, newest
+// first, under the login id and the linked teacher record alike.
+func handleMyWarnings(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subject, _ := SubjectFrom(r.Context())
+		authors := []string{subject}
+		if deps.Users != nil {
+			if u, err := deps.Users.ByID(r.Context(), subject); err == nil && strings.TrimSpace(u.TeacherID) != "" {
+				authors = append(authors, strings.TrimSpace(u.TeacherID))
+			}
+		}
+		seen := make(map[string]warnings.Warning)
+		for _, author := range authors {
+			list, err := deps.Warnings.ForAuthor(r.Context(), author)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			for _, warn := range list {
+				seen[warn.ID] = warn
+			}
+		}
+		merged := make([]warnings.Warning, 0, len(seen))
+		for _, warn := range seen {
+			merged = append(merged, warn)
+		}
+		sort.Slice(merged, func(i, j int) bool {
+			if merged[i].HappenedAt.Equal(merged[j].HappenedAt) {
+				return merged[i].ID < merged[j].ID
+			}
+			return merged[i].HappenedAt.After(merged[j].HappenedAt)
+		})
+		out := make([]recentWarning, 0, len(merged))
+		for _, warn := range merged {
+			out = append(out, enrichWarning(r.Context(), deps, warn))
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 

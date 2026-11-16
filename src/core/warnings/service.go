@@ -211,9 +211,8 @@ func validate(w Warning) error {
 	if w.Title == "" {
 		return ErrEmptyTitle
 	}
-	if w.Description == "" {
-		return ErrEmptyDescription
-	}
+	// The description is the optional free note: the title already
+	// carries the situation from the manual.
 	if w.Snapshot.Names == "" || w.Snapshot.Surnames == "" ||
 		w.Snapshot.DocumentID == "" || w.Snapshot.ClassID == "" {
 		return ErrInvalidSnapshot
