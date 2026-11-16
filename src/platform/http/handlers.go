@@ -1177,7 +1177,7 @@ func sessionCard(ctx context.Context, deps Dependencies, sess sessions.Session) 
 	present, absent, permission, evasion, late := foldSessionMarks(revs, len(sess.Roster))
 	card := classSessionCard{
 		ID:           sess.ID,
-		Date:         sess.Date.Format("2006-01-02"),
+		Date:         sess.Date.In(schoolZone).Format("2006-01-02"),
 		ClassLabel:   sess.ClassLabel,
 		ClassGroupID: sess.ClassGroupID,
 		SubjectID:    sess.SubjectID,
