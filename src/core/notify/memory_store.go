@@ -12,11 +12,20 @@ type MemoryStore struct {
 	mu      sync.Mutex
 	entries map[string]Notification
 	byDedup map[string]string
+	// order keeps the insertion sequence: on Windows the wall clock
+	// ticks coarsely, so two notices can share a CreatedAt instant and
+	// a plain time sort would list them in random order.
+	order map[string]uint64
+	next  uint64
 }
 
 // NewMemoryStore returns an empty MemoryStore.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{entries: make(map[string]Notification), byDedup: make(map[string]string)}
+	return &MemoryStore{
+		entries: make(map[string]Notification),
+		byDedup: make(map[string]string),
+		order:   make(map[string]uint64),
+	}
 }
 
 // Compile-time check that the adapter satisfies the port.
@@ -35,6 +44,8 @@ func (s *MemoryStore) Enqueue(_ context.Context, n Notification) (bool, error) {
 		s.byDedup[n.DedupKey] = n.ID
 	}
 	s.entries[n.ID] = n
+	s.next++
+	s.order[n.ID] = s.next
 	return true, nil
 }
 
@@ -48,7 +59,9 @@ func (s *MemoryStore) Claim(_ context.Context, limit, maxAttempts int) ([]Notifi
 			out = append(out, n)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	// Insertion order: oldest first, with a stable tie-break so rows
+	// sharing one clock tick keep the order they were queued in.
+	sort.Slice(out, func(i, j int) bool { return s.order[out[i].ID] < s.order[out[j].ID] })
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}

@@ -23,6 +23,7 @@ import (
 	"grade/src/core/incidents"
 	"grade/src/core/notify"
 	"grade/src/core/observations"
+	"grade/src/core/permits"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
@@ -55,6 +56,7 @@ type Dependencies struct {
 	Users        *users.Service
 	Warnings     *warnings.Service
 	Observations *observations.Service
+	Permits      *permits.Service
 	Notify       *notify.Service
 	Sessions     *sessions.Service
 	Statistics   *statistics.Service
@@ -2261,6 +2263,7 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 		}
 		subject, _ := SubjectFrom(r.Context())
 		sessionID := chi.URLParam(r, "sessionID")
+		studentID := strings.TrimSpace(body.StudentID)
 		var sess sessions.Session
 		if deps.Sessions != nil {
 			if s, err := deps.Sessions.SessionByID(r.Context(), sessionID); err == nil {
@@ -2271,11 +2274,21 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 				if rejectClosedYearForGroup(r, w, deps, sess.ClassGroupID) {
 					return
 				}
+				// A prior permission outranks the teacher: present,
+				// absent, late and evasion are all rejected for a covered
+				// student. Only the permission mark itself is accepted.
+				if mark != sessions.MarkAbsencePermission && deps.Permits != nil {
+					if p, ok, err := deps.Permits.PermitOf(r.Context(), studentID, sess.ClassGroupID, sess.Date.In(schoolZone)); err == nil && ok &&
+						(p.SubjectID == "" || sess.SubjectID == "" || p.SubjectID == sess.SubjectID) {
+						WriteError(w, r, permits.ErrLocked)
+						return
+					}
+				}
 			}
 		}
 		rev, err := deps.Sessions.RecordMark(
 			r.Context(), sessionID,
-			strings.TrimSpace(body.StudentID), mark, subject,
+			studentID, mark, subject,
 			strings.TrimSpace(body.Note),
 		)
 		if err != nil {
@@ -2283,7 +2296,7 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		if sess.ID != "" && (mark == sessions.MarkAbsence || mark == sessions.MarkLate || mark == sessions.MarkEvasion) {
-			notifyAttendance(r.Context(), deps, sess, strings.TrimSpace(body.StudentID), mark)
+			notifyAttendance(r.Context(), deps, sess, studentID, mark)
 		}
 		writeJSON(w, http.StatusCreated, rev)
 	}
@@ -3602,12 +3615,7 @@ func handleMySchedule(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		subject, _ := SubjectFrom(r.Context())
-		teacherID := subject
-		if deps.Users != nil {
-			if u, err := deps.Users.ByID(r.Context(), subject); err == nil && u.TeacherID != "" {
-				teacherID = u.TeacherID
-			}
-		}
+		teacherID := callerTeacherID(r.Context(), deps, subject)
 		entries, err := deps.Schedules.EntriesForTeacherOnDay(r.Context(), teacherID, time.Weekday(n))
 		if err != nil {
 			WriteError(w, r, err)
@@ -3716,7 +3724,30 @@ func handleOpenSession(deps Dependencies) http.HandlerFunc {
 			WriteError(w, r, err)
 			return
 		}
+		// Permits granted before the class open already marked: the
+		// teacher sees "Con permiso" from the first load.
+		applyPermitsToSession(r.Context(), deps, sess, subject)
 		writeJSON(w, http.StatusCreated, sess)
+	}
+}
+
+// applyPermitsToSession folds every prior permit of the session's group
+// and day into the fresh roll call. Best effort: marks that are already
+// on permission report no change and stay as they are.
+func applyPermitsToSession(ctx context.Context, deps Dependencies, sess sessions.Session, author string) {
+	if deps.Permits == nil || deps.Sessions == nil {
+		return
+	}
+	list, err := deps.Permits.ForGroupOnDate(ctx, sess.ClassGroupID, sess.Date.In(schoolZone))
+	if err != nil {
+		return
+	}
+	for _, p := range list {
+		if !p.AppliesTo(sess.ClassGroupID, sess.SubjectID) {
+			continue
+		}
+		_, _ = deps.Sessions.RecordMark(ctx, sess.ID, p.StudentID,
+			sessions.MarkAbsencePermission, author, p.Reason)
 	}
 }
 

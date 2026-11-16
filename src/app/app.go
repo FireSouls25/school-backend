@@ -24,6 +24,7 @@ import (
 	"grade/src/core/incidents"
 	"grade/src/core/notify"
 	"grade/src/core/observations"
+	"grade/src/core/permits"
 	"grade/src/core/roles"
 	"grade/src/core/schedules"
 	"grade/src/core/schoolyears"
@@ -52,6 +53,7 @@ type Stores struct {
 	Academics    academics.Store
 	Warnings     warnings.Store
 	Observations observations.Store
+	Permits      permits.Store
 	Notify       notify.Store
 	Audit        audit.Store
 	Teachers     teachers.Store
@@ -82,6 +84,7 @@ type Services struct {
 	Academics    *academics.Service
 	Warnings     *warnings.Service
 	Observations *observations.Service
+	Permits      *permits.Service
 	Notify       *notify.Service
 	Audit        *audit.Service
 	Teachers     *teachers.Service
@@ -136,6 +139,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		Academics:     academics.NewMemoryStore(),
 		Warnings:      warnings.NewMemoryStore(),
 		Observations:  observations.NewMemoryStore(),
+		Permits:       permits.NewMemoryStore(),
 		Notify:        notify.NewMemoryStore(),
 		Audit:         audit.NewMemoryStore(),
 		Teachers:      teachers.NewMemoryStore(),
@@ -166,6 +170,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		s.Academics = pg.NewAcademicsStore(db)
 		s.Warnings = pg.NewWarningsStore(db)
 		s.Observations = pg.NewObservationsStore(db)
+		s.Permits = pg.NewPermitsStore(db)
 		s.Notify = pg.NewNotifyStore(db)
 		s.Audit = pg.NewAuditStore(db)
 		s.Teachers = pg.NewTeachersStore(db)
@@ -199,6 +204,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	tattendanceSvc := tattendance.NewService(s.TAttendance)
 	warningsSvc := warnings.NewService(s.Warnings)
 	observationsSvc := observations.NewService(s.Observations)
+	permitsSvc := permits.NewService(s.Permits)
 	notifySvc := notify.NewService(s.Notify)
 	incidentsSvc := incidents.NewService(s.Incidents)
 	academicsSvc := academics.NewService(s.Academics)
@@ -235,6 +241,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 			Academics:    academicsSvc,
 			Warnings:     warningsSvc,
 			Observations: observationsSvc,
+			Permits:      permitsSvc,
 			Notify:       notifySvc,
 			Audit:        auditSvc,
 			Teachers:     teachersSvc,

@@ -191,6 +191,16 @@ var statusByCode = map[string]int{
 	"observations.err_invalid_situation": http.StatusBadRequest,
 	"observations.err_invalid_date":      http.StatusBadRequest,
 
+	"permits.err_not_found":           http.StatusNotFound,
+	"permits.err_invalid_id":          http.StatusBadRequest,
+	"permits.err_invalid_student":     http.StatusBadRequest,
+	"permits.err_invalid_class_group": http.StatusBadRequest,
+	"permits.err_invalid_date":        http.StatusBadRequest,
+	"permits.err_empty_reason":        http.StatusBadRequest,
+	"permits.err_invalid_actor":       http.StatusBadRequest,
+	"permits.err_not_enrolled":        http.StatusBadRequest,
+	"permits.err_locked":              http.StatusConflict,
+
 	"sessions.err_not_found":           http.StatusNotFound,
 	"sessions.err_invalid_id":          http.StatusBadRequest,
 	"sessions.err_invalid_class_group": http.StatusBadRequest,

@@ -108,6 +108,7 @@ func main() {
 		Users:             application.Services.Users,
 		Warnings:          application.Services.Warnings,
 		Observations:      application.Services.Observations,
+		Permits:           application.Services.Permits,
 		Notify:            application.Services.Notify,
 		Sessions:          application.Services.Sessions,
 		Statistics:        application.Services.Statistics,

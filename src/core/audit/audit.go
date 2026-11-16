@@ -49,6 +49,9 @@ const (
 	// ResourceAcademicAlert marks academic alerts: who raised them and who
 	// reviewed them.
 	ResourceAcademicAlert Resource = "academic-alert"
+	// ResourcePermit marks prior attendance permissions: who granted or
+	// revoked the coverage of a student before class.
+	ResourcePermit Resource = "attendance-permit"
 )
 
 // Entry is one trail row. StudentID is empty when the action concerns
