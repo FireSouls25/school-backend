@@ -37,6 +37,7 @@ var testTables = []string{
 	"promotions",
 	"enrollments",
 	"subject_assignments",
+	"attendance_permits",
 	"warnings",
 	"incident_faults",
 	"attendance_records",
