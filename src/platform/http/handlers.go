@@ -1131,15 +1131,18 @@ type classSessionCard struct {
 	ID         string `json:"ID"`
 	Date       string `json:"Date"`
 	ClassLabel string `json:"ClassLabel"`
-	Period     int    `json:"Period"`
-	Subject    string `json:"Subject"`
-	Teacher    string `json:"Teacher"`
-	Students   int    `json:"Students"`
-	Present    int    `json:"Present"`
-	Absent     int    `json:"Absent"`
-	Permission int    `json:"Permission"`
-	Evasion    int    `json:"Evasion"`
-	Late       int    `json:"Late"`
+	// ClassGroupID and SubjectID place the call on the weekly schedule.
+	ClassGroupID string `json:"ClassGroupID"`
+	SubjectID    string `json:"SubjectID"`
+	Period       int    `json:"Period"`
+	Subject      string `json:"Subject"`
+	Teacher      string `json:"Teacher"`
+	Students     int    `json:"Students"`
+	Present      int    `json:"Present"`
+	Absent       int    `json:"Absent"`
+	Permission   int    `json:"Permission"`
+	Evasion      int    `json:"Evasion"`
+	Late         int    `json:"Late"`
 }
 
 func foldSessionMarks(revs []sessions.Revision, rosterLen int) (present, absent, permission, evasion, late int) {
@@ -1173,16 +1176,18 @@ func sessionCard(ctx context.Context, deps Dependencies, sess sessions.Session) 
 	}
 	present, absent, permission, evasion, late := foldSessionMarks(revs, len(sess.Roster))
 	card := classSessionCard{
-		ID:         sess.ID,
-		Date:       sess.Date.Format("2006-01-02"),
-		ClassLabel: sess.ClassLabel,
-		Period:     sess.Period,
-		Students:   len(sess.Roster),
-		Present:    present,
-		Absent:     absent,
-		Permission: permission,
-		Evasion:    evasion,
-		Late:       late,
+		ID:           sess.ID,
+		Date:         sess.Date.Format("2006-01-02"),
+		ClassLabel:   sess.ClassLabel,
+		ClassGroupID: sess.ClassGroupID,
+		SubjectID:    sess.SubjectID,
+		Period:       sess.Period,
+		Students:     len(sess.Roster),
+		Present:      present,
+		Absent:       absent,
+		Permission:   permission,
+		Evasion:      evasion,
+		Late:         late,
 	}
 	if sess.SubjectID != "" && deps.Subjects != nil {
 		if subj, err := deps.Subjects.SubjectByID(ctx, sess.SubjectID); err == nil {
@@ -1248,7 +1253,8 @@ func handleSessionsHistory(deps Dependencies) http.HandlerFunc {
 				return
 			}
 			out = append(out, card)
-			if len(out) >= 50 {
+			// Tope amplio: el calendario pide meses completos de un salón.
+			if len(out) >= 500 {
 				break
 			}
 		}
