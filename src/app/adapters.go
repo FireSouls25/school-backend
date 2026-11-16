@@ -110,6 +110,7 @@ func (a statisticsSessions) withMarks(ctx context.Context, list []sessions.Sessi
 			ID:           sess.ID,
 			ClassGroupID: sess.ClassGroupID,
 			ClassLabel:   sess.ClassLabel,
+			SubjectID:    sess.SubjectID,
 			SchoolYear:   sess.SchoolYear,
 			Date:         sess.Date,
 			Period:       sess.Period,

@@ -23,13 +23,15 @@ type SessionView struct {
 	ID           string
 	ClassGroupID string
 	ClassLabel   string
-	SchoolYear   int
-	Date         time.Time
-	Period       int
-	Roster       []RosterEntryView
-	Marks        map[string]string
+	// SubjectID is the subject of the roll; empty for homeroom calls.
+	SubjectID  string
+	SchoolYear int
+	Date       time.Time
+	Period     int
+	Roster     []RosterEntryView
+	Marks      map[string]string
 	// Uniform holds explicitly recorded uniform states (true = proper).
-	Uniform      map[string]bool
+	Uniform map[string]bool
 }
 
 // WarningView is one llamado de atención reduced to its gravity and date.

@@ -22,7 +22,7 @@ type StudentSummary struct {
 	Absences int
 	// Excused counts absences covered by a school permission
 	// (falta con permiso).
-	Excused int
+	Excused  int
 	Evasions int
 	Lates    int
 	// LateStreak is the longest run of consecutive late marks.
@@ -64,12 +64,15 @@ type ClassReport struct {
 // Mark is "" for present, otherwise "absence", "absence-permission",
 // "evasion" or "late".
 type SessionEntry struct {
-	SessionID  string
-	Date       time.Time
-	ClassLabel string
-	SchoolYear int
-	Period     int
-	Mark       string
+	SessionID string
+	// ClassGroupID and SubjectID place the call on the weekly schedule.
+	ClassGroupID string
+	SubjectID    string
+	Date         time.Time
+	ClassLabel   string
+	SchoolYear   int
+	Period       int
+	Mark         string
 	// Note is the latest revision note of the session, if any: the
 	// recorded reason of a permission lives here.
 	Note string
@@ -251,14 +254,16 @@ func (s *Service) StudentReport(ctx context.Context, studentID string) (StudentR
 			report.UniformFaults++
 		}
 		report.Sessions = append(report.Sessions, SessionEntry{
-			SessionID:  v.ID,
-			Date:       v.Date,
-			ClassLabel: v.ClassLabel,
-			SchoolYear: v.SchoolYear,
-			Period:     v.Period,
-			Mark:       mark,
-			Note:       notes[v.ID],
-			UniformOK:  uniformOK,
+			SessionID:    v.ID,
+			ClassGroupID: v.ClassGroupID,
+			SubjectID:    v.SubjectID,
+			Date:         v.Date,
+			ClassLabel:   v.ClassLabel,
+			SchoolYear:   v.SchoolYear,
+			Period:       v.Period,
+			Mark:         mark,
+			Note:         notes[v.ID],
+			UniformOK:    uniformOK,
 		})
 		switch mark {
 		case "absence":
