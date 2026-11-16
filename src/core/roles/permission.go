@@ -38,6 +38,10 @@ const (
 	// defense against a fault ("descargo"). Teachers hold it too, scoped
 	// to the groups they teach.
 	PermissionRecordDefenses Permission = "record-defenses"
+	// PermissionManagePermits lets the office (admin and secretary) grant
+	// and revoke prior attendance permissions. Teachers never hold it:
+	// a permit locks their own roll call.
+	PermissionManagePermits Permission = "manage-permits"
 	// PermissionManageSchedules covers the timetable, its subjects and
 	// their assignments, the same for admins and secretaries.
 	PermissionManageSchedules Permission = "manage-schedules"
@@ -74,6 +78,7 @@ var permissionCatalog = []Permission{
 	PermissionManagePromotions,
 	PermissionManageOwners,
 	PermissionRecordDefenses,
+	PermissionManagePermits,
 }
 
 // rolePermissions maps each role to the permissions it grants.
@@ -103,6 +108,7 @@ var rolePermissions = func() map[Role][]Permission {
 		PermissionViewWarnings,
 		PermissionManagePromotions,
 		PermissionRecordDefenses,
+		PermissionManagePermits,
 	}
 	base[RoleAdmin] = append([]Permission(nil), permissionCatalog...)
 	// The admin union above includes manage-owners by construction:

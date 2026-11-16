@@ -75,8 +75,9 @@ func permitRowOf(ctx context.Context, deps Dependencies, p permits.Permit) permi
 }
 
 // handleGrantPermit records a prior permission for one student in one
-// class-group on one day. Only admin and secretary hold record-defenses,
-// which is the same capability that covers a session in hindsight.
+// class-group on one day. Only the office holds manage-permits: teachers
+// record defenses after the fact but never grant the permit that locks
+// their own roll call.
 func handleGrantPermit(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body permitRequest
@@ -126,7 +127,17 @@ func handleListPermits(deps Dependencies) http.HandlerFunc {
 		q := r.URL.Query()
 		studentID := strings.TrimSpace(q.Get("studentID"))
 		if studentID != "" {
-			list, err := deps.Permits.ForStudent(r.Context(), studentID)
+			// The reasons can be medical: a pure teacher only reads the
+			// permits of students in the groups they teach.
+			st, err := deps.Students.ByID(r.Context(), studentID)
+			if err != nil {
+				WriteError(w, r, err)
+				return
+			}
+			if teacherStudentScope(r, w, deps, st) {
+				return
+			}
+			list, err := deps.Permits.ForStudent(r.Context(), st.ID)
 			if err != nil {
 				WriteError(w, r, err)
 				return

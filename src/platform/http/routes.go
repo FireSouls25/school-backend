@@ -150,9 +150,9 @@ func routes(r *chi.Mux, deps Dependencies) {
 			Get("/attendance/omitted", handleOmittedRollcalls(deps))
 		r.With(RequirePermission(deps.Auth, roles.PermissionViewClassStats)).
 			Get("/attendance/permits", handleListPermits(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionRecordDefenses)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePermits)).
 			Post("/attendance/permits", handleGrantPermit(deps))
-		r.With(RequirePermission(deps.Auth, roles.PermissionRecordDefenses)).
+		r.With(RequirePermission(deps.Auth, roles.PermissionManagePermits)).
 			Delete("/attendance/permits/{id}", handleRevokePermit(deps))
 
 		r.With(RequirePermission(deps.Auth, roles.PermissionRecordAttendance)).

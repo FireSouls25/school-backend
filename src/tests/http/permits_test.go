@@ -87,10 +87,15 @@ func TestPriorPermitsFlow(t *testing.T) {
 		t.Errorf("code = %q, want permits.err_empty_reason", code)
 	}
 
-	// Teachers cannot grant: record-defenses belongs to the office.
+	// Teachers cannot grant nor revoke: manage-permits belongs to the
+	// office, even though teachers now record defenses.
 	rec = doRequest(t, h, http.MethodPost, "/v1/attendance/permits", teacherSubject, body)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("teacher grant status = %d, want 403", rec.Code)
+	}
+	rec = doRequest(t, h, http.MethodDelete, "/v1/attendance/permits/"+permit.ID, teacherSubject, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("teacher revoke status = %d, want 403", rec.Code)
 	}
 
 	// Revoking removes the row; a second revoke reports it is gone.
