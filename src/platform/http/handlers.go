@@ -1339,12 +1339,53 @@ func handleSessionDetail(deps Dependencies) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"Session":        detail.Session,
 			"Marks":          detail.Marks,
+			"OfficeLocks":    officeLocks(r.Context(), deps, detail.Revisions),
 			"Revisions":      revs,
 			"Uniform":        detail.Uniform,
 			"UniformHistory": uniformHist,
 			"Defenses":       defenses,
 		})
 	}
+}
+
+// officeLocks maps each student whose current mark is a permission set by
+// the office (admin, secretary or owner) to the recorded reason. Those
+// marks outrank the teacher like a prior permit: the teacher sees "Con
+// permiso" and cannot change it.
+func officeLocks(ctx context.Context, deps Dependencies, revs []sessions.Revision) map[string]string {
+	out := make(map[string]string)
+	if deps.Roles == nil {
+		return out
+	}
+	ordered := append([]sessions.Revision(nil), revs...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Number < ordered[j].Number })
+	last := make(map[string]sessions.Revision)
+	for _, rev := range ordered {
+		last[rev.StudentID] = rev
+	}
+	office := make(map[string]bool)
+	isOffice := func(subject string) bool {
+		if v, ok := office[subject]; ok {
+			return v
+		}
+		v := false
+		if rs, err := deps.Roles.Roles(ctx, subject); err == nil {
+			for _, rl := range rs {
+				if rl == roles.RoleAdmin || rl == roles.RoleSecretary || rl == roles.RoleOwner {
+					v = true
+					break
+				}
+			}
+		}
+		office[subject] = v
+		return v
+	}
+	for sid, rev := range last {
+		if rev.To == sessions.MarkAbsencePermission && isOffice(rev.ChangedBy) {
+			out[sid] = rev.Note
+		}
+	}
+	return out
 }
 
 // handleTeacherWarningsMade returns the llamados issued from the logins
@@ -2321,6 +2362,18 @@ func handleRecordMark(deps Dependencies) http.HandlerFunc {
 				// A prior permission outranks the teacher: present,
 				// absent, late and evasion are all rejected for a covered
 				// student. Only the permission mark itself is accepted.
+				// A permission recorded by the office in this call locks
+				// the mark the same way for a pure teacher.
+				if mark != sessions.MarkAbsencePermission {
+					if teachOnly, _, err := teacherTaughtGroups(r.Context(), deps, subject); err == nil && teachOnly {
+						if revs, err := deps.Sessions.RevisionsForSession(r.Context(), sess.ID); err == nil {
+							if _, locked := officeLocks(r.Context(), deps, revs)[studentID]; locked {
+								WriteError(w, r, permits.ErrLocked)
+								return
+							}
+						}
+					}
+				}
 				if mark != sessions.MarkAbsencePermission && deps.Permits != nil {
 					if p, ok, err := deps.Permits.PermitOf(r.Context(), studentID, sess.ClassGroupID, sess.Date.In(schoolZone)); err == nil && ok &&
 						(p.SubjectID == "" || sess.SubjectID == "" || p.SubjectID == sess.SubjectID) {
